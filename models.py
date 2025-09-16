@@ -1,6 +1,7 @@
 # models.py
 from datetime import datetime, date, timedelta, time as dt_time
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import UniqueConstraint, event
+from sqlalchemy.sql import expression
 from extensions import db
 
 # ------------------ USERS / SUBSCRIPTION ------------------
@@ -14,28 +15,32 @@ class User(db.Model):
     name = db.Column(db.String(50), nullable=False)
     date_of_birth = db.Column(db.Date)
     renewal_reminder_last_shown_on = db.Column(db.Date)
-    renewal_telegram_sent = db.Column(db.Boolean, default=False)
+    renewal_telegram_sent = db.Column(db.Boolean, default=False, server_default=expression.false())
 
-    # Глобальные флаги уведомлений
-    telegram_notify_enabled = db.Column(db.Boolean, default=True)
-    notify_trainings = db.Column(db.Boolean, default=True)
-    notify_subscription = db.Column(db.Boolean, default=True)
+    # Глобальные флаги уведомлений (держим для обратной совместимости)
+    telegram_notify_enabled = db.Column(db.Boolean, default=True, server_default=expression.true())
+    notify_trainings = db.Column(db.Boolean, default=True, server_default=expression.true())
+    notify_subscription = db.Column(db.Boolean, default=True, server_default=expression.true())
 
     # Цели
     fat_mass_goal = db.Column(db.Float, nullable=True)
     muscle_mass_goal = db.Column(db.Float, nullable=True)
 
-    is_trainer = db.Column(db.Boolean, default=False, nullable=False)
+    is_trainer = db.Column(db.Boolean, default=False, nullable=False, server_default=expression.false())
     avatar = db.Column(db.String(200), nullable=False, default='i.webp')
 
     analysis_comment = db.Column(db.Text)
     telegram_chat_id = db.Column(db.String(50), nullable=True)
     telegram_code = db.Column(db.String(10), nullable=True)
-    show_welcome_popup = db.Column(db.Boolean, default=False, nullable=False)
+    show_welcome_popup = db.Column(db.Boolean, default=False, nullable=False, server_default=expression.false())
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # отношения
-    subscription = db.relationship('Subscription', backref=db.backref('user', uselist=False), uselist=False)
+    subscription = db.relationship(
+        'Subscription',
+        backref=db.backref('user', uselist=False),
+        uselist=False
+    )
 
     @property
     def has_subscription(self):
@@ -44,7 +49,7 @@ class User(db.Model):
     # ----- Доступ к последнему анализу (динамические свойства) -----
     def _get_latest_analysis(self):
         if not hasattr(self, '_cached_latest_analysis'):
-            self._cached_latest_analysis = BodyAnalysis.query.filter_by(user_id=self.id)\
+            self._cached_latest_analysis = BodyAnalysis.query.filter_by(user_id=self.id) \
                 .order_by(BodyAnalysis.timestamp.desc()).first()
         return self._cached_latest_analysis
 
@@ -136,7 +141,7 @@ class Subscription(db.Model):
     start_date = db.Column(db.Date, default=date.today)
     end_date = db.Column(db.Date, nullable=True)
     source = db.Column(db.String(50))
-    status = db.Column(db.String(20), nullable=False, default='active')  # active, frozen, cancelled
+    status = db.Column(db.String(20), nullable=False, default='active', server_default='active')  # active, frozen, cancelled
     remaining_days_on_freeze = db.Column(db.Integer, nullable=True)
 
     @property
@@ -156,7 +161,7 @@ class Order(db.Model):
     kaspi_invoice_id = db.Column(db.String(100), nullable=True)
     subscription_type = db.Column(db.String(20), nullable=False)
     amount = db.Column(db.Float, nullable=False)
-    status = db.Column(db.String(20), nullable=False, default='pending')
+    status = db.Column(db.String(20), nullable=False, default='pending', server_default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     paid_at = db.Column(db.DateTime, nullable=True)
 
@@ -215,7 +220,7 @@ class MessageReaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     message_id = db.Column(db.Integer, db.ForeignKey('group_message.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    reaction_type = db.Column(db.String(20), nullable=False, default='👍')
+    reaction_type = db.Column(db.String(20), nullable=False, default='👍', server_default='👍')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     __table_args__ = (db.UniqueConstraint('message_id', 'user_id', name='uq_message_user_reaction'),)
@@ -232,7 +237,7 @@ class GroupTask(db.Model):
     trainer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    is_announcement = db.Column(db.Boolean, default=False, nullable=False)
+    is_announcement = db.Column(db.Boolean, default=False, nullable=False, server_default=expression.false())
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     due_date = db.Column(db.Date, nullable=True)
 
@@ -245,8 +250,8 @@ class MealLog(db.Model):
     __tablename__ = 'meal_logs'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    date = db.Column(db.Date, nullable=False, default=date.today)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, default=date.today, index=True)
     meal_type = db.Column(db.String(20), nullable=False)  # 'breakfast','lunch','dinner','snack'
     name = db.Column(db.String(100), nullable=True)
     verdict = db.Column(db.String(200), nullable=True)
@@ -257,7 +262,11 @@ class MealLog(db.Model):
     analysis = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    user = db.relationship('User', backref=db.backref('meals', lazy=True))
+    # Каскад на стороне ORM: удаляем логи при удалении пользователя
+    user = db.relationship(
+        'User',
+        backref=db.backref('meals', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
+    )
     __table_args__ = (UniqueConstraint('user_id', 'date', 'meal_type', name='uq_user_date_meal'),)
 
 
@@ -266,7 +275,7 @@ class Activity(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    date = db.Column(db.Date, default=date.today)
+    date = db.Column(db.Date, default=date.today, index=True)
     steps = db.Column(db.Integer)
     active_kcal = db.Column(db.Integer)
     resting_kcal = db.Column(db.Integer)
@@ -274,15 +283,18 @@ class Activity(db.Model):
     heart_rate_avg = db.Column(db.Integer)
     source = db.Column(db.String(50))
 
-    user = db.relationship("User", backref=db.backref("activities", lazy=True))
+    user = db.relationship(
+        "User",
+        backref=db.backref("activities", lazy=True, cascade='all, delete-orphan', passive_deletes=True)
+    )
 
 
 class Diet(db.Model):
     __tablename__ = "diet"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    date = db.Column(db.Date, default=date.today)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    date = db.Column(db.Date, default=date.today, index=True)
     breakfast = db.Column(db.Text)
     lunch = db.Column(db.Text)
     dinner = db.Column(db.Text)
@@ -292,7 +304,10 @@ class Diet(db.Model):
     fat = db.Column(db.Float)
     carbs = db.Column(db.Float)
 
-    user = db.relationship('User', backref=db.backref('diets', lazy=True))
+    user = db.relationship(
+        'User',
+        backref=db.backref('diets', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
+    )
 
 
 # ------------------ TRAININGS ------------------
@@ -311,7 +326,7 @@ class Training(db.Model):
     end_time = db.Column(db.Time, nullable=False)
     location = db.Column(db.String(120))
     capacity = db.Column(db.Integer, default=10)
-    is_public = db.Column(db.Boolean, default=True)
+    is_public = db.Column(db.Boolean, default=True, server_default=expression.true())
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -370,8 +385,8 @@ class TrainingSignup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     training_id = db.Column(db.Integer, db.ForeignKey('trainings.id', ondelete="CASCADE"), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete="CASCADE"), nullable=False, index=True)
-    notified_1h = db.Column(db.Boolean, default=False)
-    notified_start = db.Column(db.Boolean, default=False)
+    notified_1h = db.Column(db.Boolean, default=False, server_default=expression.false())
+    notified_start = db.Column(db.Boolean, default=False, server_default=expression.false())
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     __table_args__ = (db.UniqueConstraint('training_id', 'user_id', name='uq_training_user'),)
@@ -383,8 +398,8 @@ class BodyAnalysis(db.Model):
     __tablename__ = "body_analysis"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), index=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     height = db.Column(db.Integer)
     weight = db.Column(db.Float)
     muscle_mass = db.Column(db.Float)
@@ -401,7 +416,10 @@ class BodyAnalysis(db.Model):
     bmi = db.Column(db.Float)
     fat_free_body_weight = db.Column(db.Float)
 
-    user = db.relationship('User', backref=db.backref('analyses', lazy=True))
+    user = db.relationship(
+        'User',
+        backref=db.backref('analyses', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
+    )
 
 
 # ------------------ SETTINGS / REMINDERS ------------------
@@ -410,11 +428,21 @@ class UserSettings(db.Model):
     __tablename__ = "user_settings"
 
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), primary_key=True)
-    telegram_notify_enabled = db.Column(db.Boolean, default=True, nullable=False)
-    notify_trainings = db.Column(db.Boolean, default=True, nullable=False)
-    notify_subscription = db.Column(db.Boolean, default=True, nullable=False)
-    notify_meals = db.Column(db.Boolean, default=True, nullable=False)
-    meal_timezone = db.Column(db.String(64), default="Europe/Moscow")
+    telegram_notify_enabled = db.Column(
+        db.Boolean, default=True, server_default=expression.true(), nullable=False
+    )
+    notify_trainings = db.Column(
+        db.Boolean, default=True, server_default=expression.true(), nullable=False
+    )
+    notify_subscription = db.Column(
+        db.Boolean, default=True, server_default=expression.true(), nullable=False
+    )
+    notify_meals = db.Column(
+        db.Boolean, default=True, server_default=expression.true(), nullable=False
+    )
+    meal_timezone = db.Column(
+        db.String(64), default="Asia/Almaty", server_default="Asia/Almaty", nullable=False
+    )
 
     user = db.relationship("User", backref=db.backref("settings", uselist=False))
 
@@ -429,4 +457,19 @@ class MealReminderLog(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint("user_id", "meal_type", "date_sent", name="u_meal_reminder_once_per_day"),
+    )
+
+
+# ------------------ AUTO-DEFAULTS HOOK ------------------
+
+@event.listens_for(User, "after_insert")
+def create_default_settings(mapper, connection, target):
+    """
+    Гарантируем наличие строки user_settings для каждого пользователя.
+    Значения выставятся серверными дефолтами:
+    - все уведомления ВКЛ
+    - таймзона: Asia/Almaty
+    """
+    connection.execute(
+        UserSettings.__table__.insert().values(user_id=target.id)
     )

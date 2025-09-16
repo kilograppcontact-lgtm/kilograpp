@@ -48,8 +48,6 @@ from models import (
     UserSettings, MealReminderLog
 )
 
-with app.app_context():
-    db.create_all()
 
 # --- Image Resizing Configuration ---
 CHAT_IMAGE_MAX_SIZE = (200, 200)  # Max width and height for chat images
@@ -138,6 +136,12 @@ def _send_telegram(chat_id: str, text: str):
     except Exception:
         return False
 
+@app.before_request
+def set_tz():
+    if db.engine.url.get_backend_name() == "postgresql":
+        with db.engine.connect() as con:
+            con.exec_driver_sql("SET TIME ZONE 'Asia/Almaty'")
+
 @app.route('/api/activity/today/<int:chat_id>')
 def activity_today(chat_id):
     user = User.query.filter_by(telegram_chat_id=str(chat_id)).first()
@@ -161,8 +165,8 @@ def _notification_worker():
                 # 1) Напоминания за 1 час (как было)
                 trainings = Training.query.filter(
                     Training.date == target.date(),
-                    db.extract('hour', Training.start_time) == target.hour,
-                    db.extract('minute', Training.start_time) == target.minute
+                    func.extract('hour', Training.start_time) == target.hour,
+                    func.extract('minute', Training.start_time) == target.minute
                 ).all()
 
                 for t in trainings:
@@ -188,11 +192,10 @@ def _notification_worker():
                         if _send_telegram(u.telegram_chat_id, text):
                             s.notified_1h = True
 
-                # 2) НОВОЕ: рассылка в момент начала — со ссылкой на участие
                 startings = Training.query.filter(
                     Training.date == now.date(),
-                    db.extract('hour', Training.start_time) == now.hour,
-                    db.extract('minute', Training.start_time) == now.minute
+                    func.extract('hour', Training.start_time) == now.hour,
+                    func.extract('minute', Training.start_time) == now.minute
                 ).all()
 
                 for t in startings:
@@ -287,7 +290,6 @@ def start_training_notifier():
         th.start()
 
 with app.app_context():
-    db.create_all()
     # Мини-миграции для новых полей в user
 
     # Запускаем фоновые задачи ТОЛЬКО после инициализации БД
@@ -297,7 +299,6 @@ with app.app_context():
     except Exception:
         pass
     start_training_notifier()
-
 
 
 def calculate_age(born):
@@ -2964,8 +2965,7 @@ def admin_grant_subscription(user_id):
     flash(message, "success")
     return redirect(url_for("admin_user_detail", user_id=user.id))
 
-with app.app_context():
-    db.create_all()
+
 
 @app.route("/admin/user/<int:user_id>/manage_subscription", methods=["POST"])
 @admin_required
@@ -3136,13 +3136,18 @@ def weekly_summary():
     labels = [(week_ago + timedelta(days=i)).strftime("%a") for i in range(7)]
 
     # 1. Данные по весу (здесь ошибки не было, код без изменений)
-    weight_data = db.session.execute(text(f"""
-        SELECT strftime('%w', timestamp) as day_of_week, AVG(weight) as avg_weight
+    from sqlalchemy import text  # у тебя уже импортирован
+
+    weight_sql = text("""
+        SELECT EXTRACT(DOW FROM timestamp) AS day_of_week, AVG(weight) AS avg_weight
         FROM body_analysis
-        WHERE user_id = {user_id} AND date(timestamp) BETWEEN '{week_ago}' AND '{today}'
+        WHERE user_id = :user_id AND DATE(timestamp) BETWEEN :week_ago AND :today
         GROUP BY day_of_week
         ORDER BY day_of_week
-    """)).fetchall()
+    """)
+    weight_data = db.session.execute(
+        weight_sql, {"user_id": user_id, "week_ago": week_ago, "today": today}
+    ).fetchall()
 
     # 2. Потребленные калории (сумма за каждый день)
     meals_sql = text("""

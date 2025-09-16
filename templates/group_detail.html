@@ -14,22 +14,41 @@
 
   /* ---------- Чат: переносы, размеры, реакции ---------- */
   #chat-widget-container{transition:opacity .25s ease, transform .25s ease}
-  #chat-messages-container{overflow-wrap:anywhere;word-break:break-word}
-  .msg-wrap{max-width:90%}
+
+  /* ВАЖНО: ни в коем случае не ломаем слова на символы */
+  #chat-messages-container{
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+  }
+
+  /* Контейнер сообщения не должен сжиматься */
+  .msg-wrap{
+    max-width:90%;
+    flex:0 0 auto !important;    /* запретить shrink */
+    min-width:6ch !important;     /* базовый минимум ширины блока-строки */
+  }
+
   .chat-bubble{
+    display:inline-flex !important;
+    align-items:center;
     padding:8px 12px;
     max-width:85%;
-    overflow-wrap:anywhere;
-    word-break:break-word;
-    white-space:pre-wrap;
-    border-radius:20px;
-    line-height:1.35;
+    min-width:6ch !important;     /* «таблетка» не уже 6 символов */
+    min-height:2rem !important;   /* комфортная высота */
+    white-space:pre-wrap;          /* уважаем \n пользователя */
+    overflow-wrap: normal !important;
+    word-break: keep-all !important; /* не разбивать внутри слова */
+    hyphens: manual;               /* без авто-дефисации */
+    border-radius:20px; line-height:1.35;
+    flex:0 0 auto !important;      /* пузырь сам себя не сжимает */
   }
+
   .chat-bubble-me{
     background-image:linear-gradient(90deg,#3b82f6,#6366f1);
     color:#fff;
   }
   .chat-bubble-other{background:#eef2ff;color:#111827}
+
   .chat-img{
     max-width:85%;
     max-height:60vh;
@@ -48,6 +67,71 @@
   .header-grad{
     background:linear-gradient(120deg,#6366f1 0%,#8b5cf6 40%,#ec4899 100%);
   }
+
+  /* ---------- Приятная рамка/шэлл чата ---------- */
+  .chat-shell{
+    background:linear-gradient(180deg,#ffffff 0%, #fafafa 100%);
+    border:1px solid rgba(15,23,42,.08);
+    border-radius:14px;
+    box-shadow: 0 20px 40px -24px rgba(2,6,23,.35), 0 1px 0 rgba(255,255,255,.9) inset;
+    backdrop-filter:saturate(1.05);
+  }
+  .chat-header{
+    background:linear-gradient(180deg,#f8fafc 0%, #eef2ff 100%);
+    border-bottom:1px solid rgba(99,102,241,.15);
+    border-top-left-radius:14px;border-top-right-radius:14px;
+  }
+  .chat-footer{
+    background:#f8fafc;
+    border-top:1px solid #e5e7eb;
+    border-bottom-left-radius:14px;border-bottom-right-radius:14px;
+  }
+
+  /* ---------- Скролл для чата ---------- */
+  #chat-messages-container::-webkit-scrollbar{width:8px}
+  #chat-messages-container::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:9999px}
+  #chat-messages-container:hover::-webkit-scrollbar-thumb{background:#cbd5e1}
+</style>
+<style>
+  /* === Chat overflow fix === */
+  /* Разрешаем ломать только когда иначе будет переполнено */
+  #chat-messages-container{
+    overflow-wrap: break-word !important;
+    word-break: normal !important;
+  }
+
+  /* Контейнер строки сообщения: позволяем сжиматься внутри flex,
+     иначе длинные токены расширяют всю строку */
+  .msg-wrap{
+    max-width: 100% !important;
+    min-width: 0 !important;          /* критично для flex-переносов */
+    flex: 0 1 auto !important;        /* можно слегка сжиматься */
+  }
+
+  /* Сам пузырь: минимум для «ок/йоу/эмодзи», но переносим длинные куски */
+  .chat-bubble{
+    display: inline-flex !important;
+    align-items: center;
+    padding: 8px 12px;
+    max-width: 85%;
+    min-width: 6ch !important;        /* не сплющиваем короткие */
+    min-height: 2rem !important;
+    white-space: pre-wrap;
+
+    overflow-wrap: break-word !important;  /* ломаем длинные токены по необходимости */
+    word-break: normal !important;
+    word-break: break-word !important;     /* Safari fallback */
+    hyphens: auto;
+
+    border-radius: 20px;
+    line-height: 1.35;
+    flex: 0 0 auto !important;        /* ширина пузыря контролируется min/max */
+    box-sizing: border-box;
+  }
+
+  /* На всякий случай: картинки не выходят за пределы */
+  .chat-img{ max-width: 85%; height: auto; }
+
 </style>
 
 <div class="max-w-7xl mx-auto px-3 sm:px-4 py-6 space-y-6">
@@ -249,16 +333,10 @@
 
     {# ---------- ПРАВАЯ КОЛОНКА (сайдбар) ---------- #}
     <aside class="space-y-4">
-
-      {# Инфо о группе #}
       <div class="card p-4">
         <h3 class="font-semibold text-gray-800 mb-3">О группе</h3>
-
         <div class="space-y-4">
-          <div>
-            <p class="text-sm italic text-gray-600">“{{ group.description or 'Без описания' }}”</p>
-          </div>
-
+          <div><p class="text-sm italic text-gray-600">“{{ group.description or 'Без описания' }}”</p></div>
           <div class="border-t pt-3">
             <p class="text-xs text-gray-500 mb-1">Тренер</p>
             <div class="flex items-center gap-2">
@@ -278,7 +356,7 @@
                 {% for m in group.members %}
                   <li class="flex items-center gap-2 text-sm">
                     <img src="{{ url_for('serve_uploaded_file', filename=m.user.avatar) if m.user.avatar else url_for('static','default-avatar.png') }}"
-                         class="w-6 h-6 rounded-full object-cover">
+                         class="w-6 h-6 rounded-full object-cover" alt="">
                     <span class="text-gray-700">{{ m.user.name }}</span>
                     {% if m.user_id == current_user.id %}
                       <span class="text-indigo-600 text-xs font-semibold">(Вы)</span>
@@ -307,7 +385,6 @@
         </div>
       </div>
 
-      {# Прогресс участников #}
       {% if group_member_stats %}
       <div class="card p-4">
         <h3 class="font-semibold text-gray-800 mb-3">Прогресс участников</h3>
@@ -317,7 +394,7 @@
               <div class="p-3 border rounded-xl">
                 <div class="flex items-center gap-3 mb-2">
                   <img src="{{ url_for('serve_uploaded_file', filename=s.user.avatar) if s.user.avatar else url_for('static','default-avatar.png') }}"
-                       class="w-8 h-8 rounded-full object-cover">
+                       class="w-8 h-8 rounded-full object-cover" alt="">
                   <span class="text-sm font-semibold text-gray-800">{{ s.user.name }}</span>
                 </div>
 
@@ -366,26 +443,26 @@
 </button>
 
 <div id="chat-widget-container"
-     class="hidden fixed bottom-6 right-6 w-[92vw] max-w-sm h-[65vh] bg-white rounded-xl shadow-2xl flex flex-col z-40 origin-bottom-right opacity-0 scale-95">
-  <div class="flex items-center justify-between p-3 border-b rounded-t-xl bg-gray-50">
+     class="hidden fixed bottom-6 right-6 w-[92vw] max-w-sm h-[65vh] rounded-xl flex flex-col z-40 origin-bottom-right opacity-0 scale-95 chat-shell">
+  <div class="flex items-center justify-between p-3 chat-header">
     <h3 class="font-semibold text-gray-800">Обсуждение в группе</h3>
-    <button id="chat-widget-close-button" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button>
+    <button id="chat-widget-close-button" class="text-gray-500 hover:text-gray-800 text-2xl leading-none" aria-label="Закрыть чаты">&times;</button>
   </div>
 
-  <div id="chat-messages-container" class="flex-1 p-3 overflow-y-auto bg-slate-50 space-y-1 flex flex-col">
+  <div id="chat-messages-container" class="flex-1 p-3 overflow-y-auto bg-white/60 space-y-1 flex flex-col">
     <p id="chat-placeholder" class="text-gray-500 text-center italic text-xs m-auto">Загрузка сообщений…</p>
   </div>
 
-  <div class="p-3 border-t">
+  <div class="p-3 chat-footer">
     {% if (current_user.is_trainer and group.trainer_id == current_user.id) or is_member %}
     <form id="chat-form" action="{{ url_for('post_group_image_message', group_id=group.id) }}" method="POST" enctype="multipart/form-data">
-      <div class="flex items-center border border-gray-300 rounded-lg shadow-sm focus-within:ring-1 focus-within:ring-indigo-500">
+      <div class="flex items-center border border-gray-300 rounded-lg shadow-sm focus-within:ring-1 focus-within:ring-indigo-500 bg-white">
         <textarea name="text" rows="1" placeholder="Сообщение…" class="flex-1 p-2 rounded-l-lg bg-transparent focus:outline-none text-sm resize-none"></textarea>
-        <button type="button" onclick="document.getElementById('image-upload-widget').click()" class="p-2 text-gray-500 hover:text-indigo-600">
+        <button type="button" onclick="document.getElementById('image-upload-widget').click()" class="p-2 text-gray-500 hover:text-indigo-600" title="Прикрепить файл">
           <i class="fas fa-paperclip text-base"></i>
         </button>
         <input id="image-upload-widget" type="file" name="image" class="hidden" accept="image/*">
-        <button type="submit" class="p-2 text-gray-600 hover:text-indigo-600">
+        <button type="submit" class="p-2 text-gray-600 hover:text-indigo-600" title="Отправить">
           <i class="fas fa-paper-plane text-base"></i>
         </button>
       </div>
@@ -398,26 +475,22 @@
 </div>
 
 <script>
-/* ---------- утилита экранирования ---------- */
 function escapeHtml(s){
   return String(s || '').replace(/[&<>"']/g, m => (
     {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]
   ));
 }
 
-/* ---------- реакции (появляются только если >0) ---------- */
+/* Реакции */
 function likeMessage(messageId) {
   fetch(`/group_message/${messageId}/react`, { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'} })
     .then(r => r.json())
     .then(d => {
       if (!d.success) return;
-
       const root = document.querySelector(`#message-${messageId}`);
       if (!root) return;
-
       let badge = root.querySelector('.reaction-display');
       const column = root.querySelector('.msg-wrap .flex.flex-col');
-
       if (d.new_like_count > 0) {
         if (!badge && column) {
           column.insertAdjacentHTML('beforeend', `
@@ -440,7 +513,7 @@ function likeMessage(messageId) {
     });
 }
 
-/* ---------- рендер сообщения ---------- */
+/* Рендер сообщения */
 function renderMessage(msg, last) {
   const changeUser = !last || last.user.name !== msg.user.name || last.is_current_user !== msg.is_current_user;
   const showAvatar = changeUser;
@@ -457,7 +530,7 @@ function renderMessage(msg, last) {
 
   const contentHtml = msg.image_url
     ? `<div class="rounded-xl overflow-hidden shadow-md cursor-zoom-in" onclick="openLightbox('${msg.image_url}')">
-         <img src="${msg.image_url}" class="chat-img">
+         <img src="${msg.image_url}" class="chat-img" alt="">
        </div>`
     : `<div class="chat-bubble ${msg.is_current_user ? 'chat-bubble-me' : 'chat-bubble-other'}">${escapeHtml(msg.text)}</div>`;
 
@@ -465,7 +538,7 @@ function renderMessage(msg, last) {
     <div id="message-${msg.id}" class="w-full flex ${justify}">
       <div ondblclick="likeMessage(${msg.id})" class="msg-wrap flex items-end gap-1.5 group relative ${rowDir}">
         <div class="w-6 h-6 flex-shrink-0">
-          ${showAvatar ? `<img src="${msg.user.avatar_url}" class="w-full h-full rounded-full object-cover">` : ''}
+          ${showAvatar ? `<img src="${msg.user.avatar_url}" class="w-full h-full rounded-full object-cover" alt="">` : ''}
         </div>
         <div class="flex flex-col ${msg.is_current_user ? 'items-end' : 'items-start'}">
           ${(showAvatar && !msg.is_current_user) ? `<span class="text-[11px] text-gray-500 ml-2 mb-0.5">${escapeHtml(msg.user.name)}</span>` : ''}
@@ -476,7 +549,7 @@ function renderMessage(msg, last) {
     </div>`;
 }
 
-/* ---------- Лента: фильтры и поиск ---------- */
+/* Фильтры ленты */
 document.addEventListener('DOMContentLoaded', () => {
   const feed = document.getElementById('feed');
   const tabs = document.querySelectorAll('.tab-btn');
@@ -485,7 +558,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function applyFilter() {
     const active = document.querySelector('.tab-btn.bg-white')?.dataset.filter || 'all';
     const q = (search?.value || '').trim().toLowerCase();
-
     feed?.querySelectorAll('.feed-item').forEach(card => {
       const type = card.dataset.type;
       const hay = (card.dataset.title || '') + ' ' + (card.dataset.desc || '');
@@ -506,7 +578,7 @@ document.addEventListener('DOMContentLoaded', () => {
   applyFilter();
 });
 
-/* ---------- Чат ---------- */
+/* Чат */
 document.addEventListener('DOMContentLoaded', function() {
   const groupId = {{ group.id }};
   let polling = null;
@@ -559,7 +631,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (s) s.textContent = this.files[0] ? `Выбран файл: ${this.files[0].name}` : '';
   });
 
-  // open/close widget
   const btnOpen = document.getElementById('chat-toggle-button');
   const box = document.getElementById('chat-widget-container');
   const btnClose = document.getElementById('chat-widget-close-button');
@@ -581,14 +652,14 @@ document.addEventListener('DOMContentLoaded', function() {
   btnOpen?.addEventListener('click', toggleChat);
   btnClose?.addEventListener('click', toggleChat);
 
-  // Lightbox
+  /* Лайтбокс */
   const lightbox = document.getElementById('image-lightbox');
   const lightboxImg = document.getElementById('lightbox-image');
   window.openLightbox = (src) => { if(!lightbox || !lightboxImg) return; lightboxImg.src = src; lightbox.classList.add('visible'); }
   window.closeLightbox = () => { if(!lightbox || !lightboxImg) return; lightbox.classList.remove('visible'); lightboxImg.src=''; }
   lightbox?.addEventListener('click', (e) => { if (e.target === lightbox) window.closeLightbox(); });
 
-  // Esc закрывает лайтбокс или чат
+  /* Esc закрывает лайтбокс или чат */
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (lightbox?.classList.contains('visible')) return window.closeLightbox();

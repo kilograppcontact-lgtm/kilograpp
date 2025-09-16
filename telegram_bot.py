@@ -897,7 +897,7 @@ async def on_startup(app: Application):
         logging.warning(f"delete_webhook error: {e}")
 
     scheduler = AsyncIOScheduler(timezone=TIMEZONE)
-    scheduler.add_job(remind_missing_meals, 'cron', hour=21, minute=11, args=[app])
+    scheduler.add_job(remind_missing_meals, 'cron', hour=21, minute=00, args=[app])
     scheduler.start()
     logging.info("APScheduler started.")
 
