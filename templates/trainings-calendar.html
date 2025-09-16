@@ -1,0 +1,575 @@
+{% extends "base.html" %}
+{% set title = "Расписание тренировок" %}
+
+{% block content %}
+<style>
+@keyframes slide-left { from { opacity:0; transform: translateX(14px); } to { opacity:1; transform: translateX(0);} }
+@keyframes slide-right{ from { opacity:0; transform: translateX(-14px);} to { opacity:1; transform: translateX(0);} }
+@keyframes fade { from { opacity:0;} to { opacity:1;} }
+.grid-animate-left { animation: slide-left .2s ease-out; }
+.grid-animate-right{ animation: slide-right .2s ease-out; }
+.fade-in { animation: fade .2s ease-out; }
+
+.calendar-cell:hover .day-badge { transform: translateY(-1px); }
+.pill { transition: transform .15s, box-shadow .15s, background .15s, opacity .15s; }
+.pill:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -10px rgba(0,0,0,.25); }
+.pill.disabled { opacity:.55; pointer-events:none; }
+
+/* Бейджи */
+.badge { font-size: 10px; line-height: 1; padding: 3px 6px; border-radius: 999px; }
+
+/* Крупный календарь на десктопе */
+.calendar-xl .calendar-cell { min-height: 220px; }
+.calendar-xl #calendarGrid { min-height: 900px; }
+
+/* Горизонтальный скролл на мобилках, чтобы календарь не "терялся" */
+.calendar-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.calendar-inner {
+  min-width: 1000px; /* ширина месяца для 7 колонок на узких экранах */
+}
+
+/* Липкая шапка дней в области скролла */
+.weekdays-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+/* Модалки */
+.modal-overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.45); z-index: 60; }
+.modal-overlay.show { display: flex; }
+.modal-card { width: min(100%, 860px); max-height: 80vh; overflow: hidden; border-radius: 20px; }
+.modal-body { max-height: 60vh; overflow: auto; }
+
+/* Мобильные правки */
+@media (max-width: 768px) {
+  .calendar-xl .calendar-cell { min-height: 130px; }
+  .calendar-xl #calendarGrid { min-height: auto; }
+}
+
+/* Очень узкие экраны */
+@media (max-width: 420px) {
+  .calendar-inner { min-width: 900px; }
+}
+</style>
+
+<section class="max-w-7xl xl:max-w-8xl mx-auto px-4 py-8">
+  <!-- Шапка -->
+  <div class="mb-6 rounded-3xl overflow-hidden">
+    <div class="relative isolate rounded-3xl p-5 md:p-6 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white">
+      <div class="absolute inset-0 opacity-20 pointer-events-none"
+           style="background: radial-gradient(1200px 600px at 10% -10%, rgba(255,255,255,.25), transparent),
+                   radial-gradient(1000px 500px at 90% 120%, rgba(255,255,255,.25), transparent);">
+      </div>
+
+      <div class="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-3">
+          <button id="prevMonth" class="p-2 rounded-xl bg-white/15 hover:bg-white/25 transition" aria-label="Предыдущий месяц">
+            <i class="bi bi-chevron-left"></i>
+          </button>
+          <div class="flex items-center gap-2">
+            <div id="monthLabel" class="text-xl font-semibold tracking-tight">Месяц YYYY</div>
+            <select id="monthSelect" class="text-sm bg-white/10 border border-white/20 rounded-lg px-2 py-1">
+              <option value="0">Январь</option><option value="1">Февраль</option><option value="2">Март</option><option value="3">Апрель</option>
+              <option value="4">Май</option><option value="5">Июнь</option><option value="6">Июль</option><option value="7">Август</option>
+              <option value="8">Сентябрь</option><option value="9">Октябрь</option><option value="10">Ноябрь</option><option value="11">Декабрь</option>
+            </select>
+            <input id="yearInput" type="number" class="w-24 text-sm bg-white/10 border border-white/20 rounded-lg px-2 py-1" placeholder="2025" />
+          </div>
+          <button id="nextMonth" class="p-2 rounded-xl bg-white/15 hover:bg-white/25 transition" aria-label="Следующий месяц">
+            <i class="bi bi-chevron-right"></i>
+          </button>
+
+          <button id="btnToday" class="ml-1 px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 transition">
+            Сегодня
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="relative">
+            <i class="bi bi-search absolute left-3 top-2.5 text-white/70"></i>
+            <input id="searchInput" type="text" placeholder="Поиск: тренер, название или ID…"
+                   class="pl-9 pr-3 py-2 text-sm rounded-xl bg-white/15 placeholder-white/70 border border-white/20 focus:outline-none focus:ring-2 focus:ring-white/50">
+          </div>
+          <label class="inline-flex items-center gap-2 text-sm bg-white/15 border border-white/20 rounded-xl px-3 py-2">
+            <input id="onlyJoined" type="checkbox" class="rounded accent-white"/>
+            Только мои записи
+          </label>
+          <span id="tzInfo" class="text-xs text-white/80"></span>
+
+          <button id="btnMy" class="ml-1 inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white text-emerald-700 hover:bg-white/90 transition">
+            <i class="bi bi-person-check"></i> Мои записи
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Календарь: скролл-контейнер на узких экранах -->
+  <div class="calendar-xl rounded-3xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/60">
+    <div class="calendar-scroll">
+      <div class="calendar-inner">
+        <!-- Шапка дней недели -->
+        <div class="grid grid-cols-7 gap-px bg-gray-100 dark:bg-white/10 weekdays-sticky">
+          {% set weekdays = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] %}
+          {% for w in weekdays %}
+            <div class="bg-gray-50 dark:bg-slate-800/60 text-center text-[12px] font-semibold py-2 uppercase tracking-wide text-gray-600 dark:text-gray-300">
+              {{ w }}
+            </div>
+          {% endfor %}
+        </div>
+        <!-- Сетка календаря -->
+        <div id="calendarGrid" class="grid grid-cols-7 gap-px bg-gray-100 dark:bg-white/10"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Модалка ДЕНЬ -->
+<div id="dayModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="dayModalDate">
+  <div class="modal-card bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xl">
+    <div class="flex items-center justify-between p-4 border-b dark:border-white/10">
+      <div>
+        <div id="dayModalDate" class="text-lg font-semibold"></div>
+        <div id="dayModalCount" class="text-xs text-gray-500"></div>
+      </div>
+      <button id="dayModalClose" class="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10" aria-label="Закрыть"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div id="dayModalBody" class="modal-body p-4 space-y-3">
+      <!-- наполняется JS -->
+    </div>
+  </div>
+</div>
+
+<!-- Модалка МОИ ЗАПИСИ -->
+<div id="myModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="myModalTitle">
+  <div class="modal-card bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xl">
+    <div class="flex items-center justify-between p-4 border-b dark:border-white/10">
+      <div id="myModalTitle" class="text-lg font-semibold">Мои записи</div>
+      <button id="myModalClose" class="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10" aria-label="Закрыть"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div id="myModalBody" class="modal-body p-4">
+      <div class="text-gray-500">Загрузка…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Тосты -->
+<div id="toastHost" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-[70] space-y-2 pointer-events-none"></div>
+
+<script>
+(() => {
+  const el = id => document.getElementById(id);
+
+  const meId = {{ me_id or 'null' }};
+
+  const monthLabel = el('monthLabel');
+  const monthSelect = el('monthSelect');
+  const yearInput = el('yearInput');
+  const grid = el('calendarGrid');
+
+  const btnPrev = el('prevMonth');
+  const btnNext = el('nextMonth');
+  const btnToday = el('btnToday');
+
+  const btnMy = el('btnMy');
+
+  const searchInput = el('searchInput');
+  const onlyJoined = el('onlyJoined');
+  const tzInfo = el('tzInfo');
+
+  const dayModal = el('dayModal');
+  const dayModalClose = el('dayModalClose');
+  const dayModalBody = el('dayModalBody');
+  const dayModalDate = el('dayModalDate');
+  const dayModalCount = el('dayModalCount');
+
+  const myModal = el('myModal');
+  const myModalClose = el('myModalClose');
+  const myModalBody = el('myModalBody');
+
+  const ruMonths = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+  const saved = JSON.parse(localStorage.getItem('trainings_month_client') || 'null');
+  const now = new Date();
+  const state = {
+    y: saved?.y ?? now.getFullYear(),
+    m: saved?.m ?? now.getMonth(),
+    data: [],
+    search: '',
+    onlyJoined: false
+  };
+
+  const MAX_VISIBLE_IN_CELL = 6;
+
+  function fmt2(n){ return String(n).padStart(2,'0'); }
+  function yyyymm(y, m){ return y + '-' + fmt2(m+1); }
+  function toLocalDateStr(y, m, d){ return y + '-' + fmt2(m+1) + '-' + fmt2(d); }
+  function clampYear(v){ v = parseInt(v||'',10); if(isNaN(v)) return new Date().getFullYear(); return Math.min(9999, Math.max(1900, v)); }
+  function isSameDate(a, b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+
+  function tzString(){
+    const z = -new Date().getTimezoneOffset()/60;
+    const sign = z>=0?'+':'-';
+    return `Время браузера (GMT${sign}${Math.abs(z)})`;
+  }
+  tzInfo.textContent = tzString();
+
+  function notify(text, ok=true){
+    const host = el('toastHost');
+    const box = document.createElement('div');
+    box.className = `fade-in pointer-events-auto px-3 py-2 rounded-xl text-sm shadow ${ok ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`;
+    box.textContent = text;
+    host.appendChild(box);
+    setTimeout(()=>{ box.style.opacity='0'; box.style.transition='opacity .2s'; }, 2400);
+    setTimeout(()=>{ host.removeChild(box); }, 2800);
+  }
+
+  function saveMonth(){ localStorage.setItem('trainings_month_client', JSON.stringify({y: state.y, m: state.m})); }
+
+  // ---- Filters ----
+  function monthHeader(){
+    monthLabel.textContent = `${ruMonths[state.m]} ${state.y}`;
+    monthSelect.value = String(state.m);
+    yearInput.value = String(state.y);
+  }
+  function filteredData(){
+    const q = (state.search || '').trim().toLowerCase();
+    return state.data.filter(t => {
+      if(state.onlyJoined && !t.joined) return false;
+      if(q){
+        const hay = `${t.trainer_name||''} ${t.title||''} ${String(t.id||'')}`.toLowerCase();
+        if(!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  // ---- Render ----
+  function renderGrid(animateDir){
+    monthHeader();
+    const data = filteredData();
+
+    const byDate = {};
+    for(const t of data){ (byDate[t.date] ||= []).push(t); }
+    for(const k in byDate){ byDate[k].sort((a,b)=> a.start_time.localeCompare(b.start_time)); }
+
+    const first = new Date(state.y, state.m, 1);
+    const last = new Date(state.y, state.m+1, 0);
+    const startWeekDay = (first.getDay()+6)%7;
+    const totalCells = startWeekDay + last.getDate();
+    const weeks = Math.ceil(totalCells / 7);
+    const cells = Math.max(42, weeks*7);
+
+    grid.innerHTML = '';
+    if(animateDir === 'left') grid.classList.add('grid-animate-left');
+    if(animateDir === 'right') grid.classList.add('grid-animate-right');
+    setTimeout(()=> grid.classList.remove('grid-animate-left','grid-animate-right'), 210);
+
+    for(let i=0; i<cells; i++){
+      const cell = document.createElement('div');
+      cell.className = 'calendar-cell relative bg-white dark:bg-slate-900/40 p-2';
+
+      const dayNum = i - startWeekDay + 1;
+      if(dayNum < 1 || dayNum > last.getDate()){
+        cell.classList.add('bg-gray-50','dark:bg-slate-800/50');
+        grid.appendChild(cell);
+        continue;
+      }
+
+      const dateStr = toLocalDateStr(state.y, state.m, dayNum);
+      const dateObj = new Date(state.y, state.m, dayNum);
+      const isToday = isSameDate(dateObj, new Date());
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'flex items-center justify-between mb-2';
+      const dn = document.createElement('button');
+      dn.className = 'day-badge inline-flex items-center justify-center w-9 h-9 text-sm font-semibold rounded-full transition ' + (isToday ? 'bg-emerald-600 text-white' : 'bg-black/5 dark:bg-white/10 text-gray-700 dark:text-gray-200');
+      dn.textContent = dayNum;
+      dn.title = 'Открыть все тренировки дня';
+      dn.addEventListener('click', ()=> openDayModal(dateStr));
+      header.appendChild(dn);
+
+      const moreBtnTop = document.createElement('button');
+      moreBtnTop.className = 'text-[11px] text-emerald-700 hover:underline';
+      moreBtnTop.textContent = 'все';
+      moreBtnTop.title = 'Показать все тренировки этого дня';
+      moreBtnTop.addEventListener('click', ()=> openDayModal(dateStr));
+      header.appendChild(moreBtnTop);
+
+      cell.appendChild(header);
+
+      // List (только минимальный превью)
+      const list = document.createElement('div');
+      list.className = 'space-y-1 max-h-60 overflow-auto pr-1';
+      const items = byDate[dateStr] || [];
+
+      if(items.length === 0){
+        const empty = document.createElement('div');
+        empty.className = 'text-[11px] text-gray-400 select-none';
+        empty.textContent = 'Нет тренировок';
+        list.appendChild(empty);
+      }
+
+      let rendered = 0;
+      for(const t of items){
+        if(rendered >= MAX_VISIBLE_IN_CELL) break;
+        rendered++;
+
+        const past = !!t.is_past;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'pill group rounded-xl border flex flex-col gap-1 px-2 py-1 text-xs ' +
+          (t.joined ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/15 dark:border-emerald-700'
+                    : 'bg-gray-50 border-gray-200 dark:bg-slate-800/60 dark:border-white/10');
+        if(past) wrap.classList.add('disabled');
+
+        // строка 1: время + тренер
+        const row1 = document.createElement('div');
+        row1.className = 'flex items-center justify-between gap-2';
+        row1.innerHTML = `<span class="font-medium">${t.start_time}–${t.end_time}</span>
+                          <span class="truncate text-gray-700 dark:text-gray-200">${t.trainer_name}</span>`;
+        wrap.appendChild(row1);
+
+        // строка 2: название
+        const rowTitle = document.createElement('div');
+        rowTitle.className = 'truncate text-gray-600 dark:text-gray-300';
+        rowTitle.textContent = t.title || 'Онлайн-тренировка';
+        wrap.appendChild(rowTitle);
+
+        // строка 3: одна кнопка действия
+        const rowActions = document.createElement('div');
+        rowActions.className = 'flex items-center justify-end';
+
+        const btn = document.createElement('button');
+        btn.className = 'px-2 py-1 rounded-lg border transition ' +
+          (t.joined ? 'border-rose-300 text-rose-600 hover:bg-rose-50 dark:border-rose-600/40 dark:hover:bg-rose-900/20'
+                    : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-600/40 dark:hover:bg-emerald-900/20');
+
+        if(past){
+          btn.disabled = true;
+          btn.textContent = 'прошло';
+        } else if(t.joined){
+          btn.textContent = 'Отменить';
+          btn.addEventListener('click', async ()=>{
+            if(!confirm('Отменить запись?')) return;
+            const r = await fetch(`/api/trainings/${t.id}/signup`, { method:'DELETE' });
+            const ok = r.ok; const j = await r.json().catch(()=>({}));
+            if(ok){ notify('Запись отменена'); await loadAll(); } else { notify(j?.message||'Ошибка отмены', false); }
+          });
+        } else {
+          if((t.spots_left||0) === 0){
+            btn.disabled = true;
+            btn.textContent = 'Нет мест';
+          } else {
+            btn.textContent = 'Записаться';
+            btn.addEventListener('click', async ()=>{
+              const r = await fetch(`/api/trainings/${t.id}/signup`, { method:'POST' });
+              const ok = r.ok; const j = await r.json().catch(()=>({}));
+              if(ok){ notify('Вы записаны'); await loadAll(); } else { notify(j?.message||'Не удалось записаться', false); }
+            });
+          }
+        }
+
+        rowActions.appendChild(btn);
+        wrap.appendChild(rowActions);
+
+        list.appendChild(wrap);
+      }
+
+      // «ещё N»
+      if(items.length > MAX_VISIBLE_IN_CELL){
+        const more = document.createElement('button');
+        more.className = 'w-full mt-1 px-2 py-1 text-[11px] rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50';
+        more.textContent = `ещё ${items.length - MAX_VISIBLE_IN_CELL}…`;
+        more.addEventListener('click', ()=> openDayModal(dateStr));
+        list.appendChild(more);
+      }
+
+      cell.appendChild(list);
+      grid.appendChild(cell);
+    }
+  }
+
+  // ---- Day Modal ----
+  function openDayModal(dateStr){
+    const list = filteredData().filter(t => t.date === dateStr)
+                               .sort((a,b)=> a.start_time.localeCompare(b.start_time));
+    const [y,m,d] = dateStr.split('-');
+    dayModalDate.textContent = `${d}.${m}.${y}`;
+    dayModalCount.textContent = list.length ? `Тренировок: ${list.length}` : 'Нет тренировок';
+
+    dayModalBody.innerHTML = '';
+    if(list.length === 0){
+      dayModalBody.innerHTML = '<div class="text-gray-500">Расписание пусто</div>';
+    } else {
+      for(const t of list){
+        const past = !!t.is_past;
+        const host = (()=>{ try{ return new URL(t.meeting_link).hostname; }catch(_e){ return ''; }})();
+
+        const item = document.createElement('div');
+        item.className = 'rounded-2xl border p-3 flex flex-col gap-2 ' +
+          (t.joined ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/15 dark:border-emerald-700'
+                    : 'bg-white border-gray-200 dark:bg-slate-800/60 dark:border-white/10');
+
+        item.innerHTML = `
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="text-sm font-semibold">${t.start_time}–${t.end_time}</div>
+            <div class="text-xs text-gray-500">ID: <button class="copy-id underline underline-offset-2" data-id="${t.id}">${t.id}</button></div>
+          </div>
+          <div class="text-sm text-gray-700 dark:text-gray-200">${t.title || 'Онлайн-тренировка'} — ${t.trainer_name}</div>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="badge bg-white border border-gray-200 text-gray-700 dark:bg-slate-800/60 dark:border-white/10 dark:text-gray-200">
+                ${(t.spots_left||0)>0 ? 'мест: '+t.spots_left : 'нет мест'}
+              </span>
+              ${t.can_open_link && t.meeting_link
+                ? `<a href="${t.meeting_link}" target="_blank" rel="noopener" class="badge bg-emerald-600 text-white hover:opacity-90">
+                     <i class="bi bi-box-arrow-up-right"></i> ${host||'перейти'}
+                   </a>`
+                : `<span class="badge bg-gray-200 text-gray-700 dark:bg-slate-700 dark:text-gray-200">
+                     <i class="bi bi-lock"></i> откроется в ${(t.link_visible_at||'').slice(11,16) || 'скоро'}
+                   </span>`
+              }
+            </div>
+            <div>
+              ${past
+                ? `<button class="px-2 py-1 rounded-lg border text-gray-400 cursor-not-allowed">прошло</button>`
+                : t.joined
+                  ? `<button class="btn-cancel px-2 py-1 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50" data-id="${t.id}">Отменить</button>`
+                  : ((t.spots_left||0)===0
+                      ? `<button class="px-2 py-1 rounded-lg border text-gray-400 cursor-not-allowed">Нет мест</button>`
+                      : `<button class="btn-join px-2 py-1 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50" data-id="${t.id}">Записаться</button>`)}
+            </div>
+          </div>
+        `;
+
+        dayModalBody.appendChild(item);
+      }
+    }
+
+    // действия в модалке
+    dayModalBody.querySelectorAll('.copy-id').forEach(b=>{
+      b.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(b.dataset.id); notify('ID скопирован'); }catch(_e){} });
+    });
+    dayModalBody.querySelectorAll('.btn-join').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        const id = b.dataset.id;
+        const r = await fetch(`/api/trainings/${id}/signup`, { method:'POST' });
+        const ok = r.ok; const j = await r.json().catch(()=>({}));
+        if(ok){ notify('Вы записаны'); await loadAll(); openDayModal(dateStr); } else { notify(j?.message||'Не удалось записаться', false); }
+      });
+    });
+    dayModalBody.querySelectorAll('.btn-cancel').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        if(!confirm('Отменить запись?')) return;
+        const id = b.dataset.id;
+        const r = await fetch(`/api/trainings/${id}/signup`, { method:'DELETE' });
+        const ok = r.ok; const j = await r.json().catch(()=>({}));
+        if(ok){ notify('Запись отменена'); await loadAll(); openDayModal(dateStr); } else { notify(j?.message||'Ошибка отмены', false); }
+      });
+    });
+
+    showModal(dayModal, true);
+  }
+
+  // ---- My Modal ----
+  function openMyModal(){
+    const joined = state.data.filter(t => t.joined)
+      .sort((a,b)=> (`${a.date} ${a.start_time}`).localeCompare(`${b.date} ${b.start_time}`));
+    if(joined.length === 0){
+      myModalBody.innerHTML = `
+        <div class="p-10 text-center text-gray-500">
+          <div class="text-3xl mb-2">🗓️</div>
+          <div class="font-medium">Пока нет записей</div>
+          <div class="text-sm">Запишитесь на тренировку в календаре.</div>
+        </div>`;
+    } else {
+      myModalBody.innerHTML = joined.map(t=>{
+        const host = (()=>{ try{ return new URL(t.meeting_link).hostname; }catch(_e){ return ''; }})();
+        const linkHtml = t.can_open_link && t.meeting_link
+          ? `<a href="${t.meeting_link}" target="_blank" rel="noopener" class="text-xs text-emerald-600 hover:underline">${host||'перейти'}</a>`
+          : `<span class="text-xs text-gray-500">Ссылка появится в ${(t.link_visible_at||'').slice(11,16) || 'ближайшее время'}</span>`;
+        const btnHtml = t.is_past
+          ? `<button disabled class="px-2 py-1 rounded-lg border text-gray-400">прошло</button>`
+          : `<button data-cancel="${t.id}" class="px-2 py-1 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50">Отменить</button>`;
+        return `
+          <div class="p-4 border-b dark:border-white/10 flex items-start gap-3">
+            <div class="shrink-0 mt-0.5 text-emerald-600"><i class="bi bi-broadcast-pin"></i></div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-semibold">${t.date} · ${t.start_time}–${t.end_time}</div>
+              <div class="text-xs text-gray-500">ID: <button class="copy-id underline underline-offset-2" data-id="${t.id}">${t.id}</button></div>
+              <div class="text-sm text-gray-700 dark:text-gray-200 truncate">${t.title || 'Онлайн-тренировка'} — ${t.trainer_name}</div>
+              <div class="flex items-center justify-between mt-1">
+                ${linkHtml}
+                ${btnHtml}
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+      myModalBody.querySelectorAll('[data-cancel]').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          if(!confirm('Отменить запись?')) return;
+          const id = btn.getAttribute('data-cancel');
+          const r = await fetch(`/api/trainings/${id}/signup`, { method:'DELETE' });
+          const ok = r.ok; const j = await r.json().catch(()=>({}));
+          if(ok){ notify('Запись отменена'); await loadAll(); openMyModal(); } else { notify(j?.message||'Ошибка отмены', false); }
+        });
+      });
+      myModalBody.querySelectorAll('.copy-id').forEach(b=>{
+        b.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(b.dataset.id); notify('ID скопирован'); }catch(_e){} });
+      });
+    }
+    showModal(myModal, true);
+  }
+
+  // ---- Modals helpers ----
+  function showModal(node, yes){
+    if(yes){ node.classList.add('show'); }
+    else { node.classList.remove('show'); }
+  }
+  function closeModals(){ showModal(dayModal,false); showModal(myModal,false); }
+
+  dayModalClose.addEventListener('click', ()=> showModal(dayModal,false));
+  myModalClose.addEventListener('click', ()=> showModal(myModal,false));
+  dayModal.addEventListener('click', e=>{ if(e.target === dayModal) showModal(dayModal,false); });
+  myModal.addEventListener('click', e=>{ if(e.target === myModal) showModal(myModal,false); });
+  document.addEventListener('keydown', e=>{ if(e.key === 'Escape') closeModals(); });
+
+  // ---- Loaders ----
+  async function loadMonth(animate){
+    const r = await fetch(`/api/trainings?month=${yyyymm(state.y, state.m)}`);
+    const j = await r.json().catch(()=>({}));
+    state.data = Array.isArray(j?.data) ? j.data : [];
+    renderGrid(animate);
+  }
+  async function loadAll(){ await loadMonth(); }
+
+  // ---- Events ----
+  btnPrev.addEventListener('click', async ()=>{ if(state.m===0){ state.m=11; state.y--; } else state.m--; saveMonth(); await loadMonth('right'); });
+  btnNext.addEventListener('click', async ()=>{ if(state.m===11){ state.m=0; state.y++; } else state.m++; saveMonth(); await loadMonth('left'); });
+  btnToday.addEventListener('click', async ()=>{ const d=new Date(); state.y=d.getFullYear(); state.m=d.getMonth(); saveMonth(); await loadMonth(); });
+
+  monthSelect.addEventListener('change', async (e)=>{ state.m = parseInt(e.target.value,10); saveMonth(); await loadMonth(); });
+  yearInput.addEventListener('change', async (e)=>{ state.y = clampYear(e.target.value); saveMonth(); await loadMonth(); });
+
+  document.addEventListener('keydown', (e)=>{
+    if(e.target && ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+    if(e.key==='ArrowLeft'){ e.preventDefault(); btnPrev.click(); }
+    if(e.key==='ArrowRight'){ e.preventDefault(); btnNext.click(); }
+    if(e.key.toLowerCase()==='t'){ e.preventDefault(); btnToday.click(); }
+  });
+
+  searchInput.addEventListener('input', ()=>{ state.search = searchInput.value; renderGrid(); });
+  onlyJoined.addEventListener('change', ()=>{ state.onlyJoined = !!onlyJoined.checked; renderGrid(); });
+  btnMy.addEventListener('click', openMyModal);
+
+  // init
+  (async ()=>{ await loadAll(); })();
+})();
+</script>
+{% endblock %}

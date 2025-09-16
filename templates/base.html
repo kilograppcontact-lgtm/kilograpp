@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kilogr.app</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <style>[x-cloak] { display: none !important; }</style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" />
+  <style>
+/* Простой и заметный: Golos Text */
+body {
+  font-family: 'Golos Text', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  background: linear-gradient(to bottom, #f0f4f8 0%, #ffffff 100%);
+  min-height: 100vh;
+  font-weight: 500;         /* чуть плотнее базовый текст — ощущается «заметнее» */
+  letter-spacing: 0.1px;    /* деликатная разрядка для читабельности */
+}
+
+/* Заголовки — выразительнее, но без лишней декоративности */
+h1, h2, h3, h4 {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+/* Навигация и кнопки — уверенный medium */
+.nav-link, .mobile-nav-link, .btn {
+  font-weight: 600;
+}
+
+
+
+    .nav-link {
+      @apply text-gray-600 font-medium hover:text-blue-600 transition duration-200;
+    }
+
+    /* Стили для ссылок в мобильном меню */
+    .mobile-nav-link {
+        @apply block text-gray-700 py-2 px-4 text-base hover:bg-gray-100 rounded-md;
+    }
+
+    .nav-link-active {
+      @apply text-blue-600 font-semibold;
+    }
+
+    .hover-scale {
+      transition: transform 0.2s ease;
+    }
+
+    .hover-scale:hover {
+      transform: scale(1.04);
+    }
+  </style>
+</head>
+<body class="flex flex-col">
+<header
+  x-data="{ open:false }"
+  x-effect="document.documentElement.style.overflow = open ? 'hidden' : ''"
+  class="sticky top-0 z-50 bg-white shadow-sm border-b border-slate-200
+         md:bg-white/70 md:backdrop-blur-xl md:supports-[backdrop-filter]:bg-white/60 md:border-white/20">
+
+  <!-- Градиентная линия -->
+  <div class="h-0.5 w-full bg-gradient-to-r from-indigo-400 via-sky-400 to-emerald-400"></div>
+
+  <!-- Топбар -->
+  <div class="max-w-7xl mx-auto px-4">
+    <div class="flex items-center justify-between py-3">
+      <!-- Лого -->
+      <a href="/profile" class="flex items-center gap-2 hover:opacity-90 transition">
+        <img
+          src="{{ url_for('static', filename='logo.png') }}"
+          alt="Kilogr.app"
+          class="h-10 md:h-11 w-auto object-contain"
+          loading="lazy"
+        />
+      </a>
+
+      <!-- Десктоп-меню -->
+      <nav class="hidden md:flex items-center gap-2">
+        {% if session.user_id %}
+          {% if current_user and current_user.email == 'admin@healthclub.local' %}
+            <a href="/admin"
+               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-yellow-100 text-yellow-800 font-semibold hover:bg-yellow-200 transition">
+              <i class="bi bi-shield-lock"></i>
+              <span>Админ панель</span>
+            </a>
+          {% endif %}
+
+          <a href="/manual_activity"
+             class="inline-flex px-4 py-2 rounded-full text-sm font-medium transition
+                    {% if request.path == '/manual_activity' %} bg-slate-900 text-white shadow {% else %} text-slate-600 hover:text-slate-900 hover:bg-slate-100 {% endif %}">
+            Добавить активность
+          </a>
+
+          <a href="/trainings-calendar"
+             class="inline-flex px-4 py-2 rounded-full text-sm font-medium transition
+                    {% if request.path == '/trainings-calendar' %} bg-slate-900 text-white shadow {% else %} text-slate-600 hover:text-slate-900 hover:bg-slate-100 {% endif %}">
+            Расписание
+          </a>
+
+          {% if is_trainer_user %}
+          <a href="/trainings"
+             class="inline-flex px-4 py-2 rounded-full text-sm font-medium transition
+                    {% if request.path == '/trainings' %} bg-slate-900 text-white shadow {% else %} text-slate-600 hover:text-slate-900 hover:bg-slate-100 {% endif %}">
+            Тренировки
+          </a>
+          {% endif %}
+
+          <a href="/logout"
+             class="ml-2 inline-flex px-4 py-2 rounded-full text-sm font-semibold text-red-600 hover:bg-red-50 transition">
+            Выйти
+          </a>
+        {% else %}
+          <a href="/login"
+             class="inline-flex px-4 py-2 rounded-full text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition">
+            Вход
+          </a>
+          <a href="/register"
+             class="inline-flex px-4 py-2 rounded-full text-sm font-semibold text-white
+                    bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500 hover:from-indigo-600 hover:via-blue-600 hover:to-sky-600 shadow-md transition">
+            Регистрация
+          </a>
+        {% endif %}
+      </nav>
+
+      <!-- Бургер -->
+      <button
+        @click="open = true"
+        class="md:hidden inline-flex items-center justify-center h-10 w-10 rounded-xl text-slate-700 hover:bg-slate-100 transition"
+        aria-label="Открыть меню">
+        <i class="bi bi-list text-2xl"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Мобильная шторка -->
+  <div
+    x-show="open"
+    x-cloak
+    class="fixed inset-0 z-50 md:hidden"
+    role="dialog" aria-modal="true">
+
+    <!-- Подложка (мягкое появление/исчезание) -->
+    <div class="absolute inset-0 bg-black/50"
+         @click="open=false"
+         x-transition:enter="transition-opacity ease-out duration-250"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"></div>
+
+    <!-- Панель (слайд справа + лёгкий fade) -->
+    <aside
+      class="absolute right-0 top-0 h-full w-[88vw] max-w-[380px] bg-white shadow-2xl
+             rounded-l-2xl p-5 flex flex-col will-change-transform will-change-opacity"
+      x-transition:enter="transform transition ease-out duration-300"
+      x-transition:enter-start="translate-x-full opacity-0"
+      x-transition:enter-end="translate-x-0 opacity-100"
+      x-transition:leave="transform transition ease-in duration-200"
+      x-transition:leave-start="translate-x-0 opacity-100"
+      x-transition:leave-end="translate-x-full opacity-0">
+
+      <!-- Заголовок панели -->
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-sm font-semibold text-slate-500">Меню</span>
+        <button @click="open=false" class="h-9 w-9 rounded-lg hover:bg-slate-100 text-slate-700">
+          <i class="bi bi-x-lg text-xl"></i>
+        </button>
+      </div>
+
+      <!-- Ссылки: стэггер анимация пунктов -->
+      <nav class="space-y-2"
+           x-data
+           x-init="$watch('open', v => { /* просто триггер для повторной анимации при каждом открытии */ })">
+
+        {% if session.user_id %}
+          {% if current_user and current_user.email == 'admin@healthclub.local' %}
+          <a href="/admin"
+             x-show="open"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 translate-y-2"
+             :style="{ transitionDelay: (0*60)+'ms' }"
+             class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-yellow-200 bg-yellow-50 text-yellow-800 font-semibold shadow-sm hover:bg-yellow-100 transition">
+            <i class="bi bi-shield-lock text-lg"></i>
+            <span>Админ панель</span>
+          </a>
+          {% endif %}
+
+          <a href="/manual_activity"
+             x-show="open"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 translate-y-2"
+             :style="{ transitionDelay: (1*60)+'ms' }"
+             class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-semibold shadow-sm hover:bg-slate-50 active:bg-slate-100 transition">
+            <i class="bi bi-plus-circle text-lg"></i>
+            <span>Добавить активность</span>
+          </a>
+
+          <a href="/trainings-calendar"
+             x-show="open"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 translate-y-2"
+             :style="{ transitionDelay: (2*60)+'ms' }"
+             class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-semibold shadow-sm hover:bg-slate-50 active:bg-slate-100 transition">
+            <i class="bi bi-calendar3 text-lg"></i>
+            <span>Расписание</span>
+          </a>
+
+          {% if is_trainer_user %}
+          <a href="/trainings"
+             x-show="open"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 translate-y-2"
+             :style="{ transitionDelay: (3*60)+'ms' }"
+             class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-semibold shadow-sm hover:bg-slate-50 active:bg-slate-100 transition">
+            <i class="bi bi-dumbbell text-lg"></i>
+            <span>Тренировки</span>
+          </a>
+          {% endif %}
+
+          <a href="/logout"
+             x-show="open"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 translate-y-2"
+             :style="{ transitionDelay: (4*60)+'ms' }"
+             class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-red-200 bg-red-50 text-red-700 font-semibold shadow-sm hover:bg-red-100 transition">
+            <i class="bi bi-box-arrow-right text-lg"></i>
+            <span>Выйти</span>
+          </a>
+        {% else %}
+          <a href="/login"
+             x-show="open"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 translate-y-2"
+             :style="{ transitionDelay: (0*60)+'ms' }"
+             class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-semibold shadow-sm hover:bg-slate-50 active:bg-slate-100 transition">
+            <i class="bi bi-person text-lg"></i>
+            <span>Вход</span>
+          </a>
+
+          <a href="/register"
+             x-show="open"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 translate-y-2"
+             :style="{ transitionDelay: (1*60)+'ms' }"
+             class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-transparent text-white font-semibold shadow
+                    bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500 hover:from-indigo-600 hover:via-blue-600 hover:to-sky-600 transition">
+            <i class="bi bi-person-plus text-lg"></i>
+            <span>Регистрация</span>
+          </a>
+        {% endif %}
+      </nav>
+
+      <!-- Футер панели (плавный fade) -->
+      <div class="mt-auto pt-4 text-xs text-slate-400"
+           x-show="open"
+           x-transition:enter="transition-opacity ease-out duration-300"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition-opacity ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0">
+        © 2025 <span class="font-semibold text-slate-500">Kilogr.app</span>
+      </div>
+    </aside>
+  </div>
+</header>
+
+
+  <main class="flex-grow">
+    {% block content %}{% endblock %}
+  </main>
+
+  {# напоминание о продлении — оставлено без изменений #}
+  {% if renewal_reminder_due and subscription_days_left and subscription_days_left > 0 %}
+  <div id="renewalPopupOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div id="renewalPopupContent" class="card w-full max-w-lg p-6 sm:p-8 relative text-center animate-fade-in" onclick="event.stopPropagation()">
+      <button onclick="closeRenewalPopup()" class="absolute top-4 right-4 text-slate-400 text-2xl hover:text-slate-600 transition-colors" aria-label="Закрыть">&times;</button>
+
+      <div class="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-gradient-to-br from-amber-400 to-pink-500 mb-5 shadow-lg animate-pulse">
+        <span class="text-4xl text-white">⌛</span>
+      </div>
+
+      <h2 class="text-2xl font-bold text-slate-900">Подписка заканчивается через {{ subscription_days_left }} дн.</h2>
+      <p class="text-slate-600 mt-2">Не теряйте доступ к тренировкам и ИИ-диетам — продлите сейчас.</p>
+
+      <div class="mt-6 grid grid-cols-2 gap-3 text-left">
+        <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
+          <div class="text-xs font-semibold text-emerald-700">Сожжено жира за месяц</div>
+          <div class="mt-1 text-2xl font-extrabold text-emerald-700">
+            {{ (monthly_summary.fat_delta * -1)|round(2) if monthly_summary.fat_delta < 0 else 0 }} <span class="text-base">кг</span>
+          </div>
+          <div class="mt-2 w-full bg-emerald-100 h-2 rounded-full overflow-hidden">
+            <div class="h-2 bg-emerald-500 progress-bar-animate" style="width: {{ (monthly_summary.fat_delta < 0) and (min(100, (monthly_summary.fat_delta * -1) * 20)) or 0 }}%"></div>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-xl border border-indigo-200 bg-indigo-50">
+          <div class="text-xs font-semibold text-indigo-700">Прирост мышц за месяц</div>
+          <div class="mt-1 text-2xl font-extrabold text-indigo-700">
+            {{ (monthly_summary.muscle_delta > 0) and (monthly_summary.muscle_delta|round(2)) or 0 }} <span class="text-base">кг</span>
+          </div>
+          <div class="mt-2 w-full bg-indigo-100 h-2 rounded-full overflow-hidden">
+            <div class="h-2 bg-indigo-500 progress-bar-animate" style="width: {{ (monthly_summary.muscle_delta > 0) and (min(100, monthly_summary.muscle_delta * 20)) or 0 }}%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+        <a href="{{ url_for('purchase_page') }}" class="btn btn-primary">Продлить подписку</a>
+        <button onclick="closeRenewalPopup()" class="btn btn-secondary">Пока позже</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const renewalOverlay = document.getElementById('renewalPopupOverlay');
+
+    function closeRenewalPopup() {
+      if (!renewalOverlay) return;
+      fetch('/api/dismiss_renewal_reminder', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+        .catch(()=>{});
+      renewalOverlay.style.transition = 'opacity 0.3s ease';
+      renewalOverlay.style.opacity = '0';
+      setTimeout(() => {
+        renewalOverlay.style.display = 'none';
+        lockScroll(false);
+      }, 300);
+    }
+
+    if (renewalOverlay) {
+      lockScroll(true);
+      renewalOverlay.addEventListener('click', function(e){
+        if (e.target === renewalOverlay) closeRenewalPopup();
+      });
+      document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape') closeRenewalPopup();
+      });
+    }
+  </script>
+  {% endif %}
+{% if show_help_button %}
+<!-- Броская кнопка помощи для новичков -->
+<div class="fixed bottom-5 right-5 z-40 group">
+  <!-- Пульсирующий индикатор внимания -->
+  <span class="absolute -top-1 -right-1 inline-flex h-3 w-3">
+    <span class="absolute inline-flex h-full w-full rounded-full bg-indigo-400/60 animate-ping"></span>
+    <span class="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
+  </span>
+
+  <!-- Подсказка-лейбл (видна всегда на десктопе, на мобилках скрыта) -->
+  <span class="hidden sm:inline-block mb-2 mr-1 px-2 py-1 text-xs font-medium rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 shadow">
+    Как пользоваться
+  </span>
+
+  <a href="{{ url_for('instructions_page') }}"
+     class="inline-flex items-center justify-center w-14 h-14 rounded-full shadow-xl ring-2 ring-indigo-200/70
+            bg-gradient-to-br from-white via-indigo-50 to-indigo-100 hover:from-white hover:via-white hover:to-white
+            border border-slate-200 text-indigo-600 transition transform hover:scale-105 active:scale-95">
+    <span class="sr-only">Как пользоваться</span>
+    <i class="bi bi-question-circle text-2xl"></i>
+  </a>
+</div>
+{% endif %}
+
+<footer class="bg-gray-50 border-t mt-12">
+  <div class="max-w-7xl mx-auto px-4 py-6 text-center text-sm">
+    <!-- Постоянная ссылка на инструкцию для всех пользователей -->
+    <div class="mb-2">
+      <a href="{{ url_for('instructions_page') }}"
+         class="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium">
+        <i class="bi bi-question-circle"></i>
+        <span>Инструкция: как пользоваться платформой</span>
+      </a>
+    </div>
+    <div class="text-gray-400">
+      © 2025 <span class="font-semibold text-gray-500">Kilogr.app</span>. Все права защищены.
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

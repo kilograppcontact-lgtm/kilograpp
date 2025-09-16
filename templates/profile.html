@@ -1,0 +1,2255 @@
+{% extends 'base.html' %}
+{% block content %}
+{% if just_activated %}
+<div id="subscriptionPopupOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div id="subscriptionPopupContent" class="card w-full max-w-lg p-6 sm:p-8 relative text-center animate-fade-in">
+
+        <button onclick="closeSubscriptionPopup()" class="absolute top-4 right-4 text-slate-400 text-2xl hover:text-slate-600 transition-colors">&times;</button>
+
+        <div class="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-gradient-to-br from-green-400 to-blue-500 mb-5 shadow-lg">
+            <span class="text-4xl text-white">🎉</span>
+        </div>
+
+        <h2 class="text-2xl font-bold text-slate-900">Подписка успешно активирована!</h2>
+        <p class="text-slate-600 mt-2">Добро пожаловать в мир новых возможностей! Теперь вам доступны все функции, включая генерацию персональных диет и глубокую аналитику.</p>
+
+        <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+    <button onclick="closeSubscriptionPopup()" class="btn btn-primary">
+        🚀 Начать пользоваться
+    </button>
+    <a href="{{ url_for('welcome_guide') }}" class="btn btn-secondary">
+        🤔 Что я получил?
+    </a>
+</div>
+    </div>
+</div>
+
+<style>
+<style>
+  /* Эффект «как в примере» + сохраняем is-flipped */
+  .flip-card{ perspective:1200px; transition:transform .4s ease; }
+  .flip-card:hover{ transform:scale(1.03); }
+
+  .flip-card-inner{
+    transition: transform 1s ease;
+    transform-style: preserve-3d;
+    position: relative; width:100%; height:100%;
+  }
+  .flip-card.is-flipped .flip-card-inner{ transform: rotateY(180deg); }
+
+  .flip-card-front, .flip-card-back{
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    position:absolute; inset:0; padding:1.5rem; border-radius:1.25rem;
+    display:flex; flex-direction:column; justify-content:space-between;
+    overflow:hidden;
+    /* сочная тень как в примере */
+    box-shadow: 0 12px 25px rgba(0,0,0,.20);
+  }
+  .flip-card-back{ transform: rotateY(180deg); overflow-y:auto; }
+
+/* Стрелка в ВЕРХНЕМ ПРАВОМ углу, «смотрит» в угол (↗), жирная */
+.click-arrow{
+  position:absolute; top: .85rem; right: .85rem;
+  font-size: 1.4rem; font-weight: 800;
+  transform: rotate(-45deg); /* из → делаем ↗ */
+  color: rgba(255,255,255,.55);
+  text-shadow: 0 2px 6px rgba(0,0,0,.35);
+  user-select: none; pointer-events: none;
+  transition: transform .25s ease, color .25s ease, text-shadow .25s ease;
+}
+/* Подсветка при наведении на карту */
+.flip-card:hover .click-arrow{
+  transform: rotate(-45deg) translate(4px,-4px) scale(1.15);
+  color: #fff;
+  text-shadow: 0 4px 12px rgba(0,0,0,.5);
+}
+/* На обороте — тёмная стрелка */
+.flip-card-back .click-arrow{
+  color: #475569;            /* slate-600 */
+  text-shadow: none;
+}
+.flip-card:hover .flip-card-back .click-arrow{
+  color: #0f172a;            /* slate-900 */
+}
+
+</style>
+
+<style>
+    /* крупные карточки выбора пола */
+.selection-card-gender{
+  border: 2px solid var(--border-soft);
+  border-radius: 0.85rem;
+  background:
+    radial-gradient(120px 120px at 90% 10%, rgba(59,130,246,.06), transparent 60%),
+    linear-gradient(180deg, #fff, #f8fafc);
+  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease, background .3s ease;
+}
+.selection-card-gender:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(0,0,0,.08);
+  border-color: #cbd5e1; /* slate-300 */
+}
+.selection-card-gender.selected{
+  background:
+    radial-gradient(140px 140px at 90% 10%, rgba(59,130,246,.08), transparent 60%),
+    linear-gradient(180deg, #ffffff, #f0f9ff);
+}
+
+/* «телеграм»-анимация: подпрыгивание и всплеск при выборе */
+@keyframes tg-pop {
+  0%   { transform: scale(1) rotate(0deg); }
+  40%  { transform: scale(1.15) rotate(-6deg); }
+  70%  { transform: scale(0.97) rotate(3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+@keyframes burst {
+  0%   { transform: scale(0); opacity: 0; }
+  40%  { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+/* искорки */
+.selection-card-gender .burst{
+  position: absolute; width: 10px; height: 10px; border-radius: 9999px;
+  background: currentColor; opacity: 0; pointer-events: none;
+}
+.selection-card-gender .b1{ color:#60a5fa; /* blue-400 */ top:0; right:10px; }
+.selection-card-gender .b2{ color:#f472b6; /* pink-400 */ bottom:8px; right:0; }
+.selection-card-gender .b3{ color:#22c55e; /* green-500 */ top:18px; left:4px; }
+
+/* активируем анимации, когда карточка выбрана */
+.selection-card-gender.selected .icon-primary{
+  animation: tg-pop .5s ease-out both;
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,.15));
+}
+.selection-card-gender.selected .burst{
+  animation: burst .6s ease-out both;
+}
+.selection-card-gender.selected .b2{ animation-delay: .05s; }
+.selection-card-gender.selected .b3{ animation-delay: .1s; }
+
+</style>
+
+<script>
+    const popupOverlay = document.getElementById('subscriptionPopupOverlay');
+
+   function closeSubscriptionPopup() {
+    if (popupOverlay) {
+        // 1. Отправляем запрос на сервер, чтобы он "запомнил", что окно закрыто
+        fetch('/api/dismiss_welcome_popup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }).catch(err => console.error("Failed to dismiss popup on server:", err));
+
+        // 2. Плавно скрываем окно, как и раньше
+        popupOverlay.style.transition = 'opacity 0.3s ease';
+        popupOverlay.style.opacity = '0';
+        setTimeout(() => {
+popupOverlay.style.display = 'none';
+lockScroll(false);
+        }, 300);
+    }
+}
+
+    // Закрытие по клику на фон
+    if (popupOverlay) {
+        popupOverlay.addEventListener('click', function(event) {
+            if (event.target === popupOverlay) {
+                closeSubscriptionPopup();
+            }
+        });
+    }
+
+    // Закрытие по нажатию на клавишу Escape
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            closeSubscriptionPopup();
+        }
+    });
+</script>
+{% endif %}
+<style>
+    /* Стиль для заблокированных элементов */
+    .locked-feature {
+        position: relative;
+        opacity: 0.6;
+        filter: grayscale(80%);
+        pointer-events: none; /* Блокирует клики по дочерним элементам */
+    }
+    .locked-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(241, 245, 249, 0.7); /* slate-100 с прозрачностью */
+        border-radius: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 1rem;
+        z-index: 10;
+        pointer-events: auto; /* Восстанавливаем клики для оверлея */
+    }
+    .locked-text {
+        font-weight: 600;
+        color: #1e293b; /* slate-800 */
+    }
+    .locked-icon {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .flip-card-back {
+  position: relative;
+}
+.flip-card-back::after{
+  content:"";
+  position:absolute; left:0; right:0; bottom:0; height:28px;
+  pointer-events:none;
+  background: linear-gradient(to bottom, rgba(243,244,246,0), rgba(243,244,246,1));
+}
+
+
+    .progress-bar-animate { transition: width 0.5s ease-out; }
+
+  /* Общие анимации */
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+  @keyframes fadeIn {
+    from {opacity: 0; transform: scale(0.9);}
+    to {opacity: 1; transform: scale(1);}
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+
+  /* Анимация пульсирующего фона */
+  @keyframes pulse-background {
+    0% { opacity: 0; }
+    50% { opacity: 0.2; }
+    100% { opacity: 0; }
+  }
+  .animate-pulse-background:hover {
+    animation: pulse-background 1.5s infinite;
+  }
+
+  /* Анимации для кнопок */
+  .btn-hover-animate {
+    transition: all 0.3s ease;
+    transform: translateY(0);
+  }
+  .btn-hover-animate:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Анимации для карточек */
+  .card-hover-animate {
+    transition: all 0.3s ease;
+  }
+  .card-hover-animate:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Анимация для иконок */
+  .icon-hover-animate {
+    transition: transform 0.3s ease;
+  }
+  .icon-hover-animate:hover {
+    transform: scale(1.1);
+  }
+
+  /* Анимация для вкладок */
+  .tab-hover-animate {
+    transition: all 0.2s ease;
+  }
+  .tab-hover-animate:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+  }
+
+  /* Анимация для элементов формы */
+  .form-input-hover {
+    transition: all 0.2s ease;
+  }
+  .form-input-hover:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+
+  /* Анимация для элементов списка */
+  .list-item-hover {
+    transition: all 0.2s ease;
+  }
+  .list-item-hover:hover {
+    background-color: rgba(243, 244, 246, 0.5);
+    transform: translateX(2px);
+  }
+
+  /* Специальная анимация для карточки группы */
+  .group-card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .group-card-hover:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Анимация для карточек целей/пола */
+  .selection-card {
+    transition: all 0.3s ease;
+  }
+  .selection-card:hover {
+    transform: scale(1.03);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+</style>
+<style>
+  :root {
+    --brand-primary: #3b82f6; /* blue-500 */
+    --brand-secondary: #6366f1; /* indigo-500 */
+    --surface-ground: #f8fafc; /* slate-50 */
+    --surface-card: #ffffff;
+    --text-primary: #1e293b; /* slate-800 */
+    --text-secondary: #64748b; /* slate-500 */
+    --border-soft: #e2e8f0; /* slate-200 */
+  }
+
+  /* --- Base & Layout --- */
+  body {
+    background-color: var(--surface-ground);
+    color: var(--text-primary);
+  }
+
+  .page-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+  }
+
+  /* --- Animations --- */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  /* --- Card Component --- */
+  .card {
+    background-color: var(--surface-card);
+    border-radius: 1rem; /* 16px */
+    border: 1px solid var(--border-soft);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    transition: all 0.3s ease-in-out;
+  }
+  .card:hover {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.07);
+    transform: translateY(-2px);
+  }
+
+  /* --- Navigation Tabs --- */
+  .nav-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--border-soft);
+    margin-bottom: 2rem;
+  }
+  .nav-tab {
+    padding: 0.75rem 1rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+  }
+  .nav-tab:hover {
+    color: var(--brand-primary);
+  }
+  .nav-tab.active {
+    color: var(--brand-primary);
+    border-bottom-color: var(--brand-primary);
+  }
+
+  /* --- Buttons --- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+  }
+  .btn-primary {
+    background-color: var(--brand-primary);
+    color: white;
+  }
+  .btn-primary:hover {
+    background-color: #2563eb; /* blue-600 */
+  }
+  .btn-secondary {
+    background-color: var(--surface-ground);
+    color: var(--text-primary);
+    border-color: var(--border-soft);
+  }
+  .btn-secondary:hover {
+    background-color: #f1f5f9; /* slate-100 */
+    border-color: #cbd5e1; /* slate-300 */
+  }
+
+  /* --- Forms --- */
+  .form-input {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--border-soft);
+    border-radius: 0.5rem;
+    background-color: #f8fafc;
+    transition: all 0.2s ease;
+  }
+  .form-input:focus {
+    outline: none;
+    border-color: var(--brand-primary);
+    background-color: white;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  }
+  .selection-card {
+    padding: 1rem;
+    border: 2px solid var(--border-soft);
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .selection-card:hover {
+    border-color: var(--brand-secondary);
+    background-color: #f0fdfa; /* light teal for hover */
+  }
+  .selection-card.selected {
+    border-color: var(--brand-primary);
+    background-color: #eff6ff; /* light blue */
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  }
+
+  /* --- Progress Bar --- */
+  .progress-bar-bg {
+    background-color: #e5e7eb; /* gray-200 */
+    border-radius: 9999px;
+    height: 0.75rem;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    background-image: linear-gradient(to right, #fb923c, #f97316); /* orange-400 to orange-500 */
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+  }
+
+  .flip-card {
+  background-color: transparent;
+  width: 100%;
+  height: 280px; /* Задайте фиксированную высоту */
+  perspective: 1000px;
+}
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+}
+/* Класс для активации флипа */
+.flip-card.is-flipped .flip-card-inner {
+  transform: rotateY(180deg);
+}
+.flip-card-front, .flip-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: 1rem; /* 16px */
+  border: 1px solid var(--border-soft);
+  overflow: hidden;
+}
+.flip-card-front {
+  background-color: var(--surface-card);
+}
+.flip-card-back {
+  background-color: #f3f4f6; /* gray-100 */
+  color: var(--text-primary);
+  transform: rotateY(180deg);
+  padding: 1.5rem;
+  justify-content: flex-start; /* 1. Прижимаем контент к верху */
+  overflow-y: auto;          /* 2. Добавляем вертикальную прокрутку */
+}
+
+/* 3. (Опционально) Делаем скроллбар красивее */
+.flip-card-back::-webkit-scrollbar {
+  width: 6px;
+}
+.flip-card-back::-webkit-scrollbar-track {
+  background: transparent;
+}
+.flip-card-back::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  border: 3px solid transparent;
+}
+
+    /* ==== Telegram attention ==== */
+.tg-attn-btn{ position:relative; }
+.tg-attn-btn .tg-icon{ font-size:1.35rem; line-height:1; }
+
+.tg-attn-btn:not(.linked) .tg-icon{ color:#0ea5e9; }          /* sky-500 */
+.tg-attn-btn.linked        .tg-icon{ color:#10b981; }          /* emerald-500 */
+
+/* Двойная «маяк»-рябь */
+.tg-ping{
+  position:absolute; inset:-2px; border-radius:9999px;
+  border:2px solid rgba(14,165,233,.55);
+  pointer-events:none;
+  animation: tg-pulse-ring 2.2s cubic-bezier(.22,1,.36,1) infinite;
+}
+.tg-ping--1{ animation-delay: 0s;    }
+.tg-ping--2{ animation-delay: .9s;   }
+
+@keyframes tg-pulse-ring{
+  0%   { transform:scale(.65); opacity:.9; }
+  70%  { transform:scale(1.85); opacity:0; }
+  100% { transform:scale(2.05); opacity:0; }
+}
+
+/* Мягкое свечение вокруг кнопки */
+.tg-attn-btn:not(.linked)::after{
+  content:""; position:absolute; inset:-8px; border-radius:9999px;
+  box-shadow: 0 0 0 0 rgba(59,130,246,.0);
+  animation: tg-glow 1.8s ease-in-out infinite;
+}
+@keyframes tg-glow{
+  0%,100%{ box-shadow: 0 0 0 0 rgba(59,130,246,.0); }
+  50%    { box-shadow: 0 0 0 12px rgba(59,130,246,.15); }
+}
+
+/* Лёгкое покачивание иконки (не злоупотребляем) */
+.tg-attn-btn:not(.linked) .tg-icon{
+  animation: tg-wiggle 3.2s ease-in-out 1s infinite;
+}
+@keyframes tg-wiggle{
+  0%,100%{ transform:rotate(0); }
+  10%    { transform:rotate(-12deg); }
+  20%    { transform:rotate(6deg); }
+  30%    { transform:rotate(-3deg); }
+  40%    { transform:rotate(0); }
+}
+
+/* Бейдж подтверждения при привязке */
+.tg-check{
+  position:absolute; top:-4px; right:-4px;
+  background:#10b981; color:#fff; font-weight:800;
+  font-size:.66rem; line-height:1; padding:.275rem .4rem;
+  border-radius:9999px; box-shadow:0 6px 14px rgba(16,185,129,.35);
+}
+
+</style>
+<div class="max-w-7xl mx-auto px-4 py-6">
+
+<div id="infoBanner" class="relative bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl p-6 mb-6 shadow-lg">
+<button onclick="hideBanner()" aria-label="Скрыть баннер" class="absolute top-3 right-4 text-white/70 hover:text-white text-2xl font-bold">&times;</button>
+
+    <div class="flex items-center">
+        <div class="hidden sm:block mr-5 text-4xl opacity-80">⌚️</div>
+        <div>
+            <h3 class="font-bold text-xl">Добро пожаловать в экосистему Kilogr.app!</h3>
+            <p class="mt-1 text-white/90">Получили свои умные весы и часы? Они помогут вам автоматически отслеживать прогресс и достигать целей еще быстрее.</p>
+<a href="{{ url_for('devices') }}" class="inline-block mt-3 text-sm font-semibold bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors">
+  Узнать больше о наших устройствах
+</a>
+        </div>
+    </div>
+</div>
+
+<div id="restoreBannerContainer" class="text-center mb-6" style="display: none;">
+<button onclick="showBanner()" aria-controls="infoBanner"
+        class="text-sm text-blue-600 hover:underline font-semibold">
+  Показать приветственное сообщение
+</button>
+</div>
+    <div class="flex flex-wrap gap-2 border-b mb-6 overflow-x-auto scrollbar-hide px-1">
+    <a href="/profile"
+       class="px-4 py-2 font-medium {% if request.path == '/profile' %}border-b-2 border-blue-500 text-blue-600{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+      Профиль
+    </a>
+    <a href="/metrics"
+       class="px-4 py-2 font-medium {% if request.path == '/metrics' %}border-b-2 border-blue-500 text-blue-600{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+      Показатели
+    </a>
+    <a href="/activity"
+       class="px-4 py-2 font-medium {% if request.path == '/activity' %}border-b-2 border-blue-500 text-blue-600{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+      Активность
+    </a>
+    <a href="/meals"
+       class="px-4 py-2 font-medium {% if request.path == '/meals' %}border-b-2 border-blue-500 text-blue-600{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+      Приёмы пищи
+    </a>
+  </div>
+
+{% if request.path == '/profile' %}
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+
+<div class="lg:col-span-1 space-y-6">
+
+<div class="card p-6">
+        <div class="relative text-center">
+<div class="absolute top-0 right-0 z-10">
+  <button
+    onclick="openTelegramModal()"
+    title="Привязать Telegram"
+    aria-label="Привязать Telegram"
+    class="tg-attn-btn relative p-2 rounded-full hover:bg-slate-100 transition-colors {% if user.telegram_chat_id %}linked{% endif %}">
+
+    <!-- узнаваемая иконка Telegram -->
+    <i class="bi bi-telegram tg-icon"></i>
+
+    {% if not user.telegram_chat_id %}
+      <!-- двойной «маяк» + свечение -->
+      <span class="tg-ping tg-ping--1"></span>
+      <span class="tg-ping tg-ping--2"></span>
+    {% else %}
+      <!-- зелёный чек при привязке -->
+    {% endif %}
+  </button>
+</div>
+
+
+            {% if user.avatar %}
+<img loading="lazy" width="96" height="96"
+     src="{{ url_for('serve_uploaded_file', filename=user.avatar) }}" alt="Avatar"
+     class="w-24 h-24 mx-auto rounded-full ring-4 ring-offset-4 ring-blue-200 shadow-lg object-cover">
+            {% else %}
+<img loading="lazy" width="96" height="96"
+     src="https://www.svgrepo.com/show/452070/user-avatar.svg" alt="Default Avatar"
+     class="w-24 h-24 mx-auto rounded-full ring-4 ring-offset-4 ring-gray-200 shadow-lg">
+            {% endif %}
+            <h2 class="mt-5 text-xl font-bold text-slate-900">{{ user.name }}</h2>
+<p class="text-sm text-slate-500">{{ user.email }}</p>
+<div class="mt-4">
+    <button onclick="openEditProfileModal()" class="btn btn-secondary w-full text-sm">
+        Редактировать профиль
+    </button>
+</div>
+        </div>
+
+        <hr class="my-5 border-slate-200">
+
+        <div>
+            <div class="flex justify-between items-center cursor-pointer" id="metrics-header">
+              <h3 class="text-base font-bold text-slate-800">📊 Ключевые показатели</h3>
+              <button class="flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-800">
+                                <span id="metrics-toggle-text">Все данные</span>
+                <svg id="metrics-toggle-icon" xmlns="http://www....r" class="w-5 h-5 transition-transform duration-300 rotate-180">
+                  <path fill-rule="evenodd" d="M14.77 12.79a.75.... 0 011.06 0l4.24 4.25a.75.75 0 010 1.06z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            {% if not latest_analysis %}
+            <!-- Подсказка для новых пользователей: как правильно измеряться -->
+            <div class="mt-4 p-3 rounded-xl border border-amber-200 bg-amber-50 flex items-start gap-3">
+              <div class="shrink-0 mt-0.5">
+                <i class="bi bi-lightbulb text-amber-600 text-lg"></i>
+              </div>
+              <div>
+                <div class="font-semibold text-amber-800">Ещё нет анализов тела</div>
+                <div class="text-sm text-amber-700">
+                  Начните с корректного взвешивания — это улучшит рекомендации.
+                  <a class="underline font-semibold hover:no-underline"
+                     href="{{ url_for('instructions_page') }}#scales">Как измерять?</a>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+
+            <div id="metrics-icons-view" class="mt-4 grid grid-cols-3 gap-3 text-center">
+              {% set key_metrics = [('weight', '⚖️', 'Вес'), ('muscle_mass', '💪', 'Мышцы'), ('fat_mass', '🧈', 'Жир')] %}
+              {% for field, icon, label in key_metrics %}
+                {% set value = latest_analysis[field] if latest_analysis else '—' %}
+                <div class="p-2 bg-slate-50 rounded-lg border border-slate-200">
+                    <div class="text-sm text-slate-500">{{ label }}</div>
+                    <div class="text-xl font-bold text-slate-800 mt-1">{{ value|float|round(1) if value is not none else '' }}
+</div>
+                </div>
+              {% endfor %}
+            </div>
+            <div id="metrics-details-view" class="hidden mt-4 space-y-3">
+              {% set metrics = [
+                  ('Рост', 'height', '📏', 'см',  True), ('Вес', 'weight', '⚖️', 'кг',  False),
+                  ('Мышцы', 'muscle_mass', '💪', 'кг',  True), ('Жир', 'fat_mass', '🧈', 'кг',  False),
+                  ('Вода', 'body_water', '💧', '%',  True), ('Метаболизм', 'metabolism', '⚡', 'ккал',True),
+                  ('Белок', 'protein_percentage', '🥚', '%',  True), ('Висц. жир', 'visceral_fat_rating', '🔥', '',   False),
+                  ('ИМТ', 'bmi', '📐', '',   False)
+              ] %}
+              {% for label, field, icon, unit, good_up in metrics %}
+                {% set cur = latest_analysis[field] if latest_analysis else none %}
+                {% if cur is not none %}
+                  <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <div class="flex items-center">
+                      <span class="text-xl mr-3">{{ icon }}</span>
+                      <div>
+                        <div class="font-semibold text-slate-700">{{ label }}</div>
+                        <div class="text-xl font-bold text-slate-900">{{ cur|round(1) }}<span class="text-sm font-medium text-slate-400 ml-1">{{ unit }}</span></div>
+                      </div>
+                    </div>
+                    {% set prev = previous_analysis[field] if previous_analysis else none %}
+                    {% if prev is not none %}{% set cur_f, prev_f = cur|float, prev|float %}{% set diff = cur_f - prev_f %}{% if diff != 0 %}{% set arrow, is_good = ('↑', good_up) if diff > 0 else ('↓', not good_up) %}<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold {% if is_good %} bg-green-100 text-green-700 {% else %} bg-red-100 text-red-700 {% endif %}">{{ arrow }} {{ diff|abs|round(1) }}{{ unit }}</span>{% endif %}{% endif %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+              {% if user.analysis_comment %}<div class="!mt-5 p-4 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800"><strong class="font-semibold">💬 AI-комментарий:</strong> {{ user.analysis_comment }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if user.subscription %}
+      <div class="card p-6">
+        <h3 class="text-lg font-bold text-slate-800 mb-3">Статус подписки</h3>
+
+        {% if user.subscription.status == 'active' %}
+          <div class="p-4 rounded-lg bg-gradient-to-br from-green-400 to-blue-500 text-white shadow-lg">
+              <div class="flex items-center justify-between">
+                  <span class="font-bold text-lg">👑 Активна</span>
+                  <span class="text-sm opacity-90">
+                      {% if user.subscription.end_date %}
+                          до {{ user.subscription.end_date.strftime('%d.%m.%Y') }}
+                      {% else %}
+                          Безлимитная
+                      {% endif %}
+                  </span>
+              </div>
+          </div>
+          {% if user.subscription.end_date %}
+            <form action="{{ url_for('manage_user_subscription') }}" method="POST" class="mt-4">
+              <input type="hidden" name="action" value="freeze">
+              <button type="submit"
+                      onclick="return confirm('Вы уверены, что хотите заморозить подписку? Доступ к платным функциям будет приостановлен, а оставшийся срок сохранен.')"
+                      class="btn btn-secondary w-full text-sm">
+                  ❄️ Заморозить подписку
+              </button>
+            </form>
+          {% endif %}
+
+        {% elif user.subscription.status == 'frozen' %}
+          <div class="p-4 rounded-lg bg-slate-200 text-slate-800 border border-slate-300">
+              <div class="flex items-center justify-between">
+                  <span class="font-bold text-lg">❄️ Заморожена</span>
+                  <span class="text-sm font-medium">
+                      Осталось: {{ user.subscription.remaining_days_on_freeze }} дн.
+                  </span>
+              </div>
+          </div>
+          <form action="{{ url_for('manage_user_subscription') }}" method="POST" class="mt-4">
+            <input type="hidden" name="action" value="unfreeze">
+            <button type="submit"
+                    onclick="return confirm('Вы уверены, что хотите разморозить подписку? Срок ее действия начнет отсчитываться с сегодняшнего дня.')"
+                    class="btn btn-primary w-full text-sm">
+                🔥 Активировать снова
+            </button>
+          </form>
+
+        {% else %}
+            <div class="p-4 rounded-lg bg-red-100 text-red-800 border border-red-200 text-center">
+                <p class="font-semibold">Подписка неактивна (статус: {{ user.subscription.status }})</p>
+            </div>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="card p-6 bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-center shadow-xl">
+          <h3 class="font-bold text-xl">🚀 Расширьте возможности</h3>
+          <p class="text-sm text-white/80 mt-1 mb-4">Получите доступ к генерации диет, аналитике и эксклюзивным функциям, оформив подписку.</p>
+          <a href="#" class="btn bg-white text-blue-600 hover:bg-slate-100 w-full">
+              Узнать больше о подписке
+          </a>
+      </div>
+    {% endif %}
+
+    {% if not user.telegram_chat_id %}
+    <div class="card p-6 bg-blue-50 border-blue-200 text-center">
+        <h3 class="font-bold text-blue-800">Получайте уведомления в Telegram</h3>
+        <p class="text-sm text-blue-700 mt-1 mb-4">Привяжите аккаунт, чтобы получать диету и напоминания прямо в мессенджер.</p>
+        <button onclick="openTelegramModal()" class="btn btn-primary w-full">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M15 10l-4 4l6 6l4 -16l-18 7l4 2l2 6l3 -4" /></svg>
+            Привязать Telegram
+        </button>
+    </div>
+    {% endif %}
+    {% if not current_user.has_subscription %}
+<div class="card p-6 bg-green-50 border-green-200 text-center">
+    <h3 class="font-bold text-green-800">Активируйте все возможности</h3>
+    <p class="text-sm text-green-700 mt-1 mb-4">Выберите один из наших планов, чтобы получить доступ к генерации диет и другим премиум-функциям.</p>
+    <a href="{{ url_for('purchase_page') }}" class="btn bg-green-600 hover:bg-green-700 text-white w-full">
+        ✨ Выбрать подписку
+    </a>
+</div>
+{% endif %}
+
+    <div class="card p-6 relative">
+        <div {% if not current_user.has_subscription %}class="locked-feature"{% endif %}>
+            <h3 class="text-lg font-bold mb-3 text-slate-800">Сообщество</h3>
+            {% if user_joined_group %}
+              <a href="{{ url_for('group_detail', group_id=user_joined_group.id) }}" class="block p-4 rounded-lg bg-gradient-to-br from-sky-500 to-indigo-500 text-white shadow-lg hover:shadow-xl transition-shadow">
+                <span class="font-semibold text-lg">Моя группа: {{ user_joined_group.name }}</span>
+                {% if user_joined_group.description %}<p class="text-sm opacity-80 mt-1">{{ user_joined_group.description }}</p>{% endif %}
+                <span class="block text-xs mt-3 opacity-90">Перейти в группу →</span>
+              </a>
+            {% else %}
+              <div class="text-center p-4 border-2 border-dashed border-slate-300 rounded-lg">
+                <p class="text-slate-600 mb-3">Вы еще не в группе. Найдите свою команду!</p>
+                <a href="{{ url_for('groups_list') }}" class="btn btn-primary w-full">Вступить или создать</a>
+              </div>
+            {% endif %}
+        </div>
+        {% if not current_user.has_subscription %}
+        <div class="locked-overlay">
+            <div class="locked-icon">🔒</div>
+            <p class="locked-text">Доступ к группам</p>
+            <p class="text-sm text-slate-600 mb-3">открыт по подписке</p>
+<a href="{{ url_for('purchase_page') }}" class="btn btn-primary btn-sm">Активировать</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card p-6">
+        <h3 class="text-lg font-bold text-slate-800 mb-3">Новый замер тела</h3>
+        <form id="uploadForm" action="/upload_analysis" method="POST" enctype="multipart/form-data">
+              <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg" required class="form-input file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+              <button type="submit" class="btn btn-primary w-full mt-3">Загрузить и обновить</button>
+        </form>
+    </div>
+</div>
+    <div class="lg:col-span-2 space-y-6">
+
+
+      {% if fat_loss_progress and current_user.has_subscription %}
+      <div class="card p-6 cursor-pointer hover:shadow-lg transition-shadow" onclick="showDeficitHistory()">
+        <h3 class="text-lg font-bold text-slate-800 mb-1">🔥 Прогресс жиросжигания</h3>
+        <p class="text-sm text-slate-500 mb-4">На основе суммарного дефицита калорий.</p>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" style="width: {{ fat_loss_progress.percentage }}%;"></div>
+        </div>
+        <div class="flex justify-between items-center mt-2 text-sm font-medium">
+          <span class="text-slate-500">Старт: {{ fat_loss_progress.initial_kg|round(1) }} кг</span>
+          <span class="font-bold text-orange-600">{{ fat_loss_progress.percentage|round(1) }}%</span>
+          <span class="text-slate-500">Цель: {{ fat_loss_progress.goal_kg|round(1) }} кг</span>
+        </div>
+        <div class="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3 text-center">
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                <div class="text-xs text-slate-500">Сожжено</div>
+                <div class="text-lg font-bold text-green-600">{{ fat_loss_progress.burned_kg|round(2) }} кг</div>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                <div class="text-xs text-slate-500">Осталось</div>
+                <div class="text-lg font-bold text-red-600">{{ (fat_loss_progress.total_to_lose_kg - fat_loss_progress.burned_kg)|round(2) }} кг</div>
+            </div>
+             <div class="bg-slate-50 rounded-lg p-3 border border-slate-200 col-span-2 sm:col-span-1">
+                <div class="text-xs text-slate-500">Расчетный вес жира</div>
+                <div class="text-lg font-bold text-slate-700">{{ fat_loss_progress.current_kg|round(1) }} кг</div>
+            </div>
+        </div>
+      </div>
+      {% endif %}
+
+<div class="card p-6 relative">
+        <div {% if not current_user.has_subscription %}class="locked-feature"{% endif %}>
+            <h3 class="text-lg font-bold text-slate-800 mb-4">Динамика за неделю</h3>
+           <div class="grid md:grid-cols-3 gap-6 text-center">
+    <div>
+        <div class="text-sm font-semibold text-slate-600 mb-2">Вес, кг</div>
+        <div class="relative h-24 w-full">
+            <canvas id="weightChart"></canvas>
+        </div>
+    </div>
+    <div>
+        <div class="text-sm font-semibold text-slate-600 mb-2">Потреблено, ккал</div>
+        <div class="relative h-24 w-full">
+            <canvas id="mealsChart"></canvas>
+        </div>
+    </div>
+    <div>
+        <div class="text-sm font-semibold text-slate-600 mb-2">Сожжено, ккал</div>
+        <div class="relative h-24 w-full">
+            <canvas id="activityChart"></canvas>
+        </div>
+    </div>
+</div>
+        </div>
+        {% if not current_user.has_subscription %}
+        <div class="locked-overlay">
+            <div class="locked-icon">📊</div>
+            <p class="locked-text">Визуальная аналитика</p>
+            <p class="text-sm text-slate-600 mb-3">доступна по подписке</p>
+<a href="{{ url_for('purchase_page') }}" class="btn btn-primary btn-sm">Активировать PRO</a>
+        </div>
+        {% endif %}
+    </div>
+    <div id="diet-card-container" class="card p-6 relative">
+
+          <div id="diet-display-section" {% if not diet %}style="display: none;"{% endif %}>
+              <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-lg font-bold text-slate-800">📈 Ваш сгенерированный рацион</h3>
+                  <button onclick="confirmAndResetDiet()" class="text-sm font-semibold text-red-500 hover:text-red-700">
+                      Пересоздать
+                  </button>
+              </div>
+
+              {% if diet %}
+              <a href="/diet" class="block space-y-4">
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center text-slate-700">
+                      <div class="bg-green-50 py-2 rounded-lg border border-green-200"><div class="text-xs text-green-800">Калории</div><div class="font-bold">{{ diet.total_kcal }} ккал</div></div>
+                      <div class="bg-blue-50 py-2 rounded-lg border border-blue-200"><div class="text-xs text-blue-800">Белки</div><div class="font-bold">{{ diet.protein }} г</div></div>
+                      <div class="bg-yellow-50 py-2 rounded-lg border border-yellow-200"><div class="text-xs text-yellow-800">Жиры</div><div class="font-bold">{{ diet.fat }} г</div></div>
+                      <div class="bg-purple-50 py-2 rounded-lg border border-purple-200"><div class="text-xs text-purple-800">Углеводы</div><div class="font-bold">{{ diet.carbs }} г</div></div>
+                  </div>
+                 {# универсальный источник: diet.meals, diet или список с meal_type #}
+{% set meals_src = (diet.meals if diet is defined and diet.meals is defined and diet.meals else diet) %}
+{% set order = [
+  ('breakfast', '🍳 Завтрак'),
+  ('lunch',     '🍲 Обед'),
+  ('dinner',    '🍝 Ужин'),
+  ('snack',     '🍎 Перекус')
+] %}
+
+{% for key, label in order %}
+  {# dict -> берём по ключу, list -> фильтруем по meal_type #}
+  {% if meals_src and meals_src.get is defined %}
+    {% set meal_items = meals_src.get(key, []) %}
+  {% else %}
+    {% set meal_items = (meals_src | selectattr('meal_type','equalto', key) | list) if meals_src else [] %}
+  {% endif %}
+
+  <div class="bg-slate-50 border border-slate-200 rounded-lg p-3">
+    <div class="font-semibold text-slate-700 mb-2 text-sm">{{ label }}</div>
+    <ul class="space-y-1 text-sm text-slate-600">
+      {% if meal_items and meal_items|length %}
+        {% for itm in meal_items %}
+          {% set grams = (itm.grams if itm.grams is defined else (itm.weight_g if itm.weight_g is defined else none)) %}
+          {% set kcal  = (itm.kcal  if itm.kcal  is defined else (itm.calories if itm.calories is defined else none)) %}
+          <li class="flex justify-between">
+            <span>{{ itm.name }}</span>
+            <span class="text-xs text-slate-500">
+              {% if grams is not none %}{{ grams }}г{% if kcal is not none %}, {% endif %}{% endif %}
+              {% if kcal  is not none %}{{ kcal }} ккал{% endif %}
+            </span>
+          </li>
+        {% endfor %}
+      {% else %}
+        <li class="text-slate-400 text-xs">Нет блюд в этом приёме.</li>
+      {% endif %}
+    </ul>
+  </div>
+{% endfor %}
+
+              </a>
+              {% endif %}
+          </div>
+
+          <div id="diet-generation-section" {% if diet %}style="display: none;"{% endif %}>
+              <div {% if not current_user.has_subscription %}class="locked-feature"{% endif %}>
+                  <h3 class="text-lg font-bold text-slate-800 mb-4">📈 Создать рацион</h3>
+
+                  {% if latest_analysis and latest_analysis.height and latest_analysis.weight %}
+                    <form id="dietForm" class="space-y-6">
+                      <div>
+                        <label class="block text-sm font-medium mb-2 text-slate-700">Ваша цель</label>
+                        <div class="grid grid-cols-3 gap-3">
+                          {% for g in [{'label': 'Набор', 'icon': '💪', 'value': 'muscle'},{'label': 'Похудение', 'icon': '🔥', 'value': 'loss'},{'label': 'Поддержание', 'icon': '⚖️', 'value': 'maintain'}] %}
+                            <div class="selection-card text-center" data-group="goal" data-value="{{ g.value }}">
+                              <div class="text-3xl">{{ g.icon }}</div><div class="text-sm mt-1 font-semibold">{{ g.label }}</div>
+                            </div>
+                          {% endfor %}
+                        </div>
+                        <input type="hidden" name="goal" id="goalInput">
+                      </div>
+                      <div>
+  <label class="block text-sm font-medium mb-2 text-slate-700">Ваш пол</label>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <!-- Мужской -->
+    <div
+      class="selection-card selection-card-gender group relative p-5 h-40 overflow-hidden cursor-pointer"
+      data-group="gender" data-value="male" role="button" aria-pressed="false"
+    >
+      <!-- свечение/подсветка -->
+      <div class="absolute inset-0 rounded-xl pointer-events-none ring-2 ring-transparent transition-all
+                  group-[.selected]:ring-blue-500 group-[.selected]:shadow-[0_12px_30px_rgba(59,130,246,.30)]"></div>
+
+      <div class="flex items-center justify-between h-full">
+        <div class="z-10">
+          <div class="text-xs uppercase tracking-wide text-slate-500">Пол</div>
+          <div class="text-xl font-extrabold text-slate-900">Мужской</div>
+          <div class="mt-2 text-xs text-slate-500">нажимайте — карточка живая</div>
+        </div>
+
+        <div class="relative w-24 h-24">
+          <!-- активный силуэт -->
+          <i class="bi bi-gender-male icon-primary absolute left-1 top-1 text-6xl text-blue-600
+                    transition-transform duration-300 ease-out"></i>
+          <!-- второй силуэт для композиции -->
+          <i class="bi bi-gender-female icon-secondary absolute -right-1 -bottom-1 text-5xl text-slate-300
+                    opacity-70 rotate-12"></i>
+
+          <!-- искорки -->
+          <span class="burst b1"></span>
+          <span class="burst b2"></span>
+          <span class="burst b3"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Женский -->
+    <div
+      class="selection-card selection-card-gender group relative p-5 h-40 overflow-hidden cursor-pointer"
+      data-group="gender" data-value="female" role="button" aria-pressed="false"
+    >
+      <div class="absolute inset-0 rounded-xl pointer-events-none ring-2 ring-transparent transition-all
+                  group-[.selected]:ring-pink-500 group-[.selected]:shadow-[0_12px_30px_rgba(236,72,153,.28)]"></div>
+
+      <div class="flex items-center justify-between h-full">
+        <div class="z-10">
+          <div class="text-xs uppercase tracking-wide text-slate-500">Пол</div>
+          <div class="text-xl font-extrabold text-slate-900">Женский</div>
+          <div class="mt-2 text-xs text-slate-500">нажимайте — карточка живая</div>
+        </div>
+
+        <div class="relative w-24 h-24">
+          <i class="bi bi-gender-female icon-primary absolute left-1 top-1 text-6xl text-pink-600
+                    transition-transform duration-300 ease-out"></i>
+          <i class="bi bi-gender-male icon-secondary absolute -right-1 -bottom-1 text-5xl text-slate-300
+                    -rotate-12 opacity-70"></i>
+
+          <span class="burst b1"></span>
+          <span class="burst b2"></span>
+          <span class="burst b3"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input type="hidden" name="gender" id="genderInput">
+</div>
+
+                      <div>
+                        <label class="block text-sm font-medium mb-2 text-slate-700">Предпочтения (не обязательно)</label>
+                        <textarea name="preferences" rows="2" class="form-input" placeholder="Например: без рыбы, больше курицы"></textarea>
+                      </div>
+                      <button type="button" onclick="startDietGeneration()" class="btn btn-primary w-full">✨ Сгенерировать рацион</button>
+                    </form>
+                  {% else %}
+                    <p class="text-center text-slate-500 py-8">Пожалуйста, загрузите свой анализ тела, чтобы мы могли сгенерировать для вас персональный рацион.</p>
+                  {% endif %}
+               </div>
+               {% if not current_user.has_subscription %}
+               <div class="locked-overlay">
+                   <div class="locked-icon">🍽️</div>
+                   <p class="locked-text">Персональная диета</p>
+                   <p class="text-sm text-slate-600 mb-3">доступна по подписке</p>
+                   <a href="#" class="btn btn-primary btn-sm">Активировать</a>
+               </div>
+               {% endif %}
+          </div>
+      </div>
+    </div>
+  </div>
+
+   {% elif request.path == '/metrics' %}
+  <div class="space-y-6 animate-fade-in">
+    <div class="card p-6">
+      <h2 class="text-xl font-bold mb-4">Баланс калорий за сегодня</h2>
+      {% if missing_meals or missing_activity %}
+        <div class="text-center py-8 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <h3 class="font-semibold text-yellow-800">Недостаточно данных для расчета</h3>
+          <p class="text-sm text-yellow-700 mt-1">Пожалуйста, заполните следующую информацию:</p>
+          <ul class="list-disc list-inside text-sm text-yellow-700 mt-2">
+            {% if missing_meals %}<li>Приёмы пищи за сегодня</li>{% endif %}
+            {% if missing_activity %}<li>Данные активности за сегодня</li>{% endif %}
+          </ul>
+        </div>
+      {% else %}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+          <div class="bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Метаболизм</div><div class="text-2xl font-bold text-slate-800">{{ metabolism }}</div><span class="text-xs text-slate-500">ккал</span></div>
+          <div class="bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Активность</div><div class="text-2xl font-bold text-blue-600">+ {{ active_kcal }}</div><span class="text-xs text-slate-500">ккал</span></div>
+          <div class="bg-slate-50 p-4 rounded-lg"><div class="text-sm text-slate-500">Потреблено</div><div class="text-2xl font-bold text-orange-600">- {{ total_meals }}</div><span class="text-xs text-slate-500">ккал</span></div>
+          <div class="bg-green-50 p-4 rounded-lg border border-green-200"><div class="text-sm text-green-700">Дефицит</div><div class="text-2xl font-bold text-green-600">{{ deficit }}</div><span class="text-xs text-green-600">ккал</span></div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6">
+        <div class="card p-6">
+          <h3 class="text-lg font-bold mb-4">🏃‍♂️ Активность сегодня</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-slate-50 p-4 rounded-lg text-center"><div class="text-sm text-slate-500">Шаги</div><div class="text-xl font-bold">{{ steps or '—' }}</div></div>
+            <div class="bg-slate-50 p-4 rounded-lg text-center"><div class="text-sm text-slate-500">Дистанция</div><div class="text-xl font-bold">{{ distance_km or '—' }} <span class="text-sm">км</span></div></div>
+            <div class="bg-slate-50 p-4 rounded-lg text-center"><div class="text-sm text-slate-500">Актив. калории</div><div class="text-xl font-bold">{{ active_kcal or '—' }}</div></div>
+            <div class="bg-slate-50 p-4 rounded-lg text-center"><div class="text-sm text-slate-500">Калории покоя</div><div class="text-xl font-bold">{{ resting_kcal or '—' }}</div></div>
+          </div>
+        </div>
+
+        <div class="card p-6">
+          <h3 class="text-lg font-bold mb-4">🍽️ Приёмы пищи сегодня</h3>
+          {% if today_meals %}
+          <div class="grid grid-cols-2 gap-4">
+            {% for meal in today_meals %}
+              <div class="bg-slate-50 p-4 rounded-lg text-center">
+                <div class="text-sm text-slate-500 font-semibold">{{ meal.meal_type|capitalize }}</div>
+                <div class="mt-1 text-xl font-bold">{{ meal.calories }} <span class="text-sm">ккал</span></div>
+              </div>
+            {% endfor %}
+          </div>
+          {% else %}
+            <p class="text-center text-slate-500 py-6">Нет данных о приёмах пищи за сегодня.</p>
+          {% endif %}
+        </div>
+    </div>
+  </div>
+
+  {% elif request.path == '/activity' %}
+  <div class="card p-6 animate-fade-in">
+    <h2 class="text-xl font-bold mb-6">Детальная активность</h2>
+    {% if today_activity %}
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="bg-slate-50 border border-slate-200 p-4 rounded-lg"><div class="text-sm text-slate-500">👟 Шаги</div><div class="text-2xl font-bold mt-1">{{ today_activity.steps or '—' }}</div></div>
+        <div class="bg-slate-50 border border-slate-200 p-4 rounded-lg"><div class="text-sm text-slate-500">🗺️ Дистанция</div><div class="text-2xl font-bold mt-1">{{ today_activity.distance_km or '—' }} км</div></div>
+        <div class="bg-slate-50 border border-slate-200 p-4 rounded-lg"><div class="text-sm text-slate-500">🔥 Калории</div><div class="text-2xl font-bold mt-1">{{ today_activity.active_kcal or '—' }}</div></div>
+        <div class="bg-slate-50 border border-slate-200 p-4 rounded-lg"><div class="text-sm text-slate-500">❤️ Пульс (сред.)</div><div class="text-2xl font-bold mt-1">{{ today_activity.heart_rate_avg or '—' }} <span class="text-base">уд/мин</span></div></div>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="md:col-span-2 space-y-6">
+          <div class="p-4 bg-slate-50 rounded-lg"><h3 class="font-semibold mb-2">График шагов за неделю</h3><div class="h-48 flex items-center justify-center text-slate-400">[Компонент графика]</div></div>
+          <div class="p-4 bg-slate-50 rounded-lg"><h3 class="font-semibold mb-2">Активные калории по дням</h3><div class="h-48 flex items-center justify-center text-slate-400">[Компонент графика]</div></div>
+        </div>
+        <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg h-fit">
+          <h3 class="font-semibold text-blue-800">Источник данных</h3>
+          <div class="flex items-center mt-3">
+             <div class="bg-white p-3 rounded-full mr-4 shadow">
+                  <span class="text-xl">📱</span>
+             </div>
+             <div>
+                <div class="font-bold text-blue-900">{{ today_activity.source or 'Неизвестно' }}</div>
+                <div class="text-sm text-blue-700">Обновлено: {{ today_activity.date.strftime('%H:%M') }}</div>
+             </div>
+          </div>
+        </div>
+      </div>
+
+    {% else %}
+      <div class="text-center py-16">
+        <div class="text-5xl text-slate-300 mb-4">📊</div>
+        <p class="text-slate-500 font-semibold">Данные об активности не найдены</p>
+        <p class="text-sm text-slate-400 mt-2">Пожалуйста, подключите источник данных, например, Apple Health или Google Fit.</p>
+      </div>
+    {% endif %}
+  </div>
+
+{% elif request.path == '/meals' %}
+<div class="space-y-8 animate-fade-in">
+
+    <div>
+        <h2 class="text-2xl font-bold text-slate-800 mb-4">Сводка за сегодня</h2>
+        <div class="card p-6">
+            {% set all_items = meals.values() | sum(start=[]) %}
+
+            {% set today_total_kcal    = all_items | sum(attribute='calories') %}
+            {% set today_total_protein = all_items | sum(attribute='protein') %}
+            {% set today_total_fat     = all_items | sum(attribute='fat') %}
+            {% set today_total_carbs   = all_items | sum(attribute='carbs') %}
+
+            {% set goal_kcal = latest_analysis.metabolism + 500 if latest_analysis and latest_analysis.metabolism else 2000 %}
+            {% set progress_percent = (today_total_kcal / goal_kcal * 100) | round if goal_kcal > 0 else 0 %}
+
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div>
+                    <div class="text-sm text-slate-500">Потреблено калорий</div>
+                    <span class="text-3xl font-bold text-slate-900">{{ today_total_kcal }}</span>
+                    <span class="text-lg text-slate-400 font-medium">/ {{ goal_kcal }} ккал</span>
+                </div>
+                <div class="w-full sm:w-1/3">
+                    <div class="w-full bg-slate-200 rounded-full h-2.5">
+                        <div class="bg-blue-600 h-2.5 rounded-full" style="width: {{ progress_percent }}%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="my-5 border-slate-200">
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div class="text-sm font-semibold text-blue-800">Белки</div>
+                    <div class="text-xl font-bold text-blue-900 mt-1">{{ today_total_protein | round(1) }} г</div>
+                </div>
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <div class="text-sm font-semibold text-yellow-800">Жиры</div>
+                    <div class="text-xl font-bold text-yellow-900 mt-1">{{ today_total_fat | round(1) }} г</div>
+                </div>
+                <div class="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                    <div class="text-sm font-semibold text-purple-800">Углеводы</div>
+                    <div class="text-xl font-bold text-purple-900 mt-1">{{ today_total_carbs | round(1) }} г</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <h2 class="text-2xl font-bold text-slate-800 mb-4">Приёмы пищи</h2>
+   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+  {% for meal_name, key, gradient in [
+    ('Завтрак','breakfast','from-amber-400 to-orange-500'),
+    ('Обед','lunch','from-green-400 to-emerald-500'),
+    ('Ужин','dinner','from-blue-500 to-indigo-600'),
+    ('Перекус','snack','from-pink-400 to-rose-500')
+  ] %}
+    {% set item = meals.get(key, []) | first %}
+
+    <div class="flip-card cursor-pointer" onclick="this.classList.toggle('is-flipped')">
+      <div class="flip-card-inner rounded-2xl">
+        <!-- FRONT -->
+        <div class="flip-card-front relative overflow-hidden">
+          <div class="p-6 bg-gradient-to-br {{ gradient }} text-white rounded-2xl h-full flex flex-col justify-between">
+
+            <div>
+              <div class="flex justify-between items-center">
+                <h3 class="text-2xl font-bold tracking-wide">{{ meal_name }}</h3>
+                {% if item %}
+                  <span class="text-lg font-bold">{{ item.calories }}
+                    <span class="text-sm font-normal opacity-80">ккал</span>
+                  </span>
+                {% endif %}
+              </div>
+              <div class="mt-4">
+                {% if item %}
+                  <p class="text-lg font-semibold">{{ item.name or 'Название не указано' }}</p>
+                  <p class="text-xs text-white/80 mt-1">(Нажмите, чтобы увидеть детали)</p>
+                {% else %}
+                  <p class="text-white/80">Нет данных</p>
+                {% endif %}
+              </div>
+            </div>
+
+          </div>
+          <div class="p-4 bg-white/80 backdrop-blur border-t border-white/30">
+            <button onclick="event.stopPropagation(); openMealModal('{{ key }}','{{ meal_name }}')"
+                    class="btn w-full {% if item %}btn-secondary{% else %}btn-primary{% endif %}">
+              ✏️ {% if item %}Изменить{% else %}Добавить{% endif %}
+            </button>
+          </div>
+        </div>
+
+        <!-- BACK -->
+        <div class="flip-card-back bg-white text-slate-800 relative">
+          {% if item %}
+            <div class="mb-3">
+              <h4 class="font-bold text-lg">Вердикт AI</h4>
+              <p class="text-sm text-center mt-2 bg-slate-50 border border-slate-200 p-3 rounded-md">
+                {{ item.verdict or 'Нет вердикта.' }}
+              </p>
+            </div>
+            <div>
+              <h4 class="font-bold text-lg mb-2">Анализ</h4>
+              <p class="text-xs text-slate-600 text-center">{{ item.analysis or 'Нет анализа.' }}</p>
+            </div>
+          {% else %}
+            <p>Нажмите "Добавить", чтобы загрузить фото блюда или ввести данные вручную.</p>
+          {% endif %}
+          <!-- стрелка и на обратной стороне -->
+          <div class="click-arrow">➜</div>
+        </div>
+
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+    </div>
+</div>
+    </div>
+</div>
+
+{%- macro sum(items, attribute, sum_key=false) -%}
+  {% if sum_key %}
+    {{ items | map('sum', attribute=attribute) | sum }}
+  {% else %}
+    {{ items | sum(attribute=attribute) }}
+  {% endif %}
+{%- endmacro -%}
+{% endif %}
+
+<div id="mealModal" role="dialog" aria-modal="true" aria-labelledby="modalMealTitle"
+     class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4" onclick="closeMealModal()">
+  <div class="card w-full max-w-md p-0 relative animate-fade-in" onclick="event.stopPropagation()">
+    <button onclick="closeMealModal()" class="absolute top-3 right-4 text-slate-500 text-2xl hover:text-slate-700 z-20">&times;</button>
+
+    <div class="p-6">
+      <h2 class="text-xl font-bold">Приём пищи: <span id="modalMealTitle"></span></h2>
+    </div>
+
+    <div class="flex border-b border-slate-200 px-6">
+      <button id="manualTabBtn" onclick="switchMealTab('manual')" class="meal-tab active">
+        ✍️ Вручную
+      </button>
+      <button id="aiTabBtn" onclick="switchMealTab('ai')" class="meal-tab">
+        📸 Анализ по фото {% if not current_user.has_subscription %}<span class="text-amber-500">(PRO)</span>{% endif %}
+      </button>
+    </div>
+
+    <div class="p-6">
+      <div id="manualTabContent">
+        <form id="manualMealForm" method="POST" action="/meals" class="space-y-4">
+          <input type="hidden" name="meal_type" id="manualMealType">
+
+          <div>
+            <label for="manualName" class="block text-sm font-medium mb-1 text-slate-700">Название блюда</label>
+            <input type="text" id="manualName" name="name" class="form-input" placeholder="Например, Овсяная каша" required>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label for="manualCalories" class="block text-sm font-medium mb-1 text-slate-700">Калории</label>
+                <input type="number" id="manualCalories" name="calories" class="form-input" placeholder="ккал" required>
+            </div>
+            <div>
+                <label for="manualProtein" class="block text-sm font-medium mb-1 text-slate-700">Белки</label>
+                <input type="number" step="0.1" id="manualProtein" name="protein" class="form-input" placeholder="граммы" required>
+            </div>
+            <div>
+                <label for="manualFat" class="block text-sm font-medium mb-1 text-slate-700">Жиры</label>
+                <input type="number" step="0.1" id="manualFat" name="fat" class="form-input" placeholder="граммы" required>
+            </div>
+            <div>
+                <label for="manualCarbs" class="block text-sm font-medium mb-1 text-slate-700">Углеводы</label>
+                <input type="number" step="0.1" id="manualCarbs" name="carbs" class="form-input" placeholder="граммы" required>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-full">Сохранить</button>
+        </form>
+      </div>
+
+      <div id="aiTabContent" class="hidden relative">
+          <div {% if not current_user.has_subscription %}class="locked-feature"{% endif %}>
+            <div class="space-y-4">
+              <input type="file" id="mealFileInput" accept="image/*" class="form-input file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+              <button id="analyzeMealBtn" onclick="analyzeMeal()" class="btn btn-primary w-full">Анализировать фото</button>
+
+              <div id="mealLoading" class="flex items-center justify-center space-x-2 hidden text-slate-500">
+                <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                <span>Анализируем...</span>
+              </div>
+
+              <div id="mealAnalysisResult" class="hidden space-y-3">
+                 </div>
+            </div>
+          </div>
+          {% if not current_user.has_subscription %}
+            <div class="locked-overlay">
+                <div class="locked-icon">📸</div>
+                <p class="locked-text">AI-анализ по фото</p>
+                <p class="text-sm text-slate-600 mb-3">доступен по подписке</p>
+                <a href="#" class="btn btn-primary btn-sm">Активировать PRO</a>
+            </div>
+          {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="dietLoader" class="fixed inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-50 hidden">
+  <svg class="animate-spin h-10 w-10 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+  <p class="mt-4 text-lg font-semibold text-slate-700">Генерируем ваш идеальный рацион...</p>
+  <p class="text-slate-500">Это может занять до 30 секунд.</p>
+</div>
+
+<div id="telegramModal" role="dialog" aria-modal="true" aria-labelledby="telegramModalTitle"
+     class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4"
+     data-bot="{{ bot_username|default('TestKilogrBot') }}">
+  <div class="card w-full max-w-2xl p-6 sm:p-8 relative animate-fade-in bg-white" onclick="event.stopPropagation()">
+
+    <!-- Header: иконка + заголовок + крестик -->
+    <button onclick="closeTelegramModal()" class="absolute top-4 right-4 text-slate-400 text-2xl hover:text-slate-600 transition-colors" aria-label="Закрыть">&times;</button>
+    <div class="flex items-center gap-3 mb-4">
+      <div class="h-10 w-10 rounded-xl bg-sky-100 flex items-center justify-center text-sky-600">✈️</div>
+      <div>
+        <h2 id="telegramModalTitle" class="text-lg sm:text-xl font-bold text-slate-900">Привязка Telegram</h2>
+        <p class="text-slate-600 text-sm">Свяжите аккаунт, чтобы получать уведомления и делиться данными мгновенно.</p>
+      </div>
+    </div>
+
+    <!-- Статус: компактно под заголовком -->
+    <div class="flex items-center gap-2 text-sm mb-5">
+      <span class="relative flex h-2.5 w-2.5">
+        <span class="absolute inline-flex h-full w-full rounded-full animate-ping bg-amber-400" id="tgStatusPing"></span>
+        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" id="tgStatusDot"></span>
+      </span>
+      <span id="tgStatusText" class="text-slate-600">Статус: не привязан · Ожидаем подтверждение…</span>
+      <span class="ml-auto text-xs text-slate-500">
+        Бот: <a id="tgBotLink" class="font-medium text-blue-600 hover:underline" target="_blank" rel="noopener">@TestKilogrBot<span id="tgBotName"></span></a>
+      </span>
+    </div>
+
+    <!-- Основной контент в 2 колонки -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <!-- ЛЕВАЯ КОЛОНКА: шаги + код + диплинк -->
+      <div class="space-y-4">
+        <!-- Шаги (по вертикали) -->
+        <ol class="text-xs text-slate-500 space-y-2">
+          <li class="flex items-center gap-2">
+            <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 font-semibold">1</span>
+            Откройте Telegram
+          </li>
+          <li class="flex items-center gap-2">
+            <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 font-semibold">2</span>
+            Перейдите к боту <span class="font-medium text-blue-600">@TestKilogrBot</span>
+          </li>
+          <li class="flex items-center gap-2">
+            <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 font-semibold">3</span>
+            Отправьте ему одноразовый код
+          </li>
+        </ol>
+
+        <!-- Код + копирование -->
+        <div class="space-y-3">
+          <div id="tgCodeDisplay" class="font-mono text-2xl tracking-wider select-all px-4 py-3 rounded-xl bg-slate-50 border border-slate-200">...</div>
+          <div class="flex gap-3">
+            <button onclick="copyCode()" class="btn btn-secondary w-full">📋 Скопировать код</button>
+            <a id="tgDeepLink" class="btn btn-primary w-full text-center" target="_blank" rel="noopener">Автопривязка</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ПРАВАЯ КОЛОНКА: настройки уведомлений -->
+      <div class="rounded-xl border border-slate-200 p-4">
+        <h3 class="font-semibold text-slate-800 mb-3">Уведомления</h3>
+
+        <!-- Общий рубильник -->
+        <div class="flex items-center justify-between py-2">
+          <div class="text-sm">
+            <div class="font-medium text-slate-800">Получать в Telegram</div>
+            <div class="text-slate-500 text-xs">Отключает/включает все уведомления разом</div>
+          </div>
+          <button id="tgSwitchGlobal" role="switch" aria-checked="false" data-key="telegram_notify_enabled"
+        class="w-12 h-7 rounded-full bg-slate-300 relative transition">
+  <span class="knob absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition"></span>
+</button>
+
+        </div>
+
+
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="text-sm">
+              <div class="font-medium text-slate-800">Тренировки</div>
+              <div class="text-slate-500 text-xs">Напоминание за 1 час и в момент старта</div>
+            </div>
+            <button id="tgSwitchTrainings" role="switch" aria-checked="true" data-key="notify_trainings"
+                    class="w-12 h-7 rounded-full bg-emerald-500 relative transition">
+              <span class="knob absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition"></span>
+            </button>
+          </div>
+
+            <!-- Приёмы пищи -->
+<div class="flex items-center justify-between">
+  <div class="text-sm">
+    <div class="font-medium text-slate-800">Приёмы пищи</div>
+    <div class="text-slate-500 text-xs">в 8:00 · 12:00 · 18:00</div>
+  </div>
+  <button id="tgSwitchMeals" role="switch" aria-checked="true" data-key="notify_meals"
+          class="w-12 h-7 rounded-full bg-emerald-500 relative transition">
+    <span class="knob absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition"></span>
+  </button>
+</div>
+
+
+          <div class="flex items-center justify-between">
+            <div class="text-sm">
+              <div class="font-medium text-slate-800">Продление подписки</div>
+              <div class="text-slate-500 text-xs">Напоминание за 5 дней до окончания</div>
+            </div>
+            <button id="tgSwitchSubscription" role="switch" aria-checked="true" data-key="notify_subscription"
+                    class="w-12 h-7 rounded-full bg-emerald-500 relative transition">
+              <span class="knob absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition"></span>
+            </button>
+          </div>
+        </div>
+
+        <p class="text-xs text-slate-400 mt-3">Изменения сохраняются автоматически.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<div id="editProfileModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4" onclick="closeEditProfileModal()">
+  <div class="card w-full max-w-lg p-6 sm:p-8 relative animate-fade-in" onclick="event.stopPropagation()">
+    <button onclick="closeEditProfileModal()" class="absolute top-4 right-4 text-slate-400 text-2xl hover:text-slate-600">&times;</button>
+    <h2 class="text-xl font-bold mb-6">Редактирование профиля</h2>
+
+    <form action="/edit_profile" method="POST" enctype="multipart/form-data" class="space-y-5">
+
+        <div class="flex items-center gap-4">
+            {% if user.avatar %}
+              <img src="{{ url_for('serve_uploaded_file', filename=user.avatar) }}" alt="Avatar" class="w-16 h-16 rounded-full object-cover">
+            {% else %}
+              <img src="https://www.svgrepo.com/show/452070/user-avatar.svg" alt="Default Avatar" class="w-16 h-16 rounded-full">
+            {% endif %}
+            <div>
+                <label for="avatar" class="block text-sm font-medium text-slate-700">Сменить аватар</label>
+                <input type="file" name="avatar" id="avatar" accept="image/*" class="mt-1 text-sm text-slate-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+            <div>
+                <label for="name" class="block text-sm font-medium mb-1 text-slate-700">Имя</label>
+                <input type="text" name="name" id="name" value="{{ user.name }}" class="form-input" required>
+            </div>
+            <div>
+                <label for="email" class="block text-sm font-medium mb-1 text-slate-700">Email</label>
+                <input type="email" name="email" id="email" value="{{ user.email }}" class="form-input" required>
+            </div>
+        </div>
+
+        <div>
+          <label for="date_of_birth" class="block text-sm font-medium mb-1 text-slate-700">Дата рождения</label>
+          <input type="date" name="date_of_birth" id="date_of_birth" value="{{ user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else '' }}" class="form-input" required>
+        </div>
+
+        <hr>
+
+        <p class="text-sm text-slate-600">Оставьте поля ниже пустыми, если не хотите менять пароль.</p>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+             <div>
+                <label for="new_password" class="block text-sm font-medium mb-1 text-slate-700">Новый пароль</label>
+                <input type="password" name="new_password" id="new_password" class="form-input" placeholder="••••••••">
+            </div>
+            <div>
+                <label for="confirm_password" class="block text-sm font-medium mb-1 text-slate-700">Подтвердите пароль</label>
+                <input type="password" name="confirm_password" id="confirm_password" class="form-input" placeholder="••••••••">
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-4">
+            <button type="button" onclick="closeEditProfileModal()" class="btn btn-secondary">Отмена</button>
+            <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+        </div>
+    </form>
+  </div>
+</div>
+
+<style>
+/* Стили для табов модального окна */
+.meal-tab {
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+.meal-tab:hover {
+    color: var(--brand-primary);
+}
+.meal-tab.active {
+    color: var(--brand-primary);
+    border-bottom-color: var(--brand-primary);
+}
+</style>
+
+<script>
+    // --- Логика для информационного баннера ---
+    const banner = document.getElementById('infoBanner');
+    const restoreContainer = document.getElementById('restoreBannerContainer');
+    if (banner && restoreContainer) {
+        if (localStorage.getItem('infoBannerHidden') === 'true') {
+            banner.style.display = 'none';
+            restoreContainer.style.display = 'block';
+        }
+    }
+    function hideBanner() {
+        localStorage.setItem('infoBannerHidden', 'true');
+        banner.style.transition = 'opacity 0.5s, transform 0.5s';
+        banner.style.opacity = '0';
+        banner.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+            banner.style.display = 'none';
+            restoreContainer.style.display = 'block';
+        }, 500);
+    }
+    function showBanner() {
+        localStorage.removeItem('infoBannerHidden');
+        restoreContainer.style.display = 'none';
+        banner.style.display = 'block';
+        setTimeout(() => {
+            banner.style.transition = 'opacity 0.5s, transform 0.5s';
+            banner.style.opacity = '1';
+            banner.style.transform = 'scale(1)';
+        }, 10);
+    }
+
+    // --- Логика для модального окна приёма пищи ---
+    let currentMealKey = '';
+
+    function switchMealTab(tabName) {
+        document.getElementById('manualTabContent').classList.add('hidden');
+        document.getElementById('aiTabContent').classList.add('hidden');
+        document.getElementById('manualTabBtn').classList.remove('active');
+        document.getElementById('aiTabBtn').classList.remove('active');
+
+        if (tabName === 'manual') {
+            document.getElementById('manualTabContent').classList.remove('hidden');
+            document.getElementById('manualTabBtn').classList.add('active');
+        } else {
+            document.getElementById('aiTabContent').classList.remove('hidden');
+            document.getElementById('aiTabBtn').classList.add('active');
+        }
+    }
+
+    function openMealModal(key, title) {
+        currentMealKey = key;
+        document.getElementById('modalMealTitle').textContent = title;
+        document.getElementById('manualMealType').value = key;
+        document.getElementById('mealAnalysisResult').innerHTML = '';
+        document.getElementById('mealFileInput').value = '';
+        document.getElementById('mealLoading').classList.add('hidden');
+        document.getElementById('analyzeMealBtn').disabled = false;
+        document.getElementById('manualMealForm').reset();
+        switchMealTab('manual');
+        openModal('mealModal');
+
+    }
+
+    function closeMealModal() {
+   closeModal('mealModal');
+
+    }
+
+    function analyzeMeal() {
+        const fileInput = document.getElementById('mealFileInput');
+        if (!fileInput.files.length) {
+            alert('Пожалуйста, выберите фото блюда для анализа.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        document.getElementById('analyzeMealBtn').disabled = true;
+        document.getElementById('mealLoading').classList.remove('hidden');
+        document.getElementById('mealAnalysisResult').innerHTML = '';
+
+        fetch('/analyze_meal_photo', { method: 'POST', body: formData })
+            .then(response => {
+                if (response.status === 403) {
+                    alert('Анализ фото доступен только по подписке.');
+                    return null;
+                }
+                if (!response.ok) { throw new Error('Ошибка сети или сервера.'); }
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('mealLoading').classList.add('hidden');
+                document.getElementById('analyzeMealBtn').disabled = false;
+                if (!data) return;
+                if (data.error) {
+                    alert(`Ошибка анализа: ${data.error}`);
+                    return;
+                }
+
+                const resultHtml = `
+                    <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                      <div class="text-lg font-bold text-slate-800">${data.name}</div>
+                      <p class="text-sm text-slate-600 mt-2">${data.verdict}</p>
+                      <div class="grid grid-cols-2 gap-2 text-center mt-3 text-sm">
+                        <div class="bg-green-100 text-green-800 p-2 rounded-lg">Калории: <span class="font-bold">${data.calories}</span> ккал</div>
+                        <div class="bg-blue-100 text-blue-800 p-2 rounded-lg">Белки: <span class="font-bold">${data.protein}</span> г</div>
+                        <div class="bg-yellow-100 text-yellow-800 p-2 rounded-lg">Жиры: <span class="font-bold">${data.fat}</span> г</div>
+                        <div class="bg-purple-100 text-purple-800 p-2 rounded-lg">Углеводы: <span class="font-bold">${data.carbs}</span> г</div>
+                      </div>
+                    </div>
+                    <form id="confirmMealForm" method="POST" action="/meals">
+                      <input type="hidden" name="meal_type" value="${currentMealKey}">
+                      <input type="hidden" name="name" value="${data.name}">
+                      <input type="hidden" name="verdict" value="${data.verdict}">
+                      <input type="hidden" name="calories" value="${data.calories}">
+                      <input type="hidden" name="protein" value="${data.protein}">
+                      <input type="hidden" name="fat" value="${data.fat}">
+                      <input type="hidden" name="carbs" value="${data.carbs}">
+                      <input type="hidden" name="analysis" value="${data.analysis}">
+                      <button type="submit" class="btn bg-green-600 text-white hover:bg-green-700 w-full mt-3">Сохранить приём пищи</button>
+                    </form>
+                `;
+                document.getElementById('mealAnalysisResult').innerHTML = resultHtml;
+                document.getElementById('mealAnalysisResult').classList.remove('hidden');
+            })
+            .catch(error => {
+                document.getElementById('mealLoading').classList.add('hidden');
+                document.getElementById('analyzeMealBtn').disabled = false;
+                alert(`Произошла ошибка: ${error.message}`);
+            });
+    }
+
+    // --- Логика для генерации диеты ---
+    function startDietGeneration() {
+        const goal = document.getElementById('goalInput').value;
+        const gender = document.getElementById('genderInput').value;
+        const preferences = document.querySelector('textarea[name="preferences"]').value;
+
+        if (!goal || !gender) {
+            alert('Пожалуйста, выберите цель и пол.');
+            return;
+        }
+
+        const loader = document.getElementById('dietLoader');
+        loader.classList.remove('hidden');
+
+        const params = new URLSearchParams({ goal, gender, preferences });
+        fetch('/generate_diet?' + params)
+            .then(res => res.json())
+            .then(data => {
+                loader.classList.add('hidden');
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                } else {
+                    alert('Произошла ошибка: ' + JSON.stringify(data));
+                }
+            })
+            .catch(err => {
+                loader.classList.add('hidden');
+                alert('Сетевая ошибка: ' + err.message);
+            });
+    }
+
+    // --- Логика для модального окна Telegram ---
+    let tgPollTimer = null;
+
+function openTelegramModal() {
+  fetch('/generate_telegram_code')
+    .then(res => res.json())
+    .then(data => {
+      if (!data.code) { alert('Не удалось сгенерировать код.'); return; }
+
+      const modal = document.getElementById('telegramModal');
+      const bot = (modal?.dataset?.bot) || '';
+      const code = data.code;
+
+      // код
+      const codeEl = document.getElementById('tgCodeDisplay');
+      if (codeEl) codeEl.textContent = code;
+
+      // deep link в бота
+      const botNameEl = document.getElementById('tgBotName');
+      if (botNameEl) botNameEl.textContent = bot || '';
+      const botLinkEl = document.getElementById('tgBotLink');
+      if (botLinkEl && bot) botLinkEl.href = `https://t.me/${bot}`;
+      const deepLinkEl = document.getElementById('tgDeepLink');
+      if (deepLinkEl && bot) deepLinkEl.href = `https://t.me/${bot}?start=${encodeURIComponent(code)}`;
+
+      // статус
+      setTgStatusWaiting();
+
+      openModal('telegramModal');
+      startTgPolling();
+
+      // НОВОЕ: подгружаем настройки и вешаем обработчики
+      loadTgSettings();
+      bindTgSwitches();
+    })
+    .catch(err => alert('Ошибка при генерации кода: ' + err.message));
+}
+
+
+// --- НОВОЕ: UI переключателей
+function renderSwitch(btn, isOn) {
+  if (!btn) return;
+  const knob = btn.querySelector('.knob');
+  btn.classList.toggle('bg-emerald-500', !!isOn);
+  btn.classList.toggle('bg-slate-300', !isOn);
+  btn.setAttribute('aria-checked', isOn ? 'true' : 'false');
+  if (knob) knob.style.transform = isOn ? 'translateX(20px)' : 'translateX(0px)';
+}
+
+let _tgSwitchesBound = false;
+function bindTgSwitches() {
+  if (_tgSwitchesBound) return; _tgSwitchesBound = true;
+  const switches = ['tgSwitchGlobal','tgSwitchTrainings','tgSwitchSubscription','tgSwitchMeals'];
+  switches.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('click', () => {
+      const key = el.dataset.key;
+      const isOn = el.getAttribute('aria-checked') !== 'true';
+      renderSwitch(el, isOn);
+
+      // важное: «обнуляем» старые load-ответы, чтобы они не переотщёлкнули UI
+      _appliedSeq = _loadSeq;
+
+      const patch = { [key]: isOn };
+      if (key === 'notify_subscription') patch.notify_promos = isOn;
+      if (key === 'telegram_notify_enabled') patch.telegram_notifications_enabled = isOn;
+
+      saveTgSettings(patch);
+    }, { passive: true });
+  });
+}
+
+function saveTgSettings(patch) {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(async () => {
+    const payload = { ...(patch || {}) };
+    if ('notify_subscription' in payload) payload.notify_promos = payload.notify_subscription;
+    if ('telegram_notify_enabled' in payload) payload.telegram_notifications_enabled = payload.telegram_notify_enabled;
+
+    try {
+      const r = await fetch('/api/me/telegram/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify(payload)
+      });
+      let j = {}; try { j = await r.json(); } catch (_) {}
+      if (!r.ok || j.ok === false) { console.warn('Save failed', r.status, j); return; }
+
+      // после успешного сохранения тянем актуальные значения
+      _appliedSeq = _loadSeq;
+      await loadTgSettings();
+
+    } catch (e) {
+      console.error('Save error', e);
+    }
+  }, 150);
+}
+
+
+
+// seq для отсечения устаревших ответов
+let _loadSeq = 0;
+let _appliedSeq = 0;
+
+function loadTgSettings() {
+  const seq = ++_loadSeq;
+  return fetch('/api/me/telegram/settings', { credentials: 'same-origin', cache: 'no-store' })
+    .then(r => r.json())
+    .then(j => {
+      // игнорируем неактуальные ответы
+      if (seq <= _appliedSeq || !j || j.ok === false) return;
+
+      _appliedSeq = seq;
+
+      renderSwitch(document.getElementById('tgSwitchGlobal'),       toBool(j.telegram_notify_enabled ?? j.telegram_notifications_enabled));
+      renderSwitch(document.getElementById('tgSwitchTrainings'),    toBool(j.notify_trainings));
+      renderSwitch(document.getElementById('tgSwitchSubscription'), toBool(j.notify_subscription ?? j.notify_promos));
+      renderSwitch(document.getElementById('tgSwitchMeals'),        toBool(j.notify_meals));
+    })
+    .catch(e => console.error('Load settings failed', e));
+}
+
+
+
+let _saveTimer = null;
+
+function toBool(v){
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v !== 0;
+  if (v == null) return false;
+  const s = String(v).trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes' || s === 'on' || s === 'y';
+}
+
+
+
+
+function closeTelegramModal() {
+  closeModal('telegramModal');
+  stopTgPolling();
+}
+
+function copyCode() {
+  const code = document.getElementById('tgCodeDisplay').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    alert('Код скопирован в буфер обмена!');
+  });
+}
+
+// --- статус/поллинг ---
+function setTgStatusWaiting() {
+  const dot = document.getElementById('tgStatusDot');
+  const ping = document.getElementById('tgStatusPing');
+  const text = document.getElementById('tgStatusText');
+  if (dot) dot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500';
+  if (ping) ping.className = 'absolute inline-flex h-full w-full rounded-full animate-ping bg-amber-400';
+  if (text) text.textContent = 'Статус: не привязан · Ожидаем подтверждение…';
+}
+function setTgStatusLinked() {
+  const dot = document.getElementById('tgStatusDot');
+  const ping = document.getElementById('tgStatusPing');
+  const text = document.getElementById('tgStatusText');
+  if (dot) dot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500';
+  if (ping) ping.className = 'absolute inline-flex h-full w-full rounded-full bg-emerald-400'; // без анимации
+  if (text) text.textContent = 'Статус: привязан';
+}
+
+function startTgPolling() {
+  if (tgPollTimer) return;
+  tgPollTimer = setInterval(checkTgStatus, 2000);
+}
+function stopTgPolling() {
+  if (!tgPollTimer) return;
+  clearInterval(tgPollTimer);
+  tgPollTimer = null;
+}
+async function checkTgStatus() {
+  try {
+    const r = await fetch('/api/me/telegram/status', { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j && j.linked) {
+      setTgStatusLinked();
+      stopTgPolling();
+    }
+  } catch (_) { /* no-op */ }
+}
+
+
+    // --- Вспомогательные функции и обработчики событий ---
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.selection-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const group = card.dataset.group;
+                document.querySelectorAll(`.selection-card[data-group="${group}"]`).forEach(c => c.classList.remove('selected'));
+                card.classList.add('selected');
+                document.getElementById(`${group}Input`).value = card.dataset.value;
+            });
+        });
+
+        const metricsHeader = document.getElementById('metrics-header');
+        if (metricsHeader) {
+            const detailsView = document.getElementById('metrics-details-view');
+            const iconsView = document.getElementById('metrics-icons-view');
+            const toggleText = document.getElementById('metrics-toggle-text');
+            const toggleIcon = document.getElementById('metrics-toggle-icon');
+            metricsHeader.addEventListener('click', () => {
+                const isCollapsed = detailsView.classList.contains('hidden');
+                detailsView.classList.toggle('hidden', !isCollapsed);
+                iconsView.classList.toggle('hidden', isCollapsed);
+                toggleText.textContent = isCollapsed ? 'Свернуть' : 'Все данные';
+                toggleIcon.style.transform = isCollapsed ? 'rotate(0deg)' : 'rotate(180deg)';
+            });
+        }
+    });
+
+    // --- Логика для модального окна редактирования профиля ---
+    const editProfileModal = document.getElementById('editProfileModal');
+    function openEditProfileModal() {
+        if (editProfileModal) {
+            openModal('editProfileModal');
+
+        }
+    }
+    function closeEditProfileModal() {
+        if (editProfileModal) {
+            closeModal('editProfileModal');
+
+        }
+    }
+
+    function confirmAndResetDiet() {
+        if (confirm("Вы уверены, что хотите сбросить текущий рацион? Он будет удален, и вы сможете создать новый.")) {
+
+            // Показываем индикатор загрузки поверх карточки
+            const dietCard = document.getElementById('diet-card-container');
+            const loader = document.createElement('div');
+            loader.className = 'absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center rounded-xl z-20';
+            loader.innerHTML = '<svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>';
+            dietCard.appendChild(loader);
+
+            fetch('/reset_diet', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    // Прячем блок с отображением диеты
+                    document.getElementById('diet-display-section').style.display = 'none';
+                    // Показываем блок с формой генерации
+                    document.getElementById('diet-generation-section').style.display = 'block';
+                } else {
+                    alert('Произошла ошибка: ' + data.message);
+                }
+            })
+            .catch(err => {
+                alert('Сетевая ошибка. Не удалось сбросить рацион.');
+            })
+            .finally(() => {
+                // Убираем индикатор загрузки
+                dietCard.removeChild(loader);
+            });
+        }
+    }
+</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // --- Логика для отрисовки графиков динамики ---
+    document.addEventListener('DOMContentLoaded', function() {
+        // Проверяем, есть ли на странице элемент для графика и есть ли подписка
+        // (в шаблоне элемент canvas не будет создан для пользователей без подписки)
+        const weightChartCanvas = document.getElementById('weightChart');
+        if (weightChartCanvas) {
+            fetch('/api/user/weekly_summary')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error(data.error);
+                        return;
+                    }
+                    renderCharts(data);
+                })
+                .catch(err => console.error("Failed to load chart data:", err));
+        }
+    });
+
+    function renderCharts(data) {
+        const { labels, datasets } = data;
+
+       const commonOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: false,
+  devicePixelRatio: 2,
+  plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+  scales: { x: { grid: { display: false } }, y: { beginAtZero: false, ticks: { maxTicksLimit: 5 } } },
+  elements: { point: { radius: 2 }, line: { borderWidth: 2, tension: 0.4 } }
+};
+
+
+        // График веса
+        new Chart(document.getElementById('weightChart').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Вес',
+                    data: datasets.weight,
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                }]
+            },
+            options: commonOptions
+        });
+
+        // График потребленных калорий
+        new Chart(document.getElementById('mealsChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Потреблено',
+                    data: datasets.consumed_kcal,
+                    borderColor: 'rgb(249, 115, 22)',
+                    backgroundColor: 'rgba(249, 115, 22, 0.5)',
+                }]
+            },
+            options: commonOptions
+        });
+
+        // График сожженных калорий
+        new Chart(document.getElementById('activityChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Сожжено',
+                    data: datasets.burned_kcal,
+                    borderColor: 'rgb(22, 163, 74)',
+                    backgroundColor: 'rgba(22, 163, 74, 0.5)',
+                }]
+            },
+            options: commonOptions
+        });
+    }
+
+    // --- (здесь остальной ваш JS код: confirmAndResetDiet и т.д.) ---
+</script>
+
+<div id="deficitHistoryModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4" onclick="closeDeficitHistoryModal()">
+  <div class="card w-full max-w-2xl p-0 relative animate-fade-in" onclick="event.stopPropagation()">
+
+    <div class="p-5 border-b border-slate-200 flex justify-between items-center">
+        <h2 class="text-xl font-bold">История накопления дефицита</h2>
+        <button onclick="closeDeficitHistoryModal()" class="text-slate-400 text-2xl hover:text-slate-600">&times;</button>
+    </div>
+
+    <div class="p-6 max-h-[70vh] overflow-y-auto">
+        <div id="deficit-loader" class="text-center py-10">
+            <svg class="animate-spin h-8 w-8 text-blue-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+            <p class="mt-2 text-slate-500">Загружаем историю...</p>
+        </div>
+
+        <div id="deficit-content" class="hidden">
+            </div>
+    </div>
+  </div>
+</div>
+<script>
+    // --- Логика для модального окна истории дефицита ---
+const deficitModal = document.getElementById('deficitHistoryModal');
+const deficitLoader = document.getElementById('deficit-loader');
+const deficitContent = document.getElementById('deficit-content');
+
+function showDeficitHistory() {
+    if (!deficitModal) return;
+
+    // Показываем модальное окно и загрузчик
+    deficitModal.classList.remove('hidden');
+    deficitModal.classList.add('flex');
+    deficitLoader.classList.remove('hidden');
+    deficitContent.classList.add('hidden');
+    deficitContent.innerHTML = ''; // Очищаем старые данные
+
+    fetch('/api/user/deficit_history')
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                deficitContent.innerHTML = `<p class="text-center text-red-500">${data.error}</p>`;
+            } else {
+                let tableHtml = `
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-600">
+                            <tr>
+                                <th class="p-2">Дата</th>
+                                <th class="p-2 text-right text-red-600">Потреблено</th>
+                                <th class="p-2 text-right text-green-600">Сожжено (База + Акт)</th>
+                                <th class="p-2 text-right text-blue-600">Дефицит за день</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                let totalDeficit = 0;
+                // Отображаем данные в обратном порядке (сначала новые)
+                data.reverse().forEach(day => {
+                    totalDeficit += day.deficit;
+                    tableHtml += `
+                        <tr class="border-b">
+                            <td class="p-2 font-medium">${day.date}</td>
+                            <td class="p-2 text-right">${day.consumed} ккал</td>
+                            <td class="p-2 text-right">${day.total_burned} ккал</td>
+                            <td class="p-2 text-right font-bold">${day.deficit} ккал</td>
+                        </tr>
+                    `;
+                });
+
+                tableHtml += `
+                        </tbody>
+                        <tfoot>
+                            <tr class="bg-slate-100 font-bold">
+                                <td class="p-2" colspan="3">Итого накоплено дефицита:</td>
+                                <td class="p-2 text-right text-blue-700 text-base">${Math.round(totalDeficit)} ккал</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                `;
+                deficitContent.innerHTML = tableHtml;
+            }
+
+            // Показываем контент, скрываем загрузчик
+            deficitLoader.classList.add('hidden');
+            deficitContent.classList.remove('hidden');
+        })
+        .catch(err => {
+            deficitContent.innerHTML = `<p class="text-center text-red-500">Не удалось загрузить данные. Ошибка: ${err}</p>`;
+            deficitLoader.classList.add('hidden');
+            deficitContent.classList.remove('hidden');
+        });
+}
+
+function closeDeficitHistoryModal() {
+    if (deficitModal) {
+        deficitModal.classList.add('hidden');
+        deficitModal.classList.remove('flex');
+    }
+}
+
+    function lockScroll(lock = true) {
+  document.documentElement.style.overflow = lock ? 'hidden' : '';
+}
+
+function trapFocus(modalEl) {
+  const focusables = modalEl.querySelectorAll(
+    'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+  );
+  if (!focusables.length) return;
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  modalEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  });
+  (first || modalEl).focus();
+}
+
+function openModal(id) {
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.classList.remove('hidden'); m.classList.add('flex');
+  lockScroll(true);
+  setTimeout(() => trapFocus(m), 0);
+}
+
+function closeModal(id) {
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.classList.add('hidden'); m.classList.remove('flex');
+  lockScroll(false);
+}
+
+</script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // ДО: у тебя уже есть универсальный обработчик selection-card.
+    // ДОПОЛНЕНИЕ: для группы gender — перезапуск анимации и aria-pressed
+    document.querySelectorAll('.selection-card-gender').forEach(card => {
+      card.addEventListener('click', () => {
+        // aria
+        document.querySelectorAll('.selection-card-gender').forEach(c => c.setAttribute('aria-pressed','false'));
+        card.setAttribute('aria-pressed','true');
+
+        // перезапуск анимации (пересоздаём classflow)
+        card.classList.remove('selected');
+        // короткий reflow
+        void card.offsetWidth;
+        card.classList.add('selected');
+      });
+    });
+  });
+</script>
+
+{% endblock %}

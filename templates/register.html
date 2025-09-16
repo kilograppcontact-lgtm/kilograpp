@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Регистрация | Kilogr.app</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#1E40AF', // Darker Blue
+            accent: '#2563EB',
+            light: '#F9FAFB',  // Lighter gray
+            dark: '#111827',
+          },
+          fontFamily: {
+            sans: ['"Inter"', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.6s ease-out forwards;
+    }
+    .aurora-background::before {
+      content: ''; position: absolute; top: -20%; left: -20%; width: 400px; height: 400px;
+      background-image: radial-gradient(circle, rgba(59, 130, 246, 0.3), transparent 70%);
+      filter: blur(100px); z-index: 0;
+    }
+    .aurora-background::after {
+      content: ''; position: absolute; bottom: -20%; right: -20%; width: 400px; height: 400px;
+      background-image: radial-gradient(circle, rgba(30, 64, 175, 0.3), transparent 70%);
+      filter: blur(120px); z-index: 0;
+    }
+    /* Стили для валидации */
+    .input-error {
+        border-color: #EF4444 !important; /* red-500 */
+    }
+  </style>
+</head>
+<body class="bg-light min-h-screen flex items-center justify-center font-sans p-4 relative overflow-hidden aurora-background">
+
+<div class="relative z-10 w-full max-w-4xl grid md:grid-cols-2 bg-white/70 backdrop-blur-xl border border-gray-200 shadow-2xl rounded-3xl overflow-hidden animate-fade-in">
+
+ <div class="hidden md:flex flex-col justify-center p-12 bg-gray-50/50">
+  <div class="flex items-center gap-3">
+    <img
+      src="{{ url_for('static', filename='logo.png') }}"
+      alt="Kilogr.app"
+      class="h-10 md:h-12 w-auto object-contain"
+      width="1730"
+      height="379"
+      loading="lazy"
+    />
+  </div>
+  <h2 class="text-3xl font-bold text-dark mt-8">Ваш личный путь к здоровью</h2>
+  <p class="text-gray-600 mt-4">Отслеживайте свой прогресс, достигайте целей и становитесь лучшей версией себя вместе с нами.</p>
+</div>
+
+
+  <div class="w-full p-8 sm:p-12">
+    <h1 class="text-3xl font-bold text-dark text-center">Создайте аккаунт</h1>
+
+    <div class="mt-6">
+      <a href="#" class="w-full flex items-center justify-center gap-3 py-3 px-4 border border-gray-300 rounded-xl transition-colors hover:bg-gray-50">
+        <svg class="w-6 h-6" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="#FF3D00" d="m6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z"/><path fill="#4CAF50" d="m24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.223 0-9.657-3.657-11.303-8.591l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.091 35.636 44 30.138 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>
+        <span class="text-gray-700 font-medium">Зарегистрироваться через Google</span>
+      </a>
+    </div>
+
+    <div class="my-6 flex items-center text-sm">
+      <hr class="flex-grow border-gray-300">
+      <span class="mx-4 text-gray-400">или</span>
+      <hr class="flex-grow border-gray-300">
+    </div>
+
+    <form id="registerForm" method="POST" class="space-y-4">
+      <div>
+        <label for="name" class="sr-only">Имя</label>
+        <input id="name" type="text" name="name" placeholder="Ваше имя"
+               class="w-full px-4 py-3 rounded-xl border border-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent transition" required>
+      </div>
+      <div>
+        <label for="email" class="sr-only">Email</label>
+        <input id="email" type="email" name="email" placeholder="you@example.com"
+               class="w-full px-4 py-3 rounded-xl border border-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent transition" required>
+      </div>
+      <div>
+        <label for="date_of_birth" class="sr-only">Дата рождения</label>
+        <input id="date_of_birth" type="text" onfocus="(this.type='date')" onblur="(this.type='text')" name="date_of_birth" placeholder="Дата рождения"
+               class="w-full px-4 py-3 rounded-xl border border-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent transition" required>
+      </div>
+      <div>
+        <label for="password" class="sr-only">Пароль</label>
+        <input id="password" type="password" name="password" placeholder="Пароль (мин. 6 символов)"
+               class="w-full px-4 py-3 rounded-xl border border-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent transition" required>
+      </div>
+       <div>
+        <label for="password_confirm" class="sr-only">Подтвердите пароль</label>
+        <input id="password_confirm" type="password" name="password_confirm" placeholder="Подтвердите пароль"
+               class="w-full px-4 py-3 rounded-xl border border-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent transition" required>
+      </div>
+
+      <div id="passwordError" class="text-red-600 text-sm hidden">Пароли не совпадают.</div>
+
+      <div class="flex items-center">
+        <input id="terms" name="terms" type="checkbox" required class="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent">
+        <label for="terms" class="ml-2 block text-sm text-gray-700">Я согласен с <a href="#" class="text-accent hover:underline">Условиями использования</a></label>
+      </div>
+
+      <button type="submit"
+              class="w-full bg-primary text-white py-3 rounded-xl font-medium text-lg transition-all duration-300 hover:bg-accent hover:shadow-lg hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent">
+        Создать аккаунт
+      </button>
+    </form>
+
+    <p class="mt-6 text-center text-sm text-gray-500">
+      Уже есть аккаунт?
+      <a href="/login" class="font-medium text-accent hover:underline transition">Войти</a>
+    </p>
+  </div>
+</div>
+
+<script>
+  const form = document.getElementById('registerForm');
+  const password = document.getElementById('password');
+  const passwordConfirm = document.getElementById('password_confirm');
+  const passwordError = document.getElementById('passwordError');
+
+  form.addEventListener('submit', function (e) {
+    password.classList.remove('input-error');
+    passwordConfirm.classList.remove('input-error');
+    passwordError.classList.add('hidden');
+
+    if (password.value !== passwordConfirm.value) {
+      e.preventDefault(); // Останавливаем отправку формы
+      passwordError.classList.remove('hidden');
+      password.classList.add('input-error');
+      passwordConfirm.classList.add('input-error');
+      passwordConfirm.focus();
+    }
+  });
+
+  // Маленький хак для красивого плейсхолдера у поля даты
+  const dateInput = document.getElementById('date_of_birth');
+  dateInput.addEventListener('change', () => {
+      if (dateInput.value) {
+          dateInput.type = 'date';
+      } else {
+          dateInput.type = 'text';
+      }
+  });
+</script>
+
+</body>
+</html>

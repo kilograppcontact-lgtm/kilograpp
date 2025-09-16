@@ -1,0 +1,479 @@
+{% extends "base.html" %}
+{% set title = "Инструкция — Kilogr.app" %}
+
+{% block content %}
+<style>
+  html{ scroll-behavior:smooth; }
+
+  /* Анимации появления */
+  .reveal{ opacity:0; transform:translateY(14px); transition:opacity .6s ease, transform .6s ease; }
+  .reveal.show{ opacity:1; transform:none; }
+
+  /* Декор + параллакс */
+  .parallax-blob{ will-change: transform; transition: transform .2s linear; }
+
+  /* Универсальная карточка */
+  .card{ border:1px solid rgba(100,116,139,.12); border-radius:1rem; background:rgba(255,255,255,.9); backdrop-filter:saturate(1.2) blur(2px); }
+
+  /* Аккордеон (без x-collapse) */
+  .acc-item[aria-expanded="true"] .acc-panel{ max-height: 240px; }
+  .acc-panel{ max-height: 0; overflow: hidden; transition: max-height .35s ease; }
+</style>
+
+<section id="top" class="relative overflow-clip">
+  <!-- Декоративные пятна -->
+  <div class="pointer-events-none absolute inset-0 -z-10">
+    <div class="parallax-blob absolute -top-24 -left-24 h-64 w-64 rounded-full bg-indigo-200/40 blur-3xl"></div>
+    <div class="parallax-blob absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-emerald-200/40 blur-3xl"></div>
+  </div>
+
+  <!-- HERO -->
+  <div class="max-w-7xl mx-auto px-4 pt-8 pb-4 lg:pt-12">
+    <div class="grid lg:grid-cols-[1fr,340px] gap-8 items-center">
+      <div class="reveal">
+        <a href="#toc" class="inline-flex items-center gap-2 text-xs font-medium px-2.5 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-white transition">
+          <i class="bi bi-stars"></i> Быстрый старт за 2 минуты
+        </a>
+        <h1 class="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight">Как пользоваться Kilogr.app</h1>
+        <p class="mt-3 text-slate-600 max-w-2xl">
+          Короткое руководство по ключевым функциям: прогресс, приёмы пищи, активность с часов и корректные замеры на весах.
+        </p>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <a href="#live-demos" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition">
+            <i class="bi bi-lightning-charge"></i> Сразу к визуалам
+          </a>
+          <a href="#scales" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 hover:bg-white transition">
+            <i class="bi bi-activity"></i> Как пользоваться весами
+          </a>
+          <a href="#watch" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 hover:bg-white transition">
+            <i class="bi bi-smartwatch"></i> Подключить часы
+          </a>
+        </div>
+      </div>
+
+      <!-- Оглавление -->
+      <nav id="toc" class="card p-4 lg:sticky lg:top-6 h-max reveal">
+        <h3 class="text-sm font-semibold text-slate-700 mb-3">Навигация по странице</h3>
+        <ol class="space-y-2 text-sm">
+          <li><a class="hover:text-indigo-700 flex items-center gap-2" href="#live-demos"><i class="bi bi-grid"></i> Визуалы из продукта</a></li>
+          <li><a class="hover:text-indigo-700 flex items-center gap-2" href="#first-steps"><i class="bi bi-1-circle"></i> Первые шаги</a></li>
+          <li><a class="hover:text-indigo-700 flex items-center gap-2" href="#watch"><i class="bi bi-smartwatch"></i> Подключаем часы</a></li>
+          <li><a class="hover:text-indigo-700 flex items-center gap-2" href="#scales"><i class="bi bi-activity"></i> Как пользоваться весами</a></li>
+          <li><a class="hover:text-indigo-700 flex items-center gap-2" href="#videos"><i class="bi bi-play-circle"></i> Видео-инструкции</a></li>
+          <li><a class="hover:text-indigo-700 flex items-center gap-2" href="#faq"><i class="bi bi-question-circle"></i> Частые вопросы</a></li>
+        </ol>
+      </nav>
+    </div>
+  </div>
+
+  <!-- ВИЗУАЛЫ ИЗ ПРОДУКТА (без скринов) -->
+  <div id="live-demos" class="max-w-7xl mx-auto px-4 py-12">
+    <h2 class="text-2xl font-bold reveal">Как это выглядит в приложении</h2>
+    <p class="mt-2 text-slate-600 reveal">
+      Живые мини-демо ключевых блоков. Нажмите любой — перейдёте к полным данным.
+    </p>
+
+    <div class="mt-6 grid gap-6 lg:grid-cols-2">
+      <!-- DEMO: Прогресс по цели (как в профиле) -->
+      <a href="{{ url_for('profile') }}#progress" class="group block card p-5 hover:shadow-lg transition reveal">
+        <div class="flex items-start justify-between">
+          <div>
+            <h3 class="font-semibold">Ваш прогресс по цели</h3>
+            <p class="text-sm text-slate-500">В таком формате вы видите свой прогресс. Клик — подробности и история.</p>
+          </div>
+          <i class="bi bi-box-arrow-up-right text-slate-400 group-hover:text-slate-600"></i>
+        </div>
+
+        <div class="mt-4">
+          <div class="flex items-center justify-between text-xs text-slate-500">
+            <span>Старт</span>
+            <span>Цель</span>
+          </div>
+          <div class="mt-1 h-3 w-full rounded-full bg-slate-100 border border-slate-200 relative overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-emerald-500 to-emerald-400" style="width: 62%"></div>
+            <span class="absolute -top-7 left-[62%] -translate-x-1/2 text-xs px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 shadow">
+              62%
+            </span>
+          </div>
+          <div class="mt-2 text-xs text-slate-500">
+            Осталось ~ <span class="font-medium text-slate-700">3.8 кг</span> до цели
+          </div>
+        </div>
+
+        <div class="mt-4 flex gap-2 text-xs text-slate-500">
+          <span class="inline-flex items-center gap-1 px-2 py-1 rounded border"><i class="bi bi-graph-up"></i> Тренд 30 дней</span>
+          <span class="inline-flex items-center gap-1 px-2 py-1 rounded border"><i class="bi bi-clock-history"></i> История замеров</span>
+        </div>
+      </a>
+
+      <!-- DEMО: Карточка анализа еды -->
+      <a href="{{ url_for('meals') }}" class="group block card p-5 hover:shadow-lg transition reveal">
+        <div class="flex items-start justify-between">
+          <div>
+            <h3 class="font-semibold">Анализ приёма пищи</h3>
+            <p class="text-sm text-slate-500">Результат после загрузки фото: калории, БЖУ и краткий вывод.</p>
+          </div>
+          <i class="bi bi-box-arrow-up-right text-slate-400 group-hover:text-slate-600"></i>
+        </div>
+
+        <div class="mt-4 grid grid-cols-[88px,1fr] gap-4">
+          <!-- Вместо фото — лаконичный плейсхолдер-плашка -->
+          <div class="rounded-lg border bg-gradient-to-br from-slate-50 to-slate-100 aspect-square flex items-center justify-center text-2xl">🍳</div>
+          <div>
+            <div class="text-sm font-medium">Омлет с овощами, тост, авокадо</div>
+            <div class="mt-1 text-xs text-slate-500">Распознано автоматически</div>
+
+            <div class="mt-3 grid grid-cols-4 gap-2 text-center">
+              <div class="rounded-lg border p-2">
+                <div class="text-xs text-slate-500">ккал</div>
+                <div class="font-semibold">412</div>
+              </div>
+              <div class="rounded-lg border p-2">
+                <div class="text-xs text-slate-500">Белки</div>
+                <div class="font-semibold">24 г</div>
+              </div>
+              <div class="rounded-lg border p-2">
+                <div class="text-xs text-slate-500">Жиры</div>
+                <div class="font-semibold">21 г</div>
+              </div>
+              <div class="rounded-lg border p-2">
+                <div class="text-xs text-slate-500">Углев.</div>
+                <div class="font-semibold">29 г</div>
+              </div>
+            </div>
+
+            <div class="mt-3 text-xs text-slate-600">
+              <span class="font-medium">Короткий вывод:</span> вписывается в дневную цель, добавьте овощной гарнир вечером.
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 flex gap-2">
+          <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <i class="bi bi-check2-circle"></i> Сохранить
+          </span>
+          <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-slate-50 text-slate-600 border">
+            <i class="bi bi-x-circle"></i> Не сохранять
+          </span>
+        </div>
+      </a>
+
+      <!-- DEMO: Активность (часы) -->
+<a href="{{ url_for('activity') }}" class="group block card p-5 hover:shadow-lg transition reveal">
+        <div class="flex items-start justify-between">
+          <div>
+            <h3 class="font-semibold">Ежедневная активность</h3>
+            <p class="text-sm text-slate-500">Данные с часов: шаги, активные/пассивные калории, тренировки.</p>
+          </div>
+          <i class="bi bi-box-arrow-up-right text-slate-400 group-hover:text-slate-600"></i>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border">
+            <i class="bi bi-shoe-print"></i>
+            <span class="text-sm"><span class="font-semibold">7 842</span> шагов</span>
+          </span>
+          <span class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border">
+            <i class="bi bi-fire"></i>
+            <span class="text-sm"><span class="font-semibold">612</span> активных ккал</span>
+          </span>
+          <span class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border">
+            <i class="bi bi-activity"></i>
+            <span class="text-sm"><span class="font-semibold">38</span> мин тренировки</span>
+          </span>
+        </div>
+
+        <!-- Мини-тренд по шагам -->
+        <div class="mt-4">
+          <div class="flex items-center justify-between text-xs text-slate-500">
+            <span>Неделя</span><span>Тренд ↑</span>
+          </div>
+          <div class="mt-1 grid grid-cols-7 gap-1 h-14">
+            <div class="bg-indigo-200 rounded" style="height:34%"></div>
+            <div class="bg-indigo-300 rounded" style="height:48%"></div>
+            <div class="bg-indigo-400 rounded" style="height:72%"></div>
+            <div class="bg-indigo-500 rounded" style="height:80%"></div>
+            <div class="bg-indigo-400 rounded" style="height:66%"></div>
+            <div class="bg-indigo-300 rounded" style="height:52%"></div>
+            <div class="bg-indigo-500 rounded" style="height:84%"></div>
+          </div>
+        </div>
+      </a>
+
+      <!-- DEMO: Показатели тела (сравнение) -->
+      <a href="{{ url_for('profile') }}#body-metrics" class="group block card p-5 hover:shadow-lg transition reveal">
+        <div class="flex items-start justify-between">
+          <div>
+            <h3 class="font-semibold">Показатели тела: сравнение</h3>
+            <p class="text-sm text-slate-500">Сверка текущих значений с предыдущим замером.</p>
+          </div>
+          <i class="bi bi-box-arrow-up-right text-slate-400 group-hover:text-slate-600"></i>
+        </div>
+
+        <div class="mt-4 grid sm:grid-cols-3 gap-3">
+          <div class="rounded-lg border p-3">
+            <div class="text-xs text-slate-500">Вес</div>
+            <div class="mt-1 flex items-end gap-2">
+              <div class="text-lg font-semibold">81.2 кг</div>
+              <div class="text-xs text-emerald-600 inline-flex items-center gap-1"><i class="bi bi-arrow-down-right"></i> −0.8</div>
+            </div>
+            <div class="mt-2 h-1.5 bg-slate-100 rounded">
+              <div class="h-full bg-slate-900 rounded" style="width: 62%"></div>
+            </div>
+          </div>
+          <div class="rounded-lg border p-3">
+            <div class="text-xs text-slate-500">% жира</div>
+            <div class="mt-1 flex items-end gap-2">
+              <div class="text-lg font-semibold">24.6%</div>
+              <div class="text-xs text-emerald-600 inline-flex items-center gap-1"><i class="bi bi-arrow-down-right"></i> −0.5</div>
+            </div>
+            <div class="mt-2 h-1.5 bg-slate-100 rounded">
+              <div class="h-full bg-slate-900 rounded" style="width: 38%"></div>
+            </div>
+          </div>
+          <div class="rounded-lg border p-3">
+            <div class="text-xs text-slate-500">Мыш. масса</div>
+            <div class="mt-1 flex items-end gap-2">
+              <div class="text-lg font-semibold">63.1 кг</div>
+              <div class="text-xs text-emerald-600 inline-flex items-center gap-1"><i class="bi bi-arrow-up-right"></i> +0.3</div>
+            </div>
+            <div class="mt-2 h-1.5 bg-slate-100 rounded">
+              <div class="h-full bg-slate-900 rounded" style="width: 71%"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3 text-xs text-slate-600">
+          Нажмите, чтобы открыть вкладку «Показатели тела» и посмотреть графики и историю.
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <!-- ПЕРВЫЕ ШАГИ -->
+  <div id="first-steps" class="max-w-7xl mx-auto px-4 py-10 reveal">
+    <h2 class="text-2xl font-bold">Первые шаги</h2>
+    <ol class="mt-4 space-y-3">
+      <li class="card p-4 flex gap-3">
+        <div class="shrink-0 w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold">1</div>
+        <div><strong>Заполните профиль</strong>: имя, дата рождения, цель. Это влияет на аналитику.</div>
+      </li>
+      <li class="card p-4 flex gap-3">
+        <div class="shrink-0 w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold">2</div>
+        <div><strong>Подключите устройства</strong>: часы и весы — автоматический сбор данных.</div>
+      </li>
+      <li class="card p-4 flex gap-3">
+        <div class="shrink-0 w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold">3</div>
+        <div><strong>Сделайте первый замер</strong>: дальше увидите прогресс и рекомендации.</div>
+      </li>
+    </ol>
+  </div>
+
+  <!-- ЧАСЫ: подключение (UI-макет вместо скрина) -->
+  <div id="watch" class="max-w-7xl mx-auto px-4 py-10 grid lg:grid-cols-2 gap-8 items-center">
+    <div class="reveal">
+      <h2 class="text-2xl font-bold">Подключаем часы</h2>
+      <p class="mt-2 text-slate-600">После связки шаги и калории подтягиваются автоматически.</p>
+      <ul class="mt-4 space-y-2 text-slate-700">
+        <li class="flex gap-3"><i class="bi bi-link-45deg text-indigo-600 mt-0.5"></i><span>Откройте «Настройки» → «Устройства».</span></li>
+        <li class="flex gap-3"><i class="bi bi-shield-lock text-indigo-600 mt-0.5"></i><span>Разрешите доступ к шагам/калориям в приложении партнёра.</span></li>
+        <li class="flex gap-3"><i class="bi bi-check2-circle text-indigo-600 mt-0.5"></i><span>Проверьте раздел «Активность» — появятся шаги.</span></li>
+      </ul>
+      <div class="mt-4">
+        <a href="#videos" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 hover:bg-white transition">
+          <i class="bi bi-play-circle"></i> Видео-инструкция
+        </a>
+      </div>
+    </div>
+
+    <!-- Макет интерфейса привязки -->
+    <div class="reveal card p-4">
+      <div class="flex items-center justify-between">
+        <div class="font-semibold">Связанные устройства</div>
+        <span class="text-xs text-slate-500">Настройки → Устройства</span>
+      </div>
+      <div class="mt-3 divide-y">
+        <div class="py-3 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center">⌚</div>
+            <div>
+              <div class="text-sm font-medium">Fitness Watch</div>
+              <div class="text-xs text-slate-500">Шаги, калории, тренировки</div>
+            </div>
+          </div>
+          <button class="px-3 py-1.5 text-xs rounded-lg border bg-white hover:bg-slate-50">Подключить</button>
+        </div>
+        <div class="py-3 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">📱</div>
+            <div>
+              <div class="text-sm font-medium">Health App</div>
+              <div class="text-xs text-slate-500">Шаги, сон</div>
+            </div>
+          </div>
+          <button class="px-3 py-1.5 text-xs rounded-lg border bg-white hover:bg-slate-50">Подключить</button>
+        </div>
+      </div>
+      <div class="mt-3 text-xs text-slate-500">После подключения синхронизация займёт до нескольких минут.</div>
+    </div>
+  </div>
+
+  <!-- ВЕСЫ: правильный замер (UI-макет вместо скрина) -->
+  <div id="scales" class="max-w-7xl mx-auto px-4 py-10 grid lg:grid-cols-2 gap-8 items-center">
+    <!-- Визуальная карточка замера -->
+    <div class="order-2 lg:order-1 reveal card p-4">
+      <div class="flex items-center justify-between">
+        <div class="font-semibold">Сегодняшний замер</div>
+        <span class="text-xs text-slate-500">07:42 • натощак</span>
+      </div>
+
+      <div class="mt-4 grid sm:grid-cols-3 gap-3">
+        <div class="rounded-lg border p-3">
+          <div class="text-xs text-slate-500">Вес</div>
+          <div class="mt-1 text-lg font-semibold">81.2 кг</div>
+          <div class="text-xs text-emerald-600 inline-flex items-center gap-1"><i class="bi bi-arrow-down-right"></i> −0.3</div>
+        </div>
+        <div class="rounded-lg border p-3">
+          <div class="text-xs text-slate-500">% жира</div>
+          <div class="mt-1 text-lg font-semibold">24.6%</div>
+          <div class="text-xs text-emerald-600 inline-flex items-center gap-1"><i class="bi bi-arrow-down-right"></i> −0.2</div>
+        </div>
+        <div class="rounded-lg border p-3">
+          <div class="text-xs text-slate-500">Мыш. масса</div>
+          <div class="mt-1 text-lg font-semibold">63.1 кг</div>
+          <div class="text-xs text-emerald-600 inline-flex items-center gap-1"><i class="bi bi-arrow-up-right"></i> +0.1</div>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <div class="text-xs text-slate-500 mb-1">Тренд веса (14 дней)</div>
+        <div class="h-16 w-full bg-slate-100 rounded-lg p-2 flex items-end gap-1">
+          <div class="w-4 bg-slate-300 rounded" style="height:48%"></div>
+          <div class="w-4 bg-slate-400 rounded" style="height:62%"></div>
+          <div class="w-4 bg-slate-500 rounded" style="height:70%"></div>
+          <div class="w-4 bg-slate-400 rounded" style="height:60%"></div>
+          <div class="w-4 bg-slate-500 rounded" style="height:72%"></div>
+          <div class="w-4 bg-slate-400 rounded" style="height:64%"></div>
+          <div class="w-4 bg-slate-500 rounded" style="height:76%"></div>
+          <div class="w-4 bg-slate-400 rounded" style="height:61%"></div>
+          <div class="w-4 bg-slate-500 rounded" style="height:78%"></div>
+          <div class="w-4 bg-slate-400 rounded" style="height:63%"></div>
+          <div class="w-4 bg-slate-500 rounded" style="height:79%"></div>
+          <div class="w-4 bg-slate-400 rounded" style="height:65%"></div>
+          <div class="w-4 bg-slate-500 rounded" style="height:82%"></div>
+          <div class="w-4 bg-slate-400 rounded" style="height:66%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Памятка по взвешиванию -->
+    <div class="order-1 lg:order-2 reveal">
+      <h2 class="text-2xl font-bold">Как пользоваться весами</h2>
+      <p class="mt-2 text-slate-600">Чтобы данные были точными, соблюдайте одинаковые условия замера.</p>
+      <ul class="mt-4 space-y-2 text-slate-700">
+        <li class="flex gap-3"><i class="bi bi-alarm text-emerald-600 mt-0.5"></i><span>Утром, натощак, после туалета.</span></li>
+        <li class="flex gap-3"><i class="bi bi-droplet text-emerald-600 mt-0.5"></i><span>Сухие стопы, твёрдая ровная поверхность.</span></li>
+        <li class="flex gap-3"><i class="bi bi-speedometer2 text-emerald-600 mt-0.5"></i><span>Стоять босиком, не двигаться 5–7 секунд.</span></li>
+        <li class="flex gap-3"><i class="bi bi-arrow-repeat text-emerald-600 mt-0.5"></i><span>Смотрите тренд, а не разовые колебания.</span></li>
+      </ul>
+      <div class="mt-4">
+        <a href="#videos" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 hover:bg-white transition">
+          <i class="bi bi-play-circle"></i> Видео по весам
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ВИДЕО -->
+  <div id="videos" class="max-w-7xl mx-auto px-4 py-10">
+    <h2 class="text-2xl font-bold reveal">Видео-инструкции</h2>
+
+    <div class="mt-6 grid lg:grid-cols-2 gap-6">
+      <div class="reveal card overflow-hidden">
+        <div class="p-3 text-sm text-slate-600">Как подключить часы</div>
+        <div class="aspect-video">
+          <!-- Замените src на ваше видео -->
+          <iframe class="w-full h-full" src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="Видео: подключение часов" allowfullscreen></iframe>
+        </div>
+      </div>
+      <div class="reveal card overflow-hidden">
+        <div class="p-3 text-sm text-slate-600">Как правильно взвешиваться</div>
+        <div class="aspect-video">
+          <!-- Замените src на ваше видео -->
+          <iframe class="w-full h-full" src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="Видео: пользование весами" allowfullscreen></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FAQ -->
+  <div id="faq" class="max-w-7xl mx-auto px-4 py-12 reveal" x-data="{open:null}">
+    <h2 class="text-2xl font-bold">Частые вопросы</h2>
+    <div class="mt-6 space-y-3">
+      <div class="card acc-item" :aria-expanded="open===1" @click="open===1?open=null:open=1">
+        <button class="w-full px-4 py-3 text-left flex items-center justify-between">
+          <span class="font-medium">Почему вес «скачет» день ото дня?</span>
+          <i class="bi" :class="open===1?'bi-chevron-up':'bi-chevron-down'"></i>
+        </button>
+        <div class="acc-panel px-4 pb-4 text-slate-600">
+          Это нормально: вода, соль, сон и тренировки влияют на цифры. Смотрите тренд и средние значения.
+        </div>
+      </div>
+
+      <div class="card acc-item" :aria-expanded="open===2" @click="open===2?open=null:open=2">
+        <button class="w-full px-4 py-3 text-left flex items-center justify-between">
+          <span class="font-medium">Когда лучше взвешиваться?</span>
+          <i class="bi" :class="open===2?'bi-chevron-up':'bi-chevron-down'"></i>
+        </button>
+        <div class="acc-panel px-4 pb-4 text-slate-600">
+          Утром натощак, после туалета, на твёрдой поверхности, без одежды и украшений.
+        </div>
+      </div>
+
+      <div class="card acc-item" :aria-expanded="open===3" @click="open===3?open=null:open=3">
+        <button class="w-full px-4 py-3 text-left flex items-center justify-between">
+          <span class="font-medium">Как быстро обновляются данные с часов?</span>
+          <i class="bi" :class="open===3?'bi-chevron-up':'bi-chevron-down'"></i>
+        </button>
+        <div class="acc-panel px-4 pb-4 text-slate-600">
+          Обычно в течение нескольких минут после синхронизации приложения партнёра.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Кнопки вверх/FAQ -->
+  <div class="fixed bottom-5 left-5 z-40 flex flex-col gap-2">
+    <a href="#top" class="inline-flex items-center justify-center w-11 h-11 rounded-full bg-white border shadow hover:bg-slate-50"><i class="bi bi-arrow-up"></i></a>
+    <a href="#faq" class="inline-flex items-center justify-center w-11 h-11 rounded-full bg-white border shadow hover:bg-slate-50"><i class="bi bi-question-circle"></i></a>
+  </div>
+</section>
+
+<!-- Скрипты эффектов -->
+<script>
+  // Появления при скролле
+  const onReveal = () => {
+    const io = new IntersectionObserver((entries)=>{
+      entries.forEach(e=>{
+        if(e.isIntersecting){ e.target.classList.add('show'); io.unobserve(e.target); }
+      });
+    }, {threshold:.12, rootMargin:'0px 0px -10% 0px'});
+    document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+  };
+
+  // Лёгкий параллакс
+  const onParallax = () => {
+    const blobs = document.querySelectorAll('.parallax-blob');
+    window.addEventListener('scroll', ()=>{
+      const y = window.scrollY;
+      blobs.forEach((b,i)=>{ b.style.transform = `translateY(${y * (i?0.06:0.04)}px)`; });
+    }, {passive:true});
+  };
+
+  window.addEventListener('load', ()=>{
+    onReveal();
+    onParallax();
+  });
+</script>
+{% endblock %}
