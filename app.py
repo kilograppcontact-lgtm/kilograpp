@@ -308,7 +308,6 @@ def _auto_migrate_diet_schema():
 
 with app.app_context():
     # Мини-миграции для новых полей в user
-    _auto_migrate_diet_schema()
 
     # Запускаем фоновые задачи ТОЛЬКО после инициализации БД
     try:
@@ -316,17 +315,14 @@ with app.app_context():
     except Exception:
         pass
 
-    # Запускаем автогенерацию диет один раз (не в мастер-процессе reloader’a)
-    import os as _os
-    if _os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-        try:
-            start_diet_autogen_scheduler(app)
-            print("[diet_autogen] scheduler started")
-        except Exception as e:
-            print(f"[diet_autogen] scheduler error: {e}")
+    # ⬇️ ГАРАНТИРОВАННО стартуем планировщик автодиеты и логируем
+    try:
+        start_diet_autogen_scheduler(app)
+        app.logger.info("[diet_autogen] scheduler started from app.py")
+    except Exception as e:
+        app.logger.exception("[diet_autogen] failed to start: %s", e)
 
     start_training_notifier()
-
 
 
 def calculate_age(born):
