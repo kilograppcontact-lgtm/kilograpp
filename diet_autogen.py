@@ -345,9 +345,9 @@ def start_diet_autogen_scheduler(app):
             print(f"[diet_autogen] finalize DONE  {datetime.now(ALMATY).isoformat(timespec='seconds')}")
 
     # 05:00 — генерация
-    _SCHED.add_job(_stage, 'cron', hour=22, minute=58, id='diet-autogen-stage')
+    _SCHED.add_job(_stage, 'cron', hour=5, minute=00, id='diet-autogen-stage')
     # 06:00 — промоут + уведомление
-    _SCHED.add_job(_finalize, 'cron', hour=22, minute=59, id='diet-autogen-finalize')
+    _SCHED.add_job(_finalize, 'cron', hour=6, minute=00, id='diet-autogen-finalize')
 
     print("[diet_autogen] cron jobs registered: 05:00 stage, 06:00 finalize (Asia/Almaty)")
     _SCHED.start()
