@@ -23,6 +23,7 @@ from functools import wraps
 from PIL import Image  # Import Pillow
 from sqlalchemy import text # Убедитесь, что text импортирован из sqlalchemy
 from meal_reminders import start_meal_scheduler
+from diet_autogen import start_diet_autogen_scheduler
 from flask import Blueprint, request, jsonify
 from flask_login import current_user
 
@@ -259,7 +260,10 @@ def create_app():
     app = Flask(__name__)
 
     with app.app_context():
+        # Автозапуск напоминалок по приёмам пищи
         start_meal_scheduler(app)
+        # Автогенерация диет: 05:00 — GPT генерация почанково, 06:00 — промоут + уведомления
+        start_diet_autogen_scheduler(app)
 
     return app
 
@@ -289,16 +293,40 @@ def start_training_notifier():
         th = threading.Thread(target=_notification_worker, daemon=True)
         th.start()
 
+def _auto_migrate_diet_schema():
+    """
+    Мини-миграция: создаём недостающие таблицы и колонки для автогенерации диет.
+    Без Alembic: аккуратно добавляем колонки, если их нет.
+    """
+    from sqlalchemy import inspect, text
+
+    insp = inspect(db.engine)
+    tables = set(insp.get_table_names())
+
+    # 1) Создаём отсутствующие таблицы по моделям (например, staged_diet), не трогая существующие
+    db.create_all()
+
 with app.app_context():
     # Мини-миграции для новых полей в user
+    _auto_migrate_diet_schema()
 
     # Запускаем фоновые задачи ТОЛЬКО после инициализации БД
     try:
-        from meal_reminders import start_meal_scheduler
         start_meal_scheduler(app)
     except Exception:
         pass
+
+    # Запускаем автогенерацию диет один раз (не в мастер-процессе reloader’a)
+    import os as _os
+    if _os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        try:
+            start_diet_autogen_scheduler(app)
+            print("[diet_autogen] scheduler started")
+        except Exception as e:
+            print(f"[diet_autogen] scheduler error: {e}")
+
     start_training_notifier()
+
 
 
 def calculate_age(born):

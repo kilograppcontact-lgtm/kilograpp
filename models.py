@@ -459,6 +459,45 @@ class MealReminderLog(db.Model):
         db.UniqueConstraint("user_id", "meal_type", "date_sent", name="u_meal_reminder_once_per_day"),
     )
 
+# ------------------ DIET AUTOGEN PREFS / STAGING ------------------
+
+class DietPreference(db.Model):
+    __tablename__ = "diet_preference"
+
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), primary_key=True)
+    # При первичной генерации фиксируем долговременные настройки
+    sex = db.Column(db.String(16), nullable=True)          # 'male' | 'female' | None
+    goal = db.Column(db.String(32), nullable=True)         # 'fat_loss' | 'muscle_gain' | 'recomp' | ...
+    include_favorites = db.Column(db.Text, nullable=True)  # запоминаем вкусы
+    exclude_ingredients = db.Column(db.Text, nullable=True)
+    kcal_target = db.Column(db.Integer, nullable=True)
+    protein_min = db.Column(db.Float, nullable=True)
+    fat_max = db.Column(db.Float, nullable=True)
+    carbs_max = db.Column(db.Float, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship("User", backref=db.backref("diet_preference", uselist=False))
+
+
+class StagedDiet(db.Model):
+    __tablename__ = "staged_diet"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), index=True, nullable=False)
+    date = db.Column(db.Date, index=True, nullable=False, default=date.today)
+    breakfast = db.Column(db.Text)
+    lunch = db.Column(db.Text)
+    dinner = db.Column(db.Text)
+    snack = db.Column(db.Text)
+    total_kcal = db.Column(db.Integer)
+    protein = db.Column(db.Float)
+    fat = db.Column(db.Float)
+    carbs = db.Column(db.Float)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint('user_id', 'date', name='uq_staged_user_date'),)
+
+    user = db.relationship("User", backref=db.backref("staged_diets", lazy=True))
 
 # ------------------ AUTO-DEFAULTS HOOK ------------------
 
