@@ -1,4 +1,3 @@
-# meal_reminders.py
 import os
 import requests
 from datetime import datetime
@@ -75,7 +74,6 @@ def _message_for(meal_key: str) -> str:
 
 def _keyboard_for(meal_key: str, base_url: str | None) -> dict:
     """Inline-кнопки: 1) добавить конкретный приём через бота, 2) открыть дневник на сайте (если есть URL)."""
-    # красивые подписи
     meal_names = {"breakfast": "завтрак", "lunch": "обед", "dinner": "ужин"}
     add_btn_text = f"➕ Добавить {meal_names.get(meal_key, 'приём')}"
 
@@ -98,10 +96,8 @@ def _tick():
     if not token:
         return
 
-    # Базовый URL для кнопки перехода
     base_url = (app.config.get("PUBLIC_BASE_URL") or "").rstrip("/") or None
 
-    # Берём всех пользователей, у кого потенциально могут быть включены уведомления
     users = (
         User.query
         .join(UserSettings, UserSettings.user_id == User.id)
@@ -132,7 +128,31 @@ def _tick():
         db.session.rollback()
 
 
+# --- ПУБЛИЧНЫЕ ФУНКЦИИ ДЛЯ ИМПОРТА В app.py ---
+
+def get_scheduler():
+    """Вернуть текущий инстанс APScheduler (или None)."""
+    return _scheduler
+
+
+def pause_job(job_id: str):
+    if _scheduler:
+        _scheduler.pause_job(job_id)
+
+
+def resume_job(job_id: str):
+    if _scheduler:
+        _scheduler.resume_job(job_id)
+
+
+def run_tick_now(app):
+    """Принудительно вызвать тик рассылки напоминаний (в Flask-контексте)."""
+    with app.app_context():
+        _tick()
+
+
 def start_meal_scheduler(app):
+    """Создать и запустить шедулер (если ещё не создан). Вернуть инстанс."""
     global _scheduler
     if _scheduler:
         return _scheduler
@@ -144,7 +164,7 @@ def start_meal_scheduler(app):
         with app.app_context():
             _tick()
 
-    # Проверяем раз в минуту локальное HH:MM Алматы
-    _scheduler.add_job(_job, "interval", minutes=1, id="meal-reminders")
+    # регистрируем периодическую задачу и стартуем шедулер
+    _scheduler.add_job(_job, "interval", minutes=1, id="meal-reminders", replace_existing=True)
     _scheduler.start()
     return _scheduler

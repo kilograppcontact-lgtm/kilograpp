@@ -262,12 +262,42 @@ class MealLog(db.Model):
     analysis = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Новое:
+    image_path = db.Column(db.String(255), nullable=True)
+    is_flagged = db.Column(db.Boolean, default=False, nullable=False, server_default=expression.false())
+
     # Каскад на стороне ORM: удаляем логи при удалении пользователя
     user = db.relationship(
         'User',
         backref=db.backref('meals', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
     )
     __table_args__ = (UniqueConstraint('user_id', 'date', 'meal_type', name='uq_user_date_meal'),)
+
+class AuditLog(db.Model):
+    __tablename__ = "audit_logs"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    action = db.Column(db.String(100), nullable=False)
+    entity = db.Column(db.String(100), nullable=False)
+    entity_id = db.Column(db.String(100), nullable=False)
+    old_data = db.Column(db.JSON, nullable=True)
+    new_data = db.Column(db.JSON, nullable=True)
+    ip = db.Column(db.String(64), nullable=True)
+    user_agent = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+class PromptTemplate(db.Model):
+    __tablename__ = "prompt_templates"
+    __table_args__ = (db.UniqueConstraint('name', 'version', name='uq_prompt_name_version'),)
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    version = db.Column(db.Integer, nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    params = db.Column(db.JSON, nullable=True)
+    is_active = db.Column(db.Boolean, default=False, nullable=False, server_default=expression.false())
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class Activity(db.Model):

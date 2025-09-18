@@ -655,11 +655,18 @@ lockScroll(false);
             <div class="flex justify-between items-center cursor-pointer" id="metrics-header">
               <h3 class="text-base font-bold text-slate-800">📊 Ключевые показатели</h3>
               <button class="flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-800">
-                                <span id="metrics-toggle-text">Все данные</span>
-                <svg id="metrics-toggle-icon" xmlns="http://www....r" class="w-5 h-5 transition-transform duration-300 rotate-180">
-                  <path fill-rule="evenodd" d="M14.77 12.79a.75.... 0 011.06 0l4.24 4.25a.75.75 0 010 1.06z" clip-rule="evenodd" />
-                </svg>
-              </button>
+  <span id="metrics-toggle-text">Все данные</span>
+  <svg id="metrics-toggle-icon"
+       xmlns="http://www.w3.org/2000/svg"
+       viewBox="0 0 24 24"
+       fill="none"
+       stroke="currentColor"
+       class="w-5 h-5 transition-transform duration-300 rotate-180">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M19 9l-7 7-7-7"/>
+  </svg>
+</button>
+
             </div>
 
             {% if not latest_analysis %}
@@ -2010,91 +2017,62 @@ async function checkTgStatus() {
         }
     }
 </script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    // --- Логика для отрисовки графиков динамики ---
-    document.addEventListener('DOMContentLoaded', function() {
-        // Проверяем, есть ли на странице элемент для графика и есть ли подписка
-        // (в шаблоне элемент canvas не будет создан для пользователей без подписки)
-        const weightChartCanvas = document.getElementById('weightChart');
-        if (weightChartCanvas) {
-            fetch('/api/user/weekly_summary')
-                .then(res => res.json())
-                .then(data => {
-                    if (data.error) {
-                        console.error(data.error);
-                        return;
-                    }
-                    renderCharts(data);
-                })
-                .catch(err => console.error("Failed to load chart data:", err));
-        }
-    });
+document.addEventListener('DOMContentLoaded', function () {
+  const w = document.getElementById('weightChart');
+  if (!w) return;                      // канвасов нет — значит и графики не нужны
+  if (!window.Chart) {                 // библиотека не загрузилась
+    console.warn('Chart.js не загрузился');
+    return;
+  }
+  fetch('/api/user/weekly_summary', { cache: 'no-store' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data || !Array.isArray(data.labels) || !data.datasets) return;
+      // на всякий случай приведём к числам
+      const labels = data.labels;
+      const ds = {
+        weight: (data.datasets.weight || []).map(Number),
+        consumed_kcal: (data.datasets.consumed_kcal || []).map(Number),
+        burned_kcal: (data.datasets.burned_kcal || []).map(Number),
+      };
+      renderCharts({ labels, datasets: ds });
+    })
+    .catch(err => console.error('Failed to load chart data:', err));
+});
 
-    function renderCharts(data) {
-        const { labels, datasets } = data;
+function renderCharts({ labels, datasets }) {
+  const commonOptions = {
+    responsive: true, maintainAspectRatio: false, animation: false, devicePixelRatio: 2,
+    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+    scales: { x: { grid: { display: false } }, y: { beginAtZero: false, ticks: { maxTicksLimit: 5 } } },
+    elements: { point: { radius: 2 }, line: { borderWidth: 2, tension: 0.4 } }
+  };
 
-       const commonOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  animation: false,
-  devicePixelRatio: 2,
-  plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
-  scales: { x: { grid: { display: false } }, y: { beginAtZero: false, ticks: { maxTicksLimit: 5 } } },
-  elements: { point: { radius: 2 }, line: { borderWidth: 2, tension: 0.4 } }
-};
+  new Chart(document.getElementById('weightChart'), {
+    type: 'line',
+    data: { labels, datasets: [{ label: 'Вес', data: datasets.weight,
+      borderColor: 'rgb(59,130,246)', backgroundColor: 'rgba(59,130,246,0.1)', fill: true }] },
+    options: commonOptions
+  });
 
+  new Chart(document.getElementById('mealsChart'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Потреблено', data: datasets.consumed_kcal,
+      borderColor: 'rgb(249,115,22)', backgroundColor: 'rgba(249,115,22,0.5)' }] },
+    options: commonOptions
+  });
 
-        // График веса
-        new Chart(document.getElementById('weightChart').getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Вес',
-                    data: datasets.weight,
-                    borderColor: 'rgb(59, 130, 246)',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    fill: true,
-                }]
-            },
-            options: commonOptions
-        });
-
-        // График потребленных калорий
-        new Chart(document.getElementById('mealsChart').getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Потреблено',
-                    data: datasets.consumed_kcal,
-                    borderColor: 'rgb(249, 115, 22)',
-                    backgroundColor: 'rgba(249, 115, 22, 0.5)',
-                }]
-            },
-            options: commonOptions
-        });
-
-        // График сожженных калорий
-        new Chart(document.getElementById('activityChart').getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Сожжено',
-                    data: datasets.burned_kcal,
-                    borderColor: 'rgb(22, 163, 74)',
-                    backgroundColor: 'rgba(22, 163, 74, 0.5)',
-                }]
-            },
-            options: commonOptions
-        });
-    }
-
-    // --- (здесь остальной ваш JS код: confirmAndResetDiet и т.д.) ---
+  new Chart(document.getElementById('activityChart'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Сожжено', data: datasets.burned_kcal,
+      borderColor: 'rgb(22,163,74)', backgroundColor: 'rgba(22,163,74,0.5)' }] },
+    options: commonOptions
+  });
+}
 </script>
+
 
 <div id="deficitHistoryModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4" onclick="closeDeficitHistoryModal()">
   <div class="card w-full max-w-2xl p-0 relative animate-fade-in" onclick="event.stopPropagation()">

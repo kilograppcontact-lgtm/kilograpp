@@ -1,13 +1,7 @@
-import os
 from datetime import datetime, date, timedelta, time as dt_time
 from urllib.parse import urlparse
 import base64
-import json
-from flask import jsonify # Убедись, что jsonify импортирован вверху файла
-import requests
-import uuid  # Добавлено для генерации уникальных ID заказов
-import time  # Добавлено для симуляции
-from flask import Flask, render_template, request, redirect, session, jsonify, url_for, flash, abort, \
+from flask import Flask, render_template, redirect, session, url_for, flash, abort, \
     send_from_directory
 from flask_bcrypt import Bcrypt
 from werkzeug.utils import secure_filename
@@ -15,17 +9,17 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import random
 import string
-from sqlalchemy import UniqueConstraint
-from sqlalchemy.exc import IntegrityError
 import re
 from sqlalchemy import func
 from functools import wraps
-from PIL import Image  # Import Pillow
-from sqlalchemy import text # Убедитесь, что text импортирован из sqlalchemy
-from meal_reminders import start_meal_scheduler
+from PIL import Image
+from meal_reminders import start_meal_scheduler, get_scheduler, run_tick_now, pause_job, resume_job
 from diet_autogen import start_diet_autogen_scheduler
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request
 from flask_login import current_user
+import json, os
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from flask import make_response
 
 load_dotenv()
 
@@ -46,8 +40,9 @@ db.init_app(app)
 from models import (
     User, Subscription, Order, Group, GroupMember, GroupMessage, MessageReaction,
     GroupTask, MealLog, Activity, Diet, Training, TrainingSignup, BodyAnalysis,
-    UserSettings, MealReminderLog
+    UserSettings, MealReminderLog, AuditLog, PromptTemplate
 )
+
 
 
 # --- Image Resizing Configuration ---
@@ -73,6 +68,28 @@ def serve_uploaded_file(filename):
 
 ADMIN_EMAIL = "admin@healthclub.local"
 
+def _magic_serializer():
+    # соль зафиксирована, чтобы токены были совместимы между рестартами
+    secret = app.secret_key or app.config.get("SECRET_KEY")
+    return URLSafeTimedSerializer(secret, salt="magic-login")
+
+
+def log_audit(action: str, entity: str, entity_id: str, old=None, new=None):
+    try:
+        entry = AuditLog(
+            actor_id=session.get('user_id'),
+            action=action,
+            entity=entity,
+            entity_id=str(entity_id),
+            old_data=old,
+            new_data=new,
+            ip=request.headers.get('X-Forwarded-For') or request.remote_addr,
+            user_agent=request.headers.get('User-Agent')
+        )
+        db.session.add(entry)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 def login_required(f):
     @wraps(f)
@@ -107,6 +124,24 @@ def admin_required(f):
 
     return decorated_function
 
+
+# --- MAGIC LOGIN (вход по ссылке, 1 час) ---
+if "magic_login" not in app.view_functions:
+    @app.get("/auth/magic/<token>", endpoint="magic_login")
+    def magic_login(token):
+        s = _magic_serializer()
+        try:
+            user_id = int(s.loads(token, max_age=3600))
+        except SignatureExpired:
+            flash("Ссылка истекла. Сгенерируйте новую.", "error")
+            return redirect(url_for("login"))
+        except BadSignature:
+            flash("Ссылка недействительна.", "error")
+            return redirect(url_for("login"))
+        user = db.session.get(User, user_id) or abort(404)
+        session["user_id"] = user.id
+        flash("Вы вошли через магическую ссылку.", "success")
+        return redirect(url_for("profile"))
 
 
 
@@ -293,21 +328,36 @@ def start_training_notifier():
         th = threading.Thread(target=_notification_worker, daemon=True)
         th.start()
 
-def _auto_migrate_diet_schema():
-    """
-    Мини-миграция: создаём недостающие таблицы и колонки для автогенерации диет.
-    Без Alembic: аккуратно добавляем колонки, если их нет.
-    """
-    from sqlalchemy import inspect, text
-
+def _ensure_column(table: str, column: str, ddl: str):
     insp = inspect(db.engine)
-    tables = set(insp.get_table_names())
+    cols = {c['name'] for c in insp.get_columns(table)}
+    if column not in cols:
+        with db.engine.connect() as con:
+            con.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {ddl}'))
+        print(f"[auto-migrate] added {table}.{column}")
 
-    # 1) Создаём отсутствующие таблицы по моделям (например, staged_diet), не трогая существующие
+from sqlalchemy import inspect
+
+def _auto_migrate_diet_schema():
+    insp = inspect(db.engine)
+    # Создадим недостающие таблицы по моделям
     db.create_all()
+
+    # === ВАЖНО: meal_logs нужные поля ===
+    _ensure_column("meal_logs", "image_path", "TEXT")
+    _ensure_column("meal_logs", "is_flagged", "BOOLEAN DEFAULT FALSE")
+    _ensure_column("meal_logs", "created_at", "TIMESTAMP WITHOUT TIME ZONE DEFAULT (CURRENT_TIMESTAMP)")
+
+    # (опционально) Заполнить created_at там где NULL
+    try:
+        with db.engine.connect() as con:
+            con.execute(text("UPDATE meal_logs SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)"))
+    except Exception as e:
+        print(f"[auto-migrate] backfill created_at failed: {e}")
 
 with app.app_context():
     # Мини-миграции для новых полей в user
+    _auto_migrate_diet_schema()
 
     # Запускаем фоновые задачи ТОЛЬКО после инициализации БД
     try:
@@ -315,14 +365,17 @@ with app.app_context():
     except Exception:
         pass
 
-    # ⬇️ ГАРАНТИРОВАННО стартуем планировщик автодиеты и логируем
-    try:
-        start_diet_autogen_scheduler(app)
-        app.logger.info("[diet_autogen] scheduler started from app.py")
-    except Exception as e:
-        app.logger.exception("[diet_autogen] failed to start: %s", e)
+    # Запускаем автогенерацию диет один раз (не в мастер-процессе reloader’a)
+    import os as _os
+    if _os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        try:
+            start_diet_autogen_scheduler(app)
+            print("[diet_autogen] scheduler started")
+        except Exception as e:
+            print(f"[diet_autogen] scheduler error: {e}")
 
     start_training_notifier()
+
 
 
 def calculate_age(born):
@@ -1832,15 +1885,18 @@ def analyze_meal_photo():
             b64 = base64.b64encode(f.read()).decode('utf-8')
 
         # --- ИЗМЕНЕННЫЙ ПРОМПТ ---
-        system_prompt = (
-            "Ты — профессиональный диетолог. Проанализируй фото еды. Определи:"
-            "\n- Каллорий должен быть максимально реалистичным, не ровно 400, 500. А числа в которые хочется верить что то вроде 370, 420.."
-            "\n- Название блюда (в поле 'name')."
-            "\n- Калорийность, Белки, Жиры, Углеводы (в полях 'calories', 'protein', 'fat', 'carbs')."
-            "\n- Дай подробный текстовый анализ блюда (в поле 'analysis')."
-            "\n- Сделай краткий вывод: насколько блюдо полезно или вредно для диеты (в поле 'verdict')."
-            '\nВерни JSON СТРОГО в формате: {"name": "...", "calories": 0, "protein": 0.0, "fat": 0.0, "carbs": 0.0, "analysis": "...", "verdict": "..."}'
-        )
+        tmpl = PromptTemplate.query.filter_by(name='meal_photo', is_active=True) \
+            .order_by(PromptTemplate.version.desc()).first()
+
+        system_prompt = (tmpl.body if tmpl else
+                         "Ты — профессиональный диетолог. Проанализируй фото еды. Определи:"
+                         "\n- Каллорий должен быть максимально реалистичным, ..., 500. А числа в которые хочется верить что то вроде 370, 420.."
+                         "\n- Название блюда (в поле 'name')."
+                         "\n- Калорийность, Белки, Жиры, Углеводы (в полях 'calories', 'protein', 'fat', 'carbs')."
+                         "\n- Дай подробный текстовый анализ блюда (в поле 'analysis')."
+                         "\n- Сделай краткий вывод: насколько блюдо полезно или вредно для диеты (в поле 'verdict')."
+                         '\nВерни JSON СТРОГО в формате: {"name": "...", "cal... "fat": 0.0, "carbs": 0.0, "analysis": "...", "verdict": "..."}'
+                         )
 
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -3564,6 +3620,445 @@ def patch_tg_settings():
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
+# ===== ADMIN: AI Очередь (модерация MealLog) =====
+
+@app.route("/admin/ai")
+@admin_required
+def admin_ai_queue():
+    q = MealLog.query.order_by(MealLog.created_at.desc()).limit(200).all()
+    return render_template("admin_ai_queue.html", logs=q)
+
+@app.route("/admin/ai/<int:meal_id>/flag", methods=["POST"])
+@admin_required
+def admin_ai_flag(meal_id):
+    m = db.session.get(MealLog, meal_id)
+    if not m: abort(404)
+    old = {"is_flagged": m.is_flagged}
+    m.is_flagged = True
+    db.session.commit()
+    log_audit("ai_flag", "MealLog", meal_id, old=old, new={"is_flagged": True})
+    flash("Помечено как требующее внимания", "success")
+    return redirect(url_for("admin_ai_queue"))
+
+@app.route("/admin/ai/<int:meal_id>/unflag", methods=["POST"])
+@admin_required
+def admin_ai_unflag(meal_id):
+    m = db.session.get(MealLog, meal_id)
+    if not m: abort(404)
+    old = {"is_flagged": m.is_flagged}
+    m.is_flagged = False
+    db.session.commit()
+    log_audit("ai_unflag", "MealLog", meal_id, old=old, new={"is_flagged": False})
+    flash("Снята пометка", "success")
+    return redirect(url_for("admin_ai_queue"))
+
+@app.route("/admin/ai/<int:meal_id>/edit", methods=["POST"])
+@admin_required
+def admin_ai_edit(meal_id):
+    m = db.session.get(MealLog, meal_id)
+    if not m: abort(404)
+    old = {"name": m.name, "verdict": m.verdict, "analysis": m.analysis,
+           "calories": m.calories, "protein": m.protein, "fat": m.fat, "carbs": m.carbs}
+    m.name = request.form.get("name", m.name)
+    m.verdict = request.form.get("verdict", m.verdict)
+    m.analysis = request.form.get("analysis", m.analysis)
+    m.calories = int(request.form.get("calories", m.calories) or m.calories)
+    m.protein = float(request.form.get("protein", m.protein) or m.protein)
+    m.fat = float(request.form.get("fat", m.fat) or m.fat)
+    m.carbs = float(request.form.get("carbs", m.carbs) or m.carbs)
+    db.session.commit()
+    log_audit("ai_edit", "MealLog", meal_id, old=old,
+              new={"name": m.name, "verdict": m.verdict, "analysis": m.analysis,
+                   "calories": m.calories, "protein": m.protein, "fat": m.fat, "carbs": m.carbs})
+    flash("Сохранено", "success")
+    return redirect(url_for("admin_ai_queue"))
+
+@app.route("/admin/ai/<int:meal_id>/reanalyse", methods=["POST"])
+@admin_required
+def admin_ai_reanalyse(meal_id):
+    """Перегенерировать анализ по загруженной здесь фотке (админом)."""
+    m = db.session.get(MealLog, meal_id)
+    if not m: abort(404)
+
+    file = request.files.get('file')
+    if not file:
+        flash("Загрузите изображение для перегенерации", "error")
+        return redirect(url_for("admin_ai_queue"))
+
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+
+    try:
+        with open(filepath, 'rb') as f:
+            b64 = base64.b64encode(f.read()).decode('utf-8')
+
+        tmpl = PromptTemplate.query.filter_by(name='meal_photo', is_active=True) \
+            .order_by(PromptTemplate.version.desc()).first()
+        system_prompt = (tmpl.body if tmpl else
+            "Ты — профессиональный диетолог. Проанализируй фото еды. Определи: ...")
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                    {"type": "text", "text": "Проанализируй блюдо на фото."}
+                ]}
+            ],
+            max_tokens=500,
+        )
+
+        # парсинг ответа (как в твоём коде)
+        content = response.choices[0].message.content
+        data = json.loads(content)
+        old = {"name": m.name, "verdict": m.verdict, "analysis": m.analysis,
+               "calories": m.calories, "protein": m.protein, "fat": m.fat, "carbs": m.carbs}
+
+        m.name = data.get("name") or m.name
+        m.verdict = data.get("verdict") or m.verdict
+        m.analysis = data.get("analysis") or m.analysis
+        m.calories = int(float(data.get("calories", m.calories)))
+        m.protein = float(data.get("protein", m.protein))
+        m.fat = float(data.get("fat", m.fat))
+        m.carbs = float(data.get("carbs", m.carbs))
+        m.image_path = filepath
+        db.session.commit()
+
+        log_audit("ai_reanalyse", "MealLog", meal_id, old=old,
+                  new={"name": m.name, "verdict": m.verdict, "analysis": m.analysis,
+                       "calories": m.calories, "protein": m.protein, "fat": m.fat, "carbs": m.carbs,
+                       "image_path": filepath})
+        flash("Перегенерировано", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Ошибка перегенерации: {e}", "error")
+
+    return redirect(url_for("admin_ai_queue"))
+
+
+# ===== ADMIN: Планировщик (APScheduler) =====
+
+@app.route("/admin/jobs")
+@admin_required
+def admin_jobs():
+    sched = get_scheduler()
+    jobs = []
+    if sched:
+        for j in sched.get_jobs():
+            jobs.append({
+                "id": j.id,
+                "next_run_time": j.next_run_time.isoformat() if j.next_run_time else None,
+                "paused": getattr(j, "paused", False)
+            })
+    return render_template("admin_jobs.html", jobs=jobs)
+
+@app.route("/admin/jobs/<job_id>/pause", methods=["POST"])
+@admin_required
+def admin_jobs_pause(job_id):
+    pause_job(job_id)
+    log_audit("job_pause", "Job", job_id)
+    flash("Задача приостановлена", "success")
+    return redirect(url_for("admin_jobs"))
+
+@app.route("/admin/jobs/<job_id>/resume", methods=["POST"])
+@admin_required
+def admin_jobs_resume(job_id):
+    resume_job(job_id)
+    log_audit("job_resume", "Job", job_id)
+    flash("Задача возобновлена", "success")
+    return redirect(url_for("admin_jobs"))
+
+@app.route("/admin/jobs/run_tick_now", methods=["POST"])
+@admin_required
+def admin_jobs_run_tick_now():
+    run_tick_now(app)
+    log_audit("job_run", "MealReminders", "tick_now")
+    flash("Тик запущен", "success")
+    return redirect(url_for("admin_jobs"))
+
+
+# ===== ADMIN: Промпты =====
+
+@app.route("/admin/prompts", methods=["GET", "POST"])
+@admin_required
+def admin_prompts():
+    if request.method == "POST":
+        name = request.form["name"].strip()
+        version = int(request.form["version"])
+        body = request.form["body"]
+        p = PromptTemplate(name=name, version=version, body=body, is_active=False)
+        db.session.add(p)
+        db.session.commit()
+        log_audit("prompt_create", "PromptTemplate", p.id, new={"name": name, "version": version})
+        flash("Шаблон сохранён", "success")
+        return redirect(url_for("admin_prompts"))
+
+    prompts = PromptTemplate.query.order_by(PromptTemplate.name, PromptTemplate.version.desc()).all()
+    return render_template("admin_prompts.html", prompts=prompts)
+
+@app.route("/admin/prompts/<int:pid>/activate", methods=["POST"])
+@admin_required
+def admin_prompts_activate(pid):
+    p = db.session.get(PromptTemplate, pid)
+    if not p: abort(404)
+    # деактивируем остальные с тем же name
+    db.session.query(PromptTemplate).filter(
+        PromptTemplate.name == p.name,
+        PromptTemplate.id != p.id
+    ).update({"is_active": False})
+    p.is_active = True
+    db.session.commit()
+    log_audit("prompt_activate", "PromptTemplate", pid, new={"name": p.name, "version": p.version})
+    flash("Активирован", "success")
+    return redirect(url_for("admin_prompts"))
+
+
+# ===== ADMIN: Рассылки в Telegram =====
+
+@app.route("/admin/broadcast", methods=["GET", "POST"])
+@admin_required
+def admin_broadcast():
+    if request.method == "POST":
+        text = request.form["text"].strip()
+        only_active = bool(request.form.get("only_active"))
+        q = db.session.query(User.telegram_chat_id, User.id).filter(User.telegram_chat_id.isnot(None))
+        if only_active:
+            q = q.join(Subscription, Subscription.user_id == User.id).filter(Subscription.status == 'active')
+        rows = q.all()
+        sent = 0
+        for chat_id, uid in rows:
+            try:
+                requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={"chat_id": chat_id, "text": text},
+                    timeout=10
+                )
+                sent += 1
+            except Exception:
+                pass
+        log_audit("broadcast_send", "Telegram", "bulk", new={"text": text, "only_active": only_active, "sent": sent})
+        flash(f"Отправлено: {sent}", "success")
+        return redirect(url_for("admin_broadcast"))
+    return render_template("admin_broadcast.html")
+
+
+
+@app.get("/admin/impersonate/<int:user_id>")
+@admin_required
+def admin_impersonate_user(user_id):
+    target = db.session.get(User, user_id) or abort(404)
+    admin_id = session.get("user_id")
+    # сохраняем, чтобы можно было вернуться
+    session["impersonator_id"] = admin_id
+    session["user_id"] = target.id
+    flash(f"Вы вошли как {target.name} (ID {target.id}).", "success")
+    try:
+        log_audit("impersonate_start", "User", target.id, old={"admin": admin_id})
+    except Exception:
+        pass
+    return redirect(url_for("profile"))
+
+
+@app.get("/admin/impersonate/stop")
+def admin_stop_impersonation():
+    impersonator = session.pop("impersonator_id", None)
+    if impersonator:
+        session["user_id"] = impersonator
+        flash("Возвращён доступ администратора.", "success")
+        try:
+            log_audit("impersonate_stop", "User", impersonator)
+        except Exception:
+            pass
+    else:
+        flash("Режим имперсонации не активен.", "error")
+    # возвращаемся в админку, если есть user_id, иначе на дашборд
+    return redirect(url_for("admin_dashboard"))
+
+@app.post("/admin/users/<int:user_id>/telegram/test")
+@admin_required
+def admin_user_send_test_tg(user_id):
+    user = db.session.get(User, user_id) or abort(404)
+    if not user.telegram_chat_id:
+        flash("Telegram не привязан у пользователя.", "error")
+        return redirect(url_for("admin_user_detail", user_id=user.id))
+
+    text = (request.form.get("text") or f"Привет, {user.name}! Это тестовое сообщение 💬").strip()
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not token:
+        flash("TELEGRAM_BOT_TOKEN не задан в окружении.", "error")
+        return redirect(url_for("admin_user_detail", user_id=user.id))
+
+    try:
+        r = requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": user.telegram_chat_id, "text": text},
+            timeout=10
+        )
+        r.raise_for_status()
+        flash("Тестовое сообщение отправлено.", "success")
+        try:
+            log_audit("telegram_test_sent", "User", user.id, new={"text_len": len(text)})
+        except Exception:
+            pass
+    except Exception as e:
+        flash(f"Ошибка отправки: {e}", "error")
+
+    return redirect(url_for("admin_user_detail", user_id=user.id))
+
+
+@app.post("/admin/users/<int:user_id>/telegram/unlink")
+@admin_required
+def admin_user_unlink_telegram(user_id):
+    user = db.session.get(User, user_id) or abort(404)
+    old = {"telegram_chat_id": user.telegram_chat_id}
+    user.telegram_chat_id = None
+    db.session.commit()
+    flash("Telegram отвязан.", "success")
+    try:
+        log_audit("telegram_unlink", "User", user.id, old=old, new={"telegram_chat_id": None})
+    except Exception:
+        pass
+    return redirect(url_for("admin_user_detail", user_id=user.id))
+
+
+
+@app.route("/admin/user/<int:user_id>/reset_telegram", methods=["GET","POST"], endpoint="admin_reset_telegram")
+@admin_required
+def admin_reset_telegram(user_id):
+    user = db.session.get(User, user_id) or abort(404)
+    old = {
+        "telegram_chat_id": getattr(user, "telegram_chat_id", None),
+        "telegram_code": getattr(user, "telegram_code", None),
+    }
+    user.telegram_chat_id = None
+    user.telegram_code = None
+    if hasattr(user, "renewal_telegram_sent"):
+        user.renewal_telegram_sent = False
+    db.session.commit()
+    try:
+        log_audit("reset_telegram", "User", user.id, old=old, new={"telegram_chat_id": None, "telegram_code": None})
+    except Exception:
+        pass
+    flash("Связка с Telegram сброшена.", "success")
+    return redirect(url_for("admin_user_detail", user_id=user.id))
+
+
+# генерация/отправка магической ссылки из админки
+@app.route("/admin/user/<int:user_id>/send_magic_link", methods=["GET","POST"], endpoint="admin_send_magic_link")
+@admin_required
+def admin_send_magic_link(user_id):
+    user = db.session.get(User, user_id) or abort(404)
+    s = _magic_serializer()
+    token = s.dumps(str(user.id))
+
+    base = os.getenv("APP_BASE_URL", "").rstrip("/")
+    magic_url = (
+        f"{base}{url_for('magic_login', token=token)}"
+        if base else url_for("magic_login", token=token, _external=True)
+    )
+
+    sent = False
+    if getattr(user, "telegram_chat_id", None):
+        sent = _send_telegram(user.telegram_chat_id, f"🔑 Вход без пароля: {magic_url}")
+
+    try:
+        log_audit("magic_link", "User", user.id, new={"sent_to_telegram": bool(sent)})
+    except Exception:
+        pass
+
+    msg = "Ссылка сгенерирована. " + ("Отправлена в Telegram. " if sent else "")
+    flash(f"{msg}Скопируйте при необходимости: {magic_url}", "success")
+    return redirect(url_for("admin_user_detail", user_id=user.id))
+
+@app.route("/admin/users/<int:user_id>/export", methods=["GET","POST"], endpoint="admin_user_export")
+@admin_required
+def admin_user_export(user_id):
+    user = db.session.get(User, user_id) or abort(404)
+    fmt = (request.form.get("format") or request.args.get("format") or "json").lower()
+
+    meals = MealLog.query.filter_by(user_id=user.id).order_by(MealLog.date.desc()).all()
+    acts  = Activity.query.filter_by(user_id=user.id).order_by(Activity.date.desc()).all()
+    diets = Diet.query.filter_by(user_id=user.id).order_by(Diet.date.desc()).all()
+    bodies = BodyAnalysis.query.filter_by(user_id=user.id).order_by(BodyAnalysis.timestamp.desc()).all()
+
+    if fmt == "csv":
+        import io, csv
+        sio = io.StringIO()
+        w = csv.writer(sio)
+        w.writerow(["date","meal_type","name","calories","protein","fat","carbs","verdict","analysis"])
+        for m in meals:
+            w.writerow([
+                m.date.isoformat() if getattr(m, "date", None) else "",
+                m.meal_type, m.name or "",
+                m.calories, m.protein, m.fat, m.carbs,
+                m.verdict or "", (m.analysis or "").replace("\n", " ")
+            ])
+        resp = make_response(sio.getvalue())
+        resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+        resp.headers["Content-Disposition"] = f'attachment; filename="user_{user.id}_meals.csv"'
+        try: log_audit("export_csv", "User", user.id, new={"rows": len(meals)})
+        except Exception: pass
+        return resp
+
+    import json as _json
+    data = {
+        "user": {
+            "id": user.id, "name": user.name, "email": user.email,
+            "date_of_birth": user.date_of_birth.isoformat() if user.date_of_birth else None,
+            "telegram_chat_id": getattr(user, "telegram_chat_id", None)
+        },
+        "meals": [{
+            "id": m.id, "date": m.date.isoformat() if m.date else None,
+            "meal_type": m.meal_type, "name": m.name,
+            "calories": m.calories, "protein": m.protein, "fat": m.fat, "carbs": m.carbs,
+            "verdict": m.verdict, "analysis": m.analysis,
+            "image_path": getattr(m, "image_path", None)
+        } for m in meals],
+        "activities": [{
+            "id": a.id, "date": a.date.isoformat() if a.date else None,
+            "steps": a.steps, "active_kcal": a.active_kcal,
+            "resting_kcal": getattr(a, "resting_kcal", None),
+            "distance_km": getattr(a, "distance_km", None)
+        } for a in acts],
+        "diets": [{
+            "id": d.id, "date": d.date.isoformat() if d.date else None,
+            "total_kcal": d.total_kcal, "protein": d.protein, "fat": d.fat, "carbs": d.carbs,
+            "breakfast": json.loads(d.breakfast or "[]"),
+            "lunch": json.loads(d.lunch or "[]"),
+            "dinner": json.loads(d.dinner or "[]"),
+            "snack": json.loads(d.snack or "[]"),
+        } for d in diets],
+        "body_analyses": [{
+            "id": b.id,
+            "timestamp": b.timestamp.isoformat() if b.timestamp else None,
+            "height": getattr(b, "height", None),
+            "weight": getattr(b, "weight", None),
+            "muscle_mass": getattr(b, "muscle_mass", None),
+            "fat_mass": getattr(b, "fat_mass", None),
+            "bmi": getattr(b, "bmi", None),
+            "metabolism": getattr(b, "metabolism", None)
+        } for b in bodies]
+    }
+    resp = make_response(_json.dumps(data, ensure_ascii=False, default=str))
+    resp.headers["Content-Type"] = "application/json; charset=utf-8"
+    resp.headers["Content-Disposition"] = f'attachment; filename="user_{user.id}.json"'
+    try:
+        log_audit("export_json", "User", user.id,
+                  new={"meals": len(meals), "activities": len(acts), "diets": len(diets), "body_analyses": len(bodies)})
+    except Exception:
+        pass
+    return resp
+
+
+# ===== ADMIN: Аудит =====
+
+@app.route("/admin/audit")
+@admin_required
+def admin_audit():
+    logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(200).all()
+    return render_template("admin_audit.html", logs=logs)
 
 # регистрация блюпринта (добавь после определения маршрутов)
 app.register_blueprint(bp)
