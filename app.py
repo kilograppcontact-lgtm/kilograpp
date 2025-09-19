@@ -20,6 +20,7 @@ from flask_login import current_user
 import json, os
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from flask import make_response
+from sqlalchemy import inspect
 
 load_dotenv()
 
@@ -336,7 +337,6 @@ def _ensure_column(table: str, column: str, ddl: str):
             con.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {ddl}'))
         print(f"[auto-migrate] added {table}.{column}")
 
-from sqlalchemy import inspect
 
 def _auto_migrate_diet_schema():
     insp = inspect(db.engine)
@@ -701,16 +701,28 @@ def instructions_page():
     section = request.args.get('section')
     return render_template('instructions.html', scroll_to=section)
 
+# Убедись, что у тебя есть:
+# from sqlalchemy import func
+# from flask import url_for
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        user = User.query.filter_by(email=email).first()
+        email_input = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+
+        # Нормализуем email на стороне Python (работает и с не-ASCII)
+        email_norm = email_input.casefold()
+
+        # Ищем пользователя по email без учета регистра
+        user = User.query.filter(func.lower(User.email) == email_norm).first()
+
         if user and bcrypt.check_password_hash(user.password, password):
             session['user_id'] = user.id
-            return redirect('/profile')
+            return redirect(url_for('profile'))
+
         return render_template('login.html', error="Неверный логин или пароль")
+
     return render_template('login.html')
 
 
