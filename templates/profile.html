@@ -25,7 +25,6 @@
 </div>
 
 <style>
-<style>
   /* Эффект «как в примере» + сохраняем is-flipped */
   .flip-card{ perspective:1200px; transition:transform .4s ease; }
   .flip-card:hover{ transform:scale(1.03); }
@@ -451,60 +450,47 @@ lockScroll(false);
     transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
   }
 
-  .flip-card {
+.flip-card{
   background-color: transparent;
   width: 100%;
-  height: 280px; /* Задайте фиксированную высоту */
+  /* responsive высота: от компактной до «карточной», с учётом экрана */
+  height: clamp(220px, 42dvh, 360px);
   perspective: 1000px;
 }
-.flip-card-inner {
+@media (max-width: 480px){
+  .flip-card{ height: clamp(200px, 50dvh, 340px); }
+}
+.flip-card-inner{
   position: relative;
   width: 100%;
   height: 100%;
   text-align: center;
-  transition: transform 0.6s;
+  transition: transform .6s;
   transform-style: preserve-3d;
 }
-/* Класс для активации флипа */
-.flip-card.is-flipped .flip-card-inner {
-  transform: rotateY(180deg);
+.flip-card.is-flipped .flip-card-inner{ transform: rotateY(180deg); }
+
+.flip-card-front, .flip-card-back{
+  position:absolute; inset:0;
+  -webkit-backface-visibility:hidden; backface-visibility:hidden;
+  display:flex; flex-direction:column;
+  border-radius:1rem; border:1px solid var(--border-soft);
+  overflow:hidden;
 }
-.flip-card-front, .flip-card-back {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  display: flex;
-  flex-direction: column;
-  border-radius: 1rem; /* 16px */
-  border: 1px solid var(--border-soft);
-  overflow: hidden;
+.flip-card-front{ background-color: var(--surface-card); }
+.flip-card-back{
+  background-color:#f3f4f6; color:var(--text-primary);
+  transform:rotateY(180deg);
+  /* адаптивные внутренние отступы */
+  padding: clamp(1rem, 2.2vw, 1.5rem);
+  justify-content:flex-start; overflow-y:auto;
 }
-.flip-card-front {
-  background-color: var(--surface-card);
-}
-.flip-card-back {
-  background-color: #f3f4f6; /* gray-100 */
-  color: var(--text-primary);
-  transform: rotateY(180deg);
-  padding: 1.5rem;
-  justify-content: flex-start; /* 1. Прижимаем контент к верху */
-  overflow-y: auto;          /* 2. Добавляем вертикальную прокрутку */
+.flip-card-back::-webkit-scrollbar{ width:6px; }
+.flip-card-back::-webkit-scrollbar-track{ background:transparent; }
+.flip-card-back::-webkit-scrollbar-thumb{
+  background-color:rgba(0,0,0,.2); border-radius:10px; border:3px solid transparent;
 }
 
-/* 3. (Опционально) Делаем скроллбар красивее */
-.flip-card-back::-webkit-scrollbar {
-  width: 6px;
-}
-.flip-card-back::-webkit-scrollbar-track {
-  background: transparent;
-}
-.flip-card-back::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.2);
-  border-radius: 10px;
-  border: 3px solid transparent;
-}
 
     /* ==== Telegram attention ==== */
 .tg-attn-btn{ position:relative; }
@@ -561,6 +547,88 @@ lockScroll(false);
 }
 
 </style>
+<style>
+/* Ограничения + стабильный скролл + safe-area + dvh */
+#tour-box{
+  /* ширина «упругая», но не шире 420 и не уже 280 */
+  max-width: min(420px, 92vw);
+  width: auto;
+  /* высота с учётом динамической высоты вьюпорта (iOS/url-бар/клава) */
+  max-height: min(70dvh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+  overflow-wrap: anywhere;
+  padding:
+    calc(16px + env(safe-area-inset-top, 0))
+    clamp(12px, 2vw, 16px)
+    calc(16px + env(safe-area-inset-bottom, 0));
+  border-radius: 16px;
+  /* адаптивный кегль, но без скачков */
+  font-size: clamp(14px, 1.2vw + 12px, 16px);
+}
+/* Подсветку не даём «прилепляться» к самому краю экрана */
+#tour-highlight{
+  box-shadow: 0 0 0 8px rgba(99,102,241,.2);
+  border-radius: 14px;
+}
+
+@media (max-width: 640px){
+  #tour-box{
+    max-width: calc(100vw - 20px);
+    max-height: min(72dvh, 440px);
+    border-radius: 14px;
+    padding:
+      calc(14px + env(safe-area-inset-top, 0))
+      clamp(10px, 3vw, 14px)
+      calc(14px + env(safe-area-inset-bottom, 0));
+  }
+}
+/* «низкие» экраны — чуть компактнее текста */
+@media (max-height: 560px){
+  #tour-box{ font-size: clamp(13px, 1vw + 11px, 15px); }
+}
+
+</style>
+<style>
+/* контейнер без фона и фильтров */
+#tour-dim{
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* четыре полосы вокруг выделенной области */
+#tour-dim .dim{
+  position: absolute;
+  background: rgba(0,0,0,.60);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+/* стартовые значения — всё спрятано (JS расставит размеры) */
+#tour-dim .dim-top    { top:0; left:0; width:100vw; height:0; }
+#tour-dim .dim-right  { top:0; left:100vw; width:0; height:0; }
+#tour-dim .dim-bottom { top:100vh; left:0; width:100vw; height:0; }
+#tour-dim .dim-left   { top:0; left:0; width:0; height:0; }
+
+/* фиолетовая рамка остаётся как у тебя */
+#tour-highlight{
+  border: 2px solid #6366f1;
+  border-radius: 14px;
+  box-shadow: 0 0 0 8px rgba(99,102,241,.2);
+  pointer-events: none;
+}
+
+  /* Фиолетовая рамка как и была (важно, чтобы радиус совпадал с --hole-r) */
+  #tour-highlight{
+    border: 2px solid #6366f1;
+    border-radius: 14px;
+    box-shadow: 0 0 0 8px rgba(99,102,241,.2);
+    pointer-events: none;
+  }
+</style>
+
 <div class="max-w-7xl mx-auto px-4 py-6">
 
 <div id="infoBanner" class="relative bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl p-6 mb-6 shadow-lg">
@@ -585,22 +653,26 @@ lockScroll(false);
 </button>
 </div>
     <div class="flex flex-wrap gap-2 border-b mb-6 overflow-x-auto scrollbar-hide px-1">
-    <a href="/profile"
-       class="px-4 py-2 font-medium {% if request.path == '/profile' %}border-b-2 border-blue-500 text-blue-600{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+    <a href="/profile" id="tab-profile-btn"
+       class="px-4 py-2 font-medium {{ 'text-blue-600' if request.path == '/profile' else 'text-gray-500 hover:text-gray-700' }}">
       Профиль
     </a>
-    <a href="/metrics"
-       class="px-4 py-2 font-medium {% if request.path == '/metrics' %}border-b-2 border-blue-500 text-blue-600{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+
+  <a href="/metrics" id="tab-metrics-btn"
+       class="px-4 py-2 font-medium {{ 'text-blue-600' if request.path == '/metrics' else 'text-gray-500 hover:text-gray-700' }}">
       Показатели
     </a>
-    <a href="/activity"
-       class="px-4 py-2 font-medium {% if request.path == '/activity' %}border-b-2 border-blue-500 text-blue-600{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+
+<a href="/activity" id="tab-activity-btn"
+       class="px-4 py-2 font-medium {{ 'text-blue-600' if request.path == '/activity' else 'text-gray-500 hover:text-gray-700' }}">
       Активность
     </a>
-    <a href="/meals"
-       class="px-4 py-2 font-medium {% if request.path == '/meals' %}border-b-2 border-blue-500 text-blue-600{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+
+<a href="/meals" id="tab-diet-btn"
+       class="px-4 py-2 font-medium {{ 'text-blue-600' if request.path == '/meals' else 'text-gray-500 hover:text-gray-700' }}">
       Приёмы пищи
     </a>
+
   </div>
 
 {% if request.path == '/profile' %}
@@ -608,7 +680,7 @@ lockScroll(false);
 
 <div class="lg:col-span-1 space-y-6">
 
-<div class="card p-6">
+<div id="body-measure-card" class="card p-6">
         <div class="relative text-center">
 <div class="absolute top-0 right-0 z-10">
   <button
@@ -1077,7 +1149,7 @@ lockScroll(false);
   </div>
 
    {% elif request.path == '/metrics' %}
-  <div class="space-y-6 animate-fade-in">
+<div id="tab-metrics-panel" class="space-y-6 animate-fade-in">
     <div class="card p-6">
       <h2 class="text-xl font-bold mb-4">Баланс калорий за сегодня</h2>
       {% if missing_meals or missing_activity %}
@@ -1129,7 +1201,7 @@ lockScroll(false);
   </div>
 
   {% elif request.path == '/activity' %}
-  <div class="card p-6 animate-fade-in">
+<div id="tab-activity-panel" class="card p-6 animate-fade-in">
     <h2 class="text-xl font-bold mb-6">Детальная активность</h2>
     {% if today_activity %}
       <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -1168,7 +1240,7 @@ lockScroll(false);
   </div>
 
 {% elif request.path == '/meals' %}
-<div class="space-y-8 animate-fade-in">
+<div id="tab-diet-panel" class="space-y-8 animate-fade-in">
 
     <div>
         <h2 class="text-2xl font-bold text-slate-800 mb-4">Сводка за сегодня</h2>
@@ -2221,13 +2293,360 @@ function closeModal(id) {
         card.setAttribute('aria-pressed','true');
 
         // перезапуск анимации (пересоздаём classflow)
-        card.classList.remove('selected');
-        // короткий reflow
-        void card.offsetWidth;
-        card.classList.add('selected');
+                card.classList.add('selected');
       });
     });
   });
 </script>
+<!-- Onboarding Tour (vanilla JS, robust) -->
+<div id="tour-dim" style="display:none">
+  <div class="dim dim-top"></div>
+  <div class="dim dim-right"></div>
+  <div class="dim dim-bottom"></div>
+  <div class="dim dim-left"></div>
+</div>
+<div id="tour-box" style="display:none; position:absolute; z-index:10000; background:#fff; border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.2); padding:16px; max-width:320px;"></div>
+<div id="tour-highlight" style="display:none; position:absolute; z-index:9999; border:2px solid #6366f1; border-radius:14px; box-shadow:0 0 0 8px rgba(99,102,241,.2); pointer-events:none;"></div>
 
+<script>
+(function(){
+  try{
+    const uid = "{{ user.id if user else 'anon' }}";
+    const DONE = `dietaai_onboarding_done_${uid}`;
+    const ACTIVE = `dietaai_onboarding_active_${uid}`;
+    const STEP = `dietaai_onboarding_step_${uid}`;
+
+    // НЕ завися от Jinja: реальный путь из браузера
+    const path = window.location.pathname;
+
+    // Серверный флаг можно оставить, но если его нет — будет 'false'
+    const serverFirst = {{ 'true' if (first_login|default(false)) else 'false' }};
+
+    const urlParams = new URLSearchParams(location.search);
+    const force = urlParams.get('tour') === '1';
+    const debug = urlParams.get('debug') === '1';
+
+    const shouldStart = force || serverFirst || (!localStorage.getItem(DONE));
+
+    const steps = [
+      {id:'welcome',  title:'Добро пожаловать! 👋', body:'За <b>30 секунд</b> покажу основные разделы. Нажмите «Покажи мне».', route:'/profile',  target:null,                    placement:'center'},
+      {id:'measure',  title:'Замер тела',           body:'В этом блоке вы можете загрузить изображение замера тела — оно автоматически появится в профиле.', route:'/profile',  target:'#body-measure-card',  placement:'right'},
+      {id:'diet',     title:'«Приёмы пищи»',        body:'Загружайте фото или вводите состав — я посчитаю ккал и БЖУ и дам краткий вывод.',               route:'/meals',    target:'#tab-diet-panel',     placement:'top'},
+      {id:'activity', title:'«Активность»',         body:'Добавляйте шаги и тренировки — графики и прогресс обновляются автоматически.',                 route:'/activity', target:'#tab-activity-panel', placement:'top'},
+      {id:'metrics',  title:'«Показатели тела»',    body:'Сравнивайте текущие и прошлые замеры. Здесь графики динамики.',                                route:'/metrics',  target:'#tab-metrics-panel',  placement:'top'}
+    ];
+
+    const dim = document.getElementById('tour-dim');
+    const box = document.getElementById('tour-box');
+    const hl  = document.getElementById('tour-highlight');
+
+    let i = 0;
+
+    function log(...a){ if(debug) console.log('[TOUR]', ...a); }
+
+    function start(fromIdx){
+      i = isNaN(fromIdx) ? 0 : fromIdx;
+      localStorage.setItem(ACTIVE,'1');
+      show();
+      log('start', {i, path});
+      // маленький бейдж для уверенности, что скрипт жив
+      if(force && !document.getElementById('tour-badge')){
+        const b = document.createElement('div');
+        b.id='tour-badge';
+        b.textContent='Тур активен';
+        Object.assign(b.style,{position:'fixed',top:'10px',right:'10px',padding:'6px 10px',background:'#22c55e',color:'#fff',borderRadius:'12px',zIndex:10001,fontSize:'12px'});
+        document.body.appendChild(b);
+        setTimeout(()=>b.remove(),3000);
+      }
+    }
+    function end(){
+      hideAll();
+      localStorage.setItem(DONE,'1');
+      localStorage.removeItem(ACTIVE);
+      localStorage.removeItem(STEP);
+      log('end');
+    }
+    function next(){
+      if(i < steps.length - 1){ i++; go(); }
+      else { end(); }
+    }
+    function prev(){
+      if(i > 0){ i--; go(); }
+    }
+    function show(){ go(); }
+
+    function go(){
+      const s = steps[i];
+      log('go step', i, s.id, 'current path:', path);
+      if(path !== s.route){
+        localStorage.setItem(STEP, String(i));
+        const q = force ? (location.search.includes('tour=1') ? location.search : '?tour=1') : '';
+        location.href = s.route + q;
+        return;
+      }
+      dim.style.display='block';
+      box.style.display='block';
+      position(s);
+      renderBox(s);
+    }
+
+    function renderBox(s){
+      const isFirst = i===0, isLast = i===steps.length-1;
+      box.innerHTML = `
+        <div style="font-weight:600; font-size:16px; margin-bottom:6px;">${s.title}</div>
+        <div style="color:#475569; font-size:14px; margin-bottom:10px;">${s.body}</div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          ${i>0?'<button id="tour-prev" style="padding:8px 10px; font-size:12px; border-radius:12px; background:#f1f5f9; border:1px solid #e2e8f0;">Назад</button>':''}
+          ${!isLast?'<button id="tour-skip" style="padding:8px 10px; font-size:12px; border-radius:12px; background:#f1f5f9; border:1px solid #e2e8f0;">Пропустить</button>':''}
+          <button id="tour-next" style="margin-left:auto; padding:8px 12px; font-size:12px; border-radius:12px; background:#4f46e5; color:#fff; border:1px solid #4338ca;">${isFirst?'Покажи мне':(isLast?'Готово':'Понял, дальше')}</button>
+        </div>
+        <div style="margin-top:6px; font-size:12px; color:#94a3b8;">Шаг ${i+1} из ${steps.length}</div>
+      `;
+      document.getElementById('tour-next').onclick=next;
+      const p=document.getElementById('tour-prev'); if(p) p.onclick=prev;
+      const sk=document.getElementById('tour-skip'); if(sk) sk.onclick=end;
+    }
+
+// --- Хелперы для позиционирования
+  const SAFE = 12; // минимальный внутренний отступ от краёв экрана
+
+  function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+  function measureBox(){
+    const rect = document.getElementById('tour-box').getBoundingClientRect();
+    return { w: rect.width || 320, h: rect.height || 180 };
+  }
+
+  function fits(pos, size, view){
+    const right  = pos.left + size.w;
+    const bottom = pos.top  + size.h;
+    return (
+      pos.left  >= view.left  + SAFE &&
+      pos.top   >= view.top   + SAFE &&
+      right     <= view.right - SAFE &&
+      bottom    <= view.bottom- SAFE
+    );
+  }
+
+  // вернёт кандидатов в порядке приоритета
+  function candidatePlacements(pref){
+    const all = ['right','left','top','bottom'];
+    const order = [pref, ...all.filter(x => x !== pref)];
+    // последним всегда пробуем «bottom-center внутри экрана»
+    order.push('screen-bottom-center');
+    return order;
+  }
+
+  // расчёт позиции для конкретного варианта
+  function computePosFor(placement, targetRect, boxSize, view){
+    const midX = targetRect.left + targetRect.width / 2;
+    const midY = targetRect.top  + targetRect.height / 2;
+
+    if(placement === 'right'){
+      return {
+        top:  clamp(targetRect.top + window.scrollY, view.top + SAFE, view.bottom - SAFE - boxSize.h),
+        left: clamp(targetRect.right + 16 + window.scrollX, view.left + SAFE, view.right - SAFE - boxSize.w)
+      };
+    }
+    if(placement === 'left'){
+      return {
+        top:  clamp(targetRect.top + window.scrollY, view.top + SAFE, view.bottom - SAFE - boxSize.h),
+        left: clamp(targetRect.left - boxSize.w - 16 + window.scrollX, view.left + SAFE, view.right - SAFE - boxSize.w)
+      };
+    }
+    if(placement === 'top'){
+      return {
+        top:  clamp(targetRect.top - boxSize.h - 16 + window.scrollY, view.top + SAFE, view.bottom - SAFE - boxSize.h),
+        left: clamp(midX - boxSize.w/2 + window.scrollX, view.left + SAFE, view.right - SAFE - boxSize.w)
+      };
+    }
+    if(placement === 'bottom'){
+      return {
+        top:  clamp(targetRect.bottom + 16 + window.scrollY, view.top + SAFE, view.bottom - SAFE - boxSize.h),
+        left: clamp(midX - boxSize.w/2 + window.scrollX, view.left + SAFE, view.right - SAFE - boxSize.w)
+      };
+    }
+    // Фоллбэк: поместить по центру снизу (внутри экрана)
+    return {
+      top:  view.bottom - SAFE - boxSize.h,
+      left: view.left + (view.width - boxSize.w) / 2
+    };
+  }
+
+function position(s){
+  const t   = s.target ? document.querySelector(s.target) : null;
+  const box = document.getElementById('tour-box');
+  const hl  = document.getElementById('tour-highlight');
+
+  // Актуальный «видимый» вьюпорт (с учётом клавы/URL-бара)
+  function getView(){
+    const vv = window.visualViewport;
+    if (vv) {
+      const top  = vv.pageTop  ?? window.scrollY;
+      const left = vv.pageLeft ?? window.scrollX;
+      const width  = vv.width;
+      const height = vv.height;
+      return {
+        top, left, width, height,
+        get right(){ return left + width; },
+        get bottom(){ return top + height; }
+      };
+    }
+    // фоллбэк
+    const top = window.scrollY, left = window.scrollX;
+    const width = window.innerWidth, height = window.innerHeight;
+    return {
+      top, left, width, height,
+      get right(){ return left + width; },
+      get bottom(){ return top + height; }
+    };
+  }
+
+  const view = getView();
+
+  // Если нет таргета — центр экрана
+  if(!t){
+    const size = measureBox();
+    box.style.display = 'block';
+    box.style.top  = (view.top + (view.height - size.h)/2) + 'px';
+    box.style.left = (view.left + (view.width  - size.w)/2) + 'px';
+    hl.style.display = 'none';
+    setDimHole(0, 0, 0, 0);
+    return;
+  }
+
+  t.scrollIntoView({ behavior:'smooth', block:'center', inline:'nearest' });
+
+  setTimeout(()=>{
+    const r = t.getBoundingClientRect();       // viewport-координаты цели
+    const v = getView();                        // возможен ресайз/схлоп баров
+
+    // Подсветка: внутри видимой области
+    const pad = 8;
+    const hlTop  = clamp(r.top  + v.top - pad,  v.top + SAFE, v.bottom - SAFE - 20);
+    const hlLeft = clamp(r.left + v.left - pad, v.left+ SAFE, v.right  - SAFE - 20);
+    const hlW = Math.min(r.width  + pad*2, v.width  - SAFE*2);
+    const hlH = Math.min(r.height + pad*2, v.height - SAFE*2);
+
+    hl.style.display = 'block';
+    hl.style.top = hlTop + 'px'; hl.style.left = hlLeft + 'px';
+    hl.style.width = hlW + 'px'; hl.style.height = hlH + 'px';
+
+    // «Дырка» — во вьюпортных координатах (visualViewport.width/height)
+    const vw = (window.visualViewport?.width)  || window.innerWidth;
+    const vh = (window.visualViewport?.height) || window.innerHeight;
+    const holeX = clamp(r.left - pad, 0, vw);
+    const holeY = clamp(r.top  - pad, 0, vh);
+    const holeW = Math.min(r.width  + pad*2, vw - holeX);
+    const holeH = Math.min(r.height + pad*2, vh - holeY);
+    setDimHole(holeX, holeY, holeW, holeH);
+
+    // Пытаемся расположить бокс вокруг цели
+    const boxSize  = measureBox();
+    const preferred= s.placement || 'bottom';
+    const variants = candidatePlacements(preferred);
+
+    let placed = false;
+    for (const p of variants){
+      const pos = computePosFor(p, r, boxSize, v);
+      const ok  = (p === 'screen-bottom-center') ? true : fits(pos, boxSize, v);
+      if (ok){
+        box.style.display = 'block';
+        box.style.top  = clamp(pos.top,  v.top  + SAFE, v.bottom - SAFE - boxSize.h) + 'px';
+        box.style.left = clamp(pos.left, v.left + SAFE, v.right  - SAFE - boxSize.w) + 'px';
+        placed = true;
+        break;
+      }
+    }
+    if (!placed){
+      const posTop  = v.top  + (v.height - boxSize.h)/2;
+      const posLeft = v.left + (v.width  - boxSize.w)/2;
+      box.style.top  = clamp(posTop,  v.top  + SAFE, v.bottom - SAFE - boxSize.h) + 'px';
+      box.style.left = clamp(posLeft, v.left + SAFE, v.right  - SAFE - boxSize.w) + 'px';
+    }
+  }, 350);
+}
+
+
+    function hideAll(){
+      dim.style.display='none';
+      box.style.display='none';
+      hl.style.display='none';
+    }
+
+let _raf = null;
+function scheduleReposition(){
+  if (_raf) return;
+  _raf = requestAnimationFrame(()=>{ _raf = null; position(steps[i]); });
+}
+
+window.addEventListener('resize',  ()=>{ if(box.style.display!=='none') scheduleReposition(); });
+window.addEventListener('scroll',  ()=>{ if(box.style.display!=='none') scheduleReposition(); }, { passive:true });
+window.addEventListener('orientationchange', ()=>{ if(box.style.display!=='none') scheduleReposition(); });
+
+if (window.visualViewport){
+  visualViewport.addEventListener('resize', ()=>{ if(box.style.display!=='none') scheduleReposition(); });
+  visualViewport.addEventListener('scroll', ()=>{ if(box.style.display!=='none') scheduleReposition(); }, { passive:true });
+}
+
+    // Старт после DOMContentLoaded, чтобы точно был документ
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const active = localStorage.getItem(ACTIVE)==='1';
+      const storedIdx = parseInt(localStorage.getItem(STEP)||'0',10);
+      if(shouldStart || active){
+        // чуть позже, чтобы контент вкладок успел дорендериться
+        setTimeout(()=> start(active ? storedIdx : 0), 500);
+      } else {
+        log('skip start: flags say not to start');
+      }
+    });
+
+  }catch(err){
+    console.error('[TOUR] Fatal error:', err);
+  }
+})();
+</script>
+
+<script>
+    // один раз создадим ссылки на сегменты
+const _dim = document.getElementById('tour-dim');
+const _dimEls = {
+  top:   _dim?.querySelector('.dim-top'),
+  right: _dim?.querySelector('.dim-right'),
+  bottom:_dim?.querySelector('.dim-bottom'),
+  left:  _dim?.querySelector('.dim-left'),
+};
+
+function setDimHole(x, y, w, h){
+  const vv = window.visualViewport;
+  const vw = vv?.width  ?? window.innerWidth;
+  const vh = vv?.height ?? window.innerHeight;
+
+  // верхняя полоса
+  Object.assign(_dimEls.top.style, {
+    top: '0px', left: '0px', width: '100vw', height: `${Math.max(0, y)}px`
+  });
+
+  // левая полоса
+  Object.assign(_dimEls.left.style, {
+    top: `${y}px`, left: '0px',
+    width: `${Math.max(0, x)}px`, height: `${h}px`
+  });
+
+  // правая полоса
+  const rx = Math.max(0, x + w);
+  Object.assign(_dimEls.right.style, {
+    top: `${y}px`, left: `${rx}px`,
+    width: `${Math.max(0, vw - rx)}px`, height: `${h}px`
+  });
+
+  // нижняя полоса
+  const by = Math.max(0, y + h);
+  Object.assign(_dimEls.bottom.style, {
+    top: `${by}px`, left: '0px',
+    width: '100vw', height: `${Math.max(0, vh - by)}px`
+  });
+}
+
+</script>
 {% endblock %}
