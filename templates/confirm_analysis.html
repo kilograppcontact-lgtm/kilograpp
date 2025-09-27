@@ -1,134 +1,306 @@
 {% extends 'base.html' %}
+{% block title %}Ваша трансформация{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+  /* --- Анимации для "магии" --- */
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+  .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+  .animate-fade-out { animation: fadeOut 0.5s ease-in forwards; }
+
+  /* "Вжух" эффект появления результата */
+  @keyframes whoosh-in {
+    0% { opacity: 0; transform: scale(0.9) translateY(30px); filter: blur(5px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+  }
+  .animate-whoosh-in { animation: whoosh-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+  /* Пульсация стрелки и показателей */
+  @keyframes pulse-glow {
+    0%, 100% { color: #4338ca; text-shadow: 0 0 8px rgba(99, 102, 241, 0.5); }
+    50% { color: #a5b4fc; text-shadow: 0 0 25px rgba(129, 140, 248, 1); }
+  }
+  .animate-pulse-glow { animation: pulse-glow 1.8s ease-in-out infinite; }
+
+  /* Пульсация карточки прелоадера */
+  @keyframes pulse-card {
+    0%, 100% { transform: scale(1); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15); }
+    50% { transform: scale(1.02); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+  }
+  .animate-pulse-card {
+      animation: pulse-card 2.5s ease-in-out infinite;
+  }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto py-8 px-4">
+<div id="page-container" class="max-w-4xl mx-auto py-12 px-4 transition-opacity duration-500">
 
-  <div class="bg-white rounded-2xl shadow-lg mb-8 p-6 border border-gray-200">
-    <h1 class="text-2xl md:text-3xl font-bold text-gray-800 mb-2 flex items-center gap-3">
-      <span class="text-3xl">📊</span>
-      <span>Подтверждение анализа тела</span>
-    </h1>
-    {% if error %}
-      <p class="text-gray-600">Мы не смогли извлечь все данные с изображения.</p>
-    {% else %}
-      <p class="text-gray-600">Проверьте распознанные показатели и цели перед сохранением.</p>
-    {% endif %}
-  </div>
-
-  {% if error %}
-    <div class="bg-yellow-50 border-l-4 border-yellow-500 rounded p-5 mb-8 text-yellow-800">
-      <h2 class="font-semibold mb-1">⚠️ Недостаточно данных</h2>
-      <p class="text-sm leading-relaxed">{{ error }}</p>
+  <div id="confirmation-container">
+    <div class="text-center mb-8">
+      <h1 class="text-3xl md:text-4xl font-bold text-gray-900">Ваш анализ готов!</h1>
+      <p class="mt-3 text-lg text-gray-600">Проверьте показатели и подтвердите ваши цели.</p>
     </div>
-    <div class="bg-white rounded-xl shadow p-6">
-      <a href="/profile" class="inline-block text-blue-600 hover:text-blue-700 hover:underline">
-        ← Вернуться в профиль
-      </a>
-    </div>
-
-  {% elif data %}
-    <form method="POST" action="/confirm_analysis" class="space-y-8">
-
-      {% set labels = {
-        "height": ("Рост", "см", "📏"),
-        "weight": ("Вес", "кг", "⚖️"),
-        "bmi": ("ИМТ", "", "📐"),
-        "fat_mass": ("Жировая масса", "кг", "🧈"),
-        "muscle_mass": ("Мышечная масса", "кг", "💪"),
-        "body_age": ("Возраст тела", "лет", "🧬"),
-        "metabolism": ("Базовый обмен", "ккал", "⚡")
-      } %}
-
-      <section class="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
-        <h3 class="text-xl font-semibold text-gray-800 mb-5">Ключевые показатели и цели</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          <div class="bg-gray-50/70 border rounded-lg p-4">
-            <div class="text-sm text-gray-500 mb-1">{{ labels.weight[2] }} {{ labels.weight[0] }}</div>
-            <div class="text-2xl font-bold text-gray-800">
-              {{ data.weight }} <span class="text-lg text-gray-500">{{ labels.weight[1] }}</span>
-            </div>
-          </div>
-
-          <div class="bg-gray-50/70 border rounded-lg p-4">
-            <label for="height" class="text-sm text-gray-500 mb-1 block">{{ labels.height[2] }} {{ labels.height[0] }}</label>
-            <input type="number" name="height" id="height" value="{{ data.height }}"
-                   class="w-full bg-white border-gray-300 text-2xl font-bold text-gray-800 rounded px-3 py-1 border shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          </div>
-
-          <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-            <div class="text-sm font-medium text-green-800 mb-2">{{ labels.muscle_mass[2] }} {{ labels.muscle_mass[0] }}</div>
-            <div class="flex items-end gap-4">
-              <div>
-                <div class="text-xs text-gray-500">Текущая</div>
-                <div class="text-2xl font-bold text-green-900">{{ data.muscle_mass }} <span class="text-lg">{{ labels.muscle_mass[1] }}</span></div>
-              </div>
-              <div class="text-2xl text-gray-400 pb-1">→</div>
-              <div class="flex-1">
-                <label for="muscle_mass_goal" class="text-xs text-gray-500">Цель</label>
-                <input type="number" step="0.1" name="muscle_mass_goal" id="muscle_mass_goal" value="{{ data.muscle_mass_goal }}"
-                       class="w-full bg-white border-gray-300 font-semibold text-gray-800 rounded px-2 py-1 border shadow-sm focus:outline-none focus:ring-1 focus:ring-green-500">
-              </div>
-            </div>
-            {% set muscle_diff = data.muscle_mass_goal - data.muscle_mass %}
-            {% if muscle_diff > 0 %}
-              <div class="text-xs text-green-700 mt-2 font-medium">Нужно набрать: {{ muscle_diff|round(1) }} кг</div>
-            {% endif %}
-          </div>
-
-          <div class="bg-orange-50 border border-orange-200 rounded-lg p-4">
-            <div class="text-sm font-medium text-orange-800 mb-2">{{ labels.fat_mass[2] }} {{ labels.fat_mass[0] }}</div>
-            <div class="flex items-end gap-4">
-              <div>
-                <div class="text-xs text-gray-500">Текущая</div>
-                <div class="text-2xl font-bold text-orange-900">{{ data.fat_mass }} <span class="text-lg">{{ labels.fat_mass[1] }}</span></div>
-              </div>
-              <div class="text-2xl text-gray-400 pb-1">→</div>
-              <div class="flex-1">
-                <label for="fat_mass_goal" class="text-xs text-gray-500">Цель</label>
-                <input type="number" step="0.1" name="fat_mass_goal" id="fat_mass_goal" value="{{ data.fat_mass_goal }}"
-                       class="w-full bg-white border-gray-300 font-semibold text-gray-800 rounded px-2 py-1 border shadow-sm focus:outline-none focus:ring-1 focus:ring-orange-500">
-              </div>
-            </div>
-            {% set fat_diff = data.fat_mass - data.fat_mass_goal %}
-            {% if fat_diff > 0 %}
-              <div class="text-xs text-orange-700 mt-2 font-medium">Нужно сбросить: {{ fat_diff|round(1) }} кг</div>
-            {% endif %}
-          </div>
-
+    <form id="analysisForm" method="POST" action="/confirm_analysis" class="bg-white rounded-2xl shadow-lg p-6 md:p-8 border border-gray-200/80 space-y-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div class="bg-gray-50 border rounded-xl p-4">
+          <div class="text-sm text-gray-500 mb-1 flex items-center gap-2">⚖️ Вес</div>
+          <div id="form-current-weight" class="text-3xl font-bold text-gray-800">{{ data.weight }} <span class="text-xl text-gray-500">кг</span></div>
         </div>
-      </section>
-
-      <section class="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
-          <h3 class="text-xl font-semibold text-gray-800 mb-4">Прочие показатели</h3>
-          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {% for key in ['bmi', 'body_age', 'metabolism'] %}
-              {% if data.get(key) is not none %}
-                  {% set label, unit, icon = labels[key] %}
-                  <div class="bg-gray-50/70 border rounded-lg p-4">
-                    <div class="text-sm text-gray-500">{{ icon }} {{ label }}</div>
-                    <div class="text-lg font-bold text-gray-800 mt-1">
-                      {{ data[key] }}{% if unit %} {{ unit }}{% endif %}
-                    </div>
-                  </div>
-              {% endif %}
-            {% endfor %}
+        <div class="bg-gray-50 border rounded-xl p-4">
+          <label for="height" class="text-sm text-gray-500 mb-1 block flex items-center gap-2">📏 Рост</label>
+          <input type="number" name="height" id="height" value="{{ data.height }}" class="w-full bg-transparent border-0 text-3xl font-bold text-gray-800 p-0 focus:outline-none focus:ring-0">
+        </div>
+      </div>
+      <h3 class="text-xl font-semibold text-gray-800 !mt-8 mb-4">Ваши цели</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-green-50 border border-green-200 rounded-xl p-5">
+          <div class="text-sm font-medium text-green-800 mb-2 flex items-center gap-2">💪 Мышечная масса</div>
+          <div class="flex items-end gap-4">
+            <div>
+              <div class="text-xs text-gray-500">Сейчас</div>
+              <div id="form-current-muscle" class="text-3xl font-bold text-green-900">{{ data.muscle_mass }} <span class="text-xl">кг</span></div>
+            </div>
+            <div class="text-2xl text-gray-400 pb-1">→</div>
+            <div class="flex-1">
+              <label for="muscle_mass_goal" class="text-xs text-gray-500">Ваша цель</label>
+              <input type="number" step="0.1" name="muscle_mass_goal" id="muscle_mass_goal" value="{{ data.muscle_mass_goal }}" class="w-full bg-white font-semibold text-gray-800 rounded-md px-2 py-1.5 border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+            </div>
           </div>
-      </section>
-
-      <div class="flex flex-col sm:flex-row sm:justify-end gap-4 pt-4">
-        <a href="/profile"
-           class="sm:w-auto w-full text-center px-6 py-3 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-100 transition font-semibold">
-          Отменить
-        </a>
-        <button type="submit"
-                class="sm:w-auto w-full px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/30">
-          ✅ Сохранить и обновить цели
+        </div>
+        <div class="bg-orange-50 border border-orange-200 rounded-xl p-5">
+          <div class="text-sm font-medium text-orange-800 mb-2 flex items-center gap-2">🧈 Жировая масса</div>
+          <div class="flex items-end gap-4">
+            <div>
+              <div class="text-xs text-gray-500">Сейчас</div>
+              <div id="form-current-fat" class="text-3xl font-bold text-orange-900">{{ data.fat_mass }} <span class="text-xl">кг</span></div>
+            </div>
+            <div class="text-2xl text-gray-400 pb-1">→</div>
+            <div class="flex-1">
+              <label for="fat_mass_goal" class="text-xs text-gray-500">Ваша цель</label>
+              <input type="number" step="0.1" name="fat_mass_goal" id="fat_mass_goal" value="{{ data.fat_mass_goal }}" class="w-full bg-white font-semibold text-gray-800 rounded-md px-2 py-1.5 border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="!mt-8">
+          <h3 class="text-lg font-semibold text-gray-700 mb-4">Дополнительные показатели</h3>
+          {% set labels = { "bmi": ("ИМТ", "", "📐"), "body_age": ("Возраст тела", "лет", "🧬"), "metabolism": ("Базовый обмен", "ккал", "⚡") } %}
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {% for key in ['bmi', 'body_age', 'metabolism'] %}{% if data.get(key) is not none %}
+            <div class="bg-gray-50/70 border rounded-lg p-3">
+              <div class="text-xs text-gray-500">{{ labels[key][2] }} {{ labels[key][0] }}</div>
+              <div class="text-xl font-bold text-gray-800 mt-1">{{ data[key] }}<span class="text-sm font-medium text-gray-500 ml-1">{{ labels[key][1] }}</span></div>
+            </div>
+            {% endif %}{% endfor %}
+          </div>
+      </div>
+      <div class="text-center pt-8">
+        <button id="saveBtn" type="submit" class="w-full sm:w-auto px-8 py-3 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-500 text-white font-semibold shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transform hover:-translate-y-1 transition-all duration-300">
+          Сохранить и увидеть магию ✨
         </button>
       </div>
-
     </form>
-  {% endif %}
+  </div>
 
+  <div id="result-container" class="hidden">
+      <div class="text-center mb-10">
+        <h1 class="text-3xl md:text-4xl font-bold text-gray-900">Ваша трансформация!</h1>
+        <p class="mt-3 text-lg text-gray-600">Вот как вы можете выглядить у вашей цели</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div class="text-center">
+          <h2 class="text-2xl font-bold mb-4 text-gray-500">Текущая форма</h2>
+          <div id="before-metrics" class="space-y-2 text-lg p-4 mb-4 bg-gray-50 rounded-lg"></div>
+          <div class="rounded-2xl overflow-hidden shadow-xl">
+            <img id="before-img" src="" alt="Текущая форма" class="w-full bg-gray-100">
+          </div>
+        </div>
+        <div class="text-center">
+          <h2 class="text-2xl font-bold mb-4 text-green-600">Целевая форма</h2>
+          <div id="after-metrics" class="space-y-2 text-lg p-4 mb-4 bg-gray-50 rounded-lg"></div>
+          <div class="rounded-2xl overflow-hidden shadow-xl">
+            <img id="after-img" src="" alt="Целевая форма" class="w-full bg-gray-100">
+          </div>
+        </div>
+      </div>
+       <div class="text-center mt-12">
+        <a href="/profile" class="w-full sm:w-auto px-8 py-3 rounded-xl bg-gray-800 text-white font-semibold shadow-lg hover:bg-black transform hover:-translate-y-0.5 transition-all">
+          Отлично! Вернуться в профиль
+        </a>
+      </div>
+  </div>
 </div>
+
+
+<div id="fullscreen-preloader" class="hidden fixed inset-0 z-50 bg-white/80 backdrop-blur-xl flex flex-col items-center justify-center p-4">
+  <canvas id="neural-canvas" class="absolute inset-0 w-full h-full opacity-50"></canvas>
+  <div id="preloader-card" class="relative z-10 bg-white/95 rounded-3xl shadow-2xl p-8 max-w-2xl w-full">
+    <div class="text-center">
+        <h2 class="text-3xl font-bold mb-6 text-gray-900">AI создает вашу визуализацию...</h2>
+        <div id="transition-metrics-container" class="space-y-4"></div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // --- DOM элементы ---
+  const pageContainer = document.getElementById('page-container');
+  const form = document.getElementById('analysisForm');
+  if (!form) return;
+  const saveBtn = document.getElementById('saveBtn');
+  const preloader = document.getElementById('fullscreen-preloader');
+  const preloaderCard = document.getElementById('preloader-card');
+  const resultContainer = document.getElementById('result-container');
+
+  // --- Обработчик формы ---
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-white"></span>';
+
+    const currentMetrics = {
+        weight: parseFloat(document.getElementById('form-current-weight').innerText),
+        muscle: parseFloat(document.getElementById('form-current-muscle').innerText),
+        fat: parseFloat(document.getElementById('form-current-fat').innerText),
+    };
+    const targetMetrics = {
+        muscle: parseFloat(document.getElementById('muscle_mass_goal').value),
+        fat: parseFloat(document.getElementById('fat_mass_goal').value),
+    };
+
+    // 1. Сохраняем анализ
+    const formData = new FormData(form);
+    const saveResponse = await fetch(form.action, { method: 'POST', body: formData });
+
+    if (!saveResponse.ok) {
+      alert('Ошибка при сохранении анализа.');
+      saveBtn.disabled = false; saveBtn.textContent = 'Сохранить и увидеть магию ✨';
+      return;
+    }
+
+    // 2. Запускаем "Магию"
+    pageContainer.classList.add('animate-fade-out');
+
+    setTimeout(() => {
+      pageContainer.classList.add('hidden');
+      preloader.classList.remove('hidden');
+      preloader.classList.add('animate-fade-in');
+      preloaderCard.classList.add('animate-pulse-card');
+      startNeuralAnimation();
+      animateMetrics(currentMetrics, targetMetrics);
+      runVisualization(currentMetrics, targetMetrics);
+    }, 500);
+  });
+
+  async function runVisualization(current, target) {
+      try {
+        const vizResponse = await fetch("{{ url_for('visualize_run') }}", { method: 'POST' });
+        const vizData = await vizResponse.json();
+
+        if (vizResponse.ok && vizData.success) {
+          // 3. Показываем результат
+          preloader.classList.add('animate-fade-out');
+          setTimeout(() => {
+            preloader.classList.add('hidden');
+            preloaderCard.classList.remove('animate-pulse-card');
+
+            populateResultView(current, target, vizData.visualization);
+
+            pageContainer.classList.remove('animate-fade-out', 'hidden');
+            document.getElementById('confirmation-container').classList.add('hidden');
+            resultContainer.classList.remove('hidden');
+            resultContainer.classList.add('animate-whoosh-in');
+          }, 500);
+        } else { throw new Error(vizData.error || 'Неизвестная ошибка генерации'); }
+      } catch (error) {
+        alert(`Ошибка при создании визуализации: ${error.message}`);
+        window.location.href = "/profile";
+      }
+  }
+
+  function populateResultView(current, target, viz) {
+      const targetWeight = (current.weight - (current.fat - target.fat) + (target.muscle - current.muscle)).toFixed(1);
+
+      document.getElementById('before-metrics').innerHTML = `
+          <div class="flex justify-between"><span>⚖️ Вес:</span> <strong class="font-mono">${current.weight.toFixed(1)} кг</strong></div>
+          <div class="flex justify-between"><span>💪 Мышцы:</span> <strong class="font-mono">${current.muscle.toFixed(1)} кг</strong></div>
+          <div class="flex justify-between"><span>🧈 Жир:</span> <strong class="font-mono">${current.fat.toFixed(1)} кг</strong></div>
+      `;
+      document.getElementById('before-img').src = viz.image_current_path;
+
+      document.getElementById('after-metrics').innerHTML = `
+          <div class="flex justify-between"><span>⚖️ Вес:</span> <strong class="font-mono">${targetWeight} кг</strong></div>
+          <div class="flex justify-between"><span>💪 Мышцы:</span> <strong class="font-mono text-green-700">${target.muscle.toFixed(1)} кг</strong></div>
+          <div class="flex justify-between"><span>🧈 Жир:</span> <strong class="font-mono text-orange-700">${target.fat.toFixed(1)} кг</strong></div>
+      `;
+      document.getElementById('after-img').src = viz.image_target_path;
+  }
+
+  // --- Анимации ---
+  function animateMetrics(current, target) {
+      const targetWeight = (current.weight - (current.fat - target.fat) + (target.muscle - current.muscle));
+      const metrics = [
+          { label: 'Вес', before: current.weight, after: targetWeight, unit: 'кг' },
+          { label: 'Мышцы', before: current.muscle, after: target.muscle, unit: 'кг' },
+          { label: 'Жир', before: current.fat, after: target.fat, unit: 'кг' }
+      ];
+      const transitionContainer = document.getElementById('transition-metrics-container');
+      transitionContainer.innerHTML = '';
+      metrics.forEach((metric, index) => {
+          const el = document.createElement('div');
+          el.className = 'flex items-center justify-center gap-4 text-2xl font-mono animate-fade-in';
+          el.style.animationDelay = `${index * 150}ms`;
+          el.innerHTML = `
+              <span class="w-32 text-right text-gray-500">${metric.label}:</span>
+              <span class="w-24 text-center text-gray-700">${metric.before.toFixed(1)} ${metric.unit}</span>
+              <span class="text-3xl animate-pulse-glow w-8 text-center">&rarr;</span>
+              <span class="w-24 text-center text-indigo-700 font-bold" id="count-${metric.label}"></span>
+              <span class="w-32"></span>
+          `;
+          transitionContainer.appendChild(el);
+          countUp(`count-${metric.label}`, metric.after, metric.unit);
+      });
+  }
+
+  function countUp(elementId, endValue, unit) {
+      const el = document.getElementById(elementId);
+      const startValue = parseFloat(el.textContent) || (endValue > 10 ? endValue - 10 : 0);
+      const duration = 2500; let startTime = null;
+      function animation(currentTime) {
+          if (startTime === null) startTime = currentTime;
+          const progress = Math.min((currentTime - startTime) / duration, 1);
+          const easedProgress = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+          const currentValue = startValue + easedProgress * (endValue - startValue);
+          el.textContent = `${currentValue.toFixed(1)} ${unit}`;
+          if (progress < 1) requestAnimationFrame(animation);
+      }
+      requestAnimationFrame(animation);
+  }
+
+  function startNeuralAnimation() {
+      const canvas = document.getElementById('neural-canvas'); if (!canvas) return;
+      const ctx = canvas.getContext('2d'); let particles = [];
+      const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+      resize(); window.addEventListener('resize', resize);
+      class Particle {
+          constructor() { this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height; this.size = Math.random() * 2 + 0.5; this.speedX = Math.random() * 0.4 - 0.2; this.speedY = Math.random() * 0.4 - 0.2; this.color = `rgba(99, 102, 241, ${Math.random() * 0.5 + 0.1})`; }
+          update() { this.x += this.speedX; this.y += this.speedY; if (this.x < 0 || this.x > canvas.width) this.x = Math.random() * canvas.width; if (this.y < 0 || this.y > canvas.height) this.y = Math.random() * canvas.height; }
+          draw() { ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); }
+      }
+      function init() { particles = []; for (let i = 0; i < 120; i++) { particles.push(new Particle()); } }
+      function animate() {
+          if (!preloader || preloader.classList.contains('hidden')) return; // Stop animation when hidden
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          particles.forEach(p => { p.update(); p.draw(); });
+          requestAnimationFrame(animate);
+      }
+      init(); animate();
+  }
+});
+</script>
 {% endblock %}

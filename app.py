@@ -1,7 +1,7 @@
 from datetime import datetime, date, timedelta, time as dt_time
 from urllib.parse import urlparse
 import base64
-from flask import Flask, render_template, redirect, session, url_for, flash, abort, \
+from flask import Flask, render_template, redirect, session, url_for, flash, send_file, abort, \
     send_from_directory
 from flask_bcrypt import Bcrypt
 from werkzeug.utils import secure_filename
@@ -10,17 +10,22 @@ from dotenv import load_dotenv
 import random
 import string
 import re
-from sqlalchemy import func
+from sqlalchemy import func, text
 from functools import wraps
 from PIL import Image
 from meal_reminders import start_meal_scheduler, get_scheduler, run_tick_now, pause_job, resume_job
 from diet_autogen import start_diet_autogen_scheduler
+from gemini_visualizer import generate_for_user, create_record, _compute_pct
 from flask import Blueprint, request
 from flask_login import current_user
+from shopping_bp import shopping_bp
 import json, os
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from flask import make_response
 from sqlalchemy import inspect
+import uuid  # для генерации уникальных имён файлов
+from pathlib import Path
+from models import BodyVisualization
 
 load_dotenv()
 
@@ -41,8 +46,8 @@ db.init_app(app)
 from models import (
     User, Subscription, Order, Group, GroupMember, GroupMessage, MessageReaction,
     GroupTask, MealLog, Activity, Diet, Training, TrainingSignup, BodyAnalysis,
-    UserSettings, MealReminderLog, AuditLog, PromptTemplate
-)
+    UserSettings, MealReminderLog, AuditLog, PromptTemplate)
+
 
 
 
@@ -329,19 +334,27 @@ def start_training_notifier():
         th = threading.Thread(target=_notification_worker, daemon=True)
         th.start()
 
-def _ensure_column(table: str, column: str, ddl: str):
+def _ensure_column(table, column, ddl):
+    # инспектору передаём «сырое» имя (без кавычек), он сам разберётся
     insp = inspect(db.engine)
-    cols = {c['name'] for c in insp.get_columns(table)}
+    cols = [c['name'] for c in insp.get_columns(table)]
     if column not in cols:
+        # но в самом SQL-выражении имена нужно корректно квотировать под конкретный диалект
+        preparer = db.engine.dialect.identifier_preparer
+        table_q = preparer.quote(table)     # например -> "user"
+        column_q = preparer.quote(column)   # например -> "sex"
         with db.engine.connect() as con:
-            con.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {ddl}'))
-        print(f"[auto-migrate] added {table}.{column}")
+            con.execute(text(f'ALTER TABLE {table_q} ADD COLUMN {column_q} {ddl}'))
 
 
 def _auto_migrate_diet_schema():
     insp = inspect(db.engine)
     # Создадим недостающие таблицы по моделям
     db.create_all()
+
+    # === Новые поля пользователя для визуализаций ===
+    _ensure_column("user", "sex", "TEXT DEFAULT 'male'")
+    _ensure_column("user", "face_consent", "BOOLEAN DEFAULT FALSE")
 
     # === ВАЖНО: meal_logs нужные поля ===
     _ensure_column("meal_logs", "image_path", "TEXT")
@@ -682,6 +695,23 @@ def inject_renewal_reminder():
         summary = _month_deltas(u)
     return dict(renewal_reminder_due=show, monthly_summary=summary, subscription_days_left=days_left)
 
+# Error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    """Обработчик для ошибки 404 (страница не найдена)."""
+    return render_template('errors/404.html'), 404
+
+@app.errorhandler(403)
+def forbidden_error(error):
+    """Обработчик для ошибки 403 (доступ запрещен)."""
+    return render_template('errors/403.html'), 403
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Обработчик для ошибки 500 (внутренняя ошибка сервера)."""
+    # Важно откатить сессию, чтобы избежать "зависших" транзакций в БД
+    db.session.rollback()
+    return render_template('errors/500.html'), 500
 # ------------------ ROUTES ------------------
 
 @app.route('/')
@@ -726,6 +756,18 @@ def login():
     return render_template('login.html')
 
 
+@app.route('/api/check_email', methods=['POST'])
+def check_email():
+    data = request.get_json()
+    if not data or 'email' not in data:
+        return jsonify({"error": "Email not provided"}), 400
+
+    email = data['email'].strip().lower()
+    # Поиск без учета регистра
+    user = User.query.filter(func.lower(User.email) == email).first()
+
+    return jsonify({"exists": user is not None})
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     errors = []
@@ -735,6 +777,8 @@ def register():
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '').strip()
         date_str = request.form.get('date_of_birth', '').strip()
+        sex = (request.form.get('sex') or '').strip().lower()
+        face_consent = bool(request.form.get('face_consent'))
 
         # Проверка обязательных полей
         if not name:
@@ -743,6 +787,8 @@ def register():
             errors.append("Email обязателен.")
         if not password or len(password) < 6:
             errors.append("Пароль обязателен и должен содержать минимум 6 символов.")
+        if sex not in ('male', 'female'):
+            errors.append("Пожалуйста, выберите пол.")
 
         # Проверка уникальности email
         if User.query.filter_by(email=email).first():
@@ -763,13 +809,32 @@ def register():
         if errors:
             return render_template('register.html', errors=errors)
 
+        # Обработка аватара (опционально)
+        avatar_relpath = 'i.webp'  # дефолтный
+        file = request.files.get('avatar')
+        if file and file.filename:
+            filename = secure_filename(file.filename)
+            ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+            if ext in {'jpg','jpeg','png','webp'}:
+                os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'avatars'), exist_ok=True)
+                stored = f"{uuid.uuid4().hex}.{ext}"
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'avatars', stored)
+                file.save(filepath)
+                avatar_relpath = f"avatars/{stored}"
+            else:
+                errors.append("Неверный формат аватара (разрешены: jpg, jpeg, png, webp).")
+                return render_template('register.html', errors=errors)
+
         # Хеширование пароля и сохранение пользователя
         hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
         user = User(
             name=name,
             email=email,
             password=hashed_pw,
-            date_of_birth=date_of_birth
+            date_of_birth=date_of_birth,
+            sex=sex,
+            face_consent=face_consent,
+            avatar=avatar_relpath
         )
 
         db.session.add(user)
@@ -964,7 +1029,7 @@ def profile():
                     consumed -= calories_before_analysis
                     burned_active = 0
 
-                daily_deficit = (metabolism + burned_active) - consumed
+                daily_deficit = ((metabolism or 0) + (burned_active or 0)) - (consumed or 0)
                 if daily_deficit > 0:
                     total_accumulated_deficit += daily_deficit
 
@@ -1177,49 +1242,41 @@ def meals():
                            tab='meals')
 
 # --- НАЧАЛО ИЗМЕНЕНИЙ: Обновлённая функция для сохранения анализа ---
+from flask import jsonify # Убедись, что jsonify импортирован вверху файла
+
 @app.route('/confirm_analysis', methods=['POST'])
 def confirm_analysis():
     user_id = session.get('user_id')
+    # Для AJAX-запроса возвращаем ошибку в JSON
     if not user_id or 'temp_analysis' not in session:
-        flash("Нет данных для подтверждения анализа.", "error")
-        return redirect('/profile')
+        return jsonify({"success": False, "error": "Нет данных для подтверждения."}), 400
 
     analysis_data = session.pop('temp_analysis')
     user = db.session.get(User, user_id)
 
-    # 1. Обновляем ТОЛЬКО цели в таблице User.
-    #    Метрики состава тела больше здесь не сохраняются.
     user.fat_mass_goal = request.form.get('fat_mass_goal', user.fat_mass_goal, type=float)
     user.muscle_mass_goal = request.form.get('muscle_mass_goal', user.muscle_mass_goal, type=float)
     user.analysis_comment = analysis_data.get("analysis")
     user.updated_at = datetime.utcnow()
 
-    # 2. Создаем НОВУЮ запись в истории BodyAnalysis.
-    #    Это позволяет хранить полную историю всех замеров.
     new_analysis_entry = BodyAnalysis(
         user_id=user.id,
         timestamp=datetime.utcnow()
     )
 
-    # 3. Заполняем новую запись всеми данными из анализа, полученными от AI.
     for field, value in analysis_data.items():
-        # Проверяем, есть ли такое поле в модели BodyAnalysis, чтобы избежать ошибок.
         if hasattr(new_analysis_entry, field):
             setattr(new_analysis_entry, field, value)
 
-    # 4. Проверяем, не отредактировал ли пользователь рост в форме подтверждения.
-    #    Если да, обновляем значение в НАШЕЙ НОВОЙ ЗАПИСИ.
     edited_height = request.form.get('height', type=int)
     if edited_height is not None:
         new_analysis_entry.height = edited_height
 
-    # Сохраняем в БД новую запись анализа и обновленные цели пользователя.
     db.session.add(new_analysis_entry)
     db.session.commit()
 
-    flash("Данные анализа тела и цели успешно сохранены!", "success")
-    return redirect('/profile')
-# --- КОНЕЦ ИЗМЕНЕНИЙ ---
+    # Вместо редиректа возвращаем JSON об успехе
+    return jsonify({"success": True, "message": "Анализ и цели успешно сохранены."})
 
 
 @app.route('/generate_telegram_code')
@@ -1250,11 +1307,11 @@ def generate_diet():
         return jsonify({"error": "Unauthorized"}), 401
 
     goal = request.args.get("goal", "maintain")
-    gender = request.args.get("gender", "male")
+    # пол больше не из query; берём из профиля
+    gender = (user.sex or "male")
     preferences = request.args.get("preferences", "")
 
     latest_analysis = BodyAnalysis.query.filter_by(user_id=user_id).order_by(BodyAnalysis.timestamp.desc()).first()
-
     # Проверка наличия всех необходимых данных для генерации диеты
     if not (latest_analysis and
             all(getattr(latest_analysis, attr, None) is not None
@@ -3349,108 +3406,9 @@ def deficit_history():
 
 @app.route("/purchase")
 def purchase_page():
-    bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "DietaAIBot")
+    bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "kilograpptestbot")
     return render_template("purchase.html", bot_username=bot_username)
 
-
-@app.route('/api/kaspi/generate_qr', methods=['POST'])
-@login_required
-def generate_kaspi_qr():
-    """Создает заказ в нашей системе и генерирует QR-код для оплаты."""
-    user = get_current_user()
-    data = request.get_json()
-    sub_type = data.get('subscription_type')
-    amount = data.get('amount')
-
-    if not sub_type or not amount:
-        return jsonify({"error": "Отсутствуют данные о подписке."}), 400
-
-    # 1. Создаем заказ в нашей базе данных
-    new_order = Order(
-        user_id=user.id,
-        subscription_type=sub_type,
-        amount=float(amount)
-    )
-    db.session.add(new_order)
-    db.session.commit()
-
-    # 2. --- SIMULATE KASPI API CALL ---
-    #    Здесь должен быть реальный HTTP-запрос к API Kaspi для создания счета.
-    #    Вам нужно будет передать `new_order.order_id` и `new_order.amount`.
-    #    В заголовках необходимо передать 'X-Auth-Token': KASPI_API_TOKEN
-
-    #    Пример тела запроса (уточните по документации Kaspi):
-    #    payload = { "merchantInvoiceId": new_order.order_id, "amount": new_order.amount }
-    #    headers = { "X-Auth-Token": KASPI_API_TOKEN }
-    #    response = requests.post(f"{KASPI_API_URL}/invoices", json=payload, headers=headers)
-
-    #    Вместо реального запроса мы симулируем успешный ответ:
-    print(f"SIMULATING: Generating Kaspi QR for order {new_order.order_id} with amount {new_order.amount}")
-
-    # Kaspi в ответ вернет ID своего счета и данные для QR
-    kaspi_invoice_id = f"KASPI_{new_order.order_id}"
-    qr_data_string = f"https://kaspi.kz/pay/{kaspi_invoice_id}"
-
-    # Сохраняем ID от Kaspi в наш заказ
-    new_order.kaspi_invoice_id = kaspi_invoice_id
-    db.session.commit()
-
-    return jsonify({
-        "orderId": new_order.order_id,
-        "qrData": qr_data_string
-    })
-
-
-@app.route('/api/kaspi/status/<order_id>')
-@login_required
-def get_payment_status(order_id):
-    """Проверяет статус оплаты заказа. Вызывается с фронтенда каждые несколько секунд."""
-    order = Order.query.filter_by(order_id=order_id, user_id=get_current_user().id).first_or_404()
-
-    # Если заказ уже оплачен, просто возвращаем статус
-    if order.status == 'paid':
-        return jsonify({"status": "paid"})
-
-    # --- SIMULATE KASPI STATUS CHECK ---
-    #    Здесь должен быть реальный HTTP-запрос к API Kaspi для проверки статуса счета.
-    #    response = requests.get(f"{KASPI_API_URL}/invoices/{order.kaspi_invoice_id}", headers=headers)
-    #    kaspi_status = response.json().get('status')
-
-    #    Вместо этого мы симулируем оплату через 10 секунд после создания заказа
-    seconds_since_creation = (datetime.utcnow() - order.created_at).total_seconds()
-
-    if seconds_since_creation > 10:
-        # Симулируем успешную оплату
-        order.status = 'paid'
-        order.paid_at = datetime.utcnow()
-
-        # Выдаем подписку пользователю
-        # Логика скопирована из manage_subscription
-        months_map = {'1m': 1, '6m': 6, '12m': 12}
-        months_to_add = months_map.get(order.subscription_type, 1)
-
-        today = date.today()
-        end_date = today + timedelta(days=30 * months_to_add)
-
-        sub = Subscription.query.filter_by(user_id=order.user_id).first()
-        if sub:
-            sub.start_date = today
-            sub.end_date = end_date
-            sub.status = 'active'
-            sub.source = 'kaspi_payment'
-        else:
-            sub = Subscription(user_id=order.user_id, start_date=today, end_date=end_date, source='kaspi_payment')
-            db.session.add(sub)
-
-        user = User.query.get(order.user_id)
-        user.show_welcome_popup = True
-
-        db.session.commit()
-        print(f"SIMULATING: Order {order.order_id} is PAID. Subscription granted.")
-        return jsonify({"status": "paid"})
-    else:
-        # Пока 10 секунд не прошло, возвращаем "в ожидании"
-        return jsonify({"status": "pending"})
 
 from sqlalchemy.exc import IntegrityError
 
@@ -4062,7 +4020,120 @@ def admin_user_export(user_id):
     except Exception:
         pass
     return resp
+# --- ВИЗУАЛИЗАЦИЯ ТЕЛА -------------------------------------------------------
 
+def _latest_analysis_for(user_id: int):
+    return (BodyAnalysis.query
+            .filter(BodyAnalysis.user_id == user_id)
+            .order_by(BodyAnalysis.timestamp.desc())
+            .first())
+
+@app.get("/visualize", endpoint="visualize")
+@login_required
+def visualize_page():
+    u = get_current_user()
+    la = _latest_analysis_for(u.id)
+
+    # --- ИЗМЕНЕНИЕ 1: Загружаем только последнюю запись, а не все ---
+    latest_visualization = BodyVisualization.query.filter_by(user_id=u.id).order_by(BodyVisualization.id.desc()).first()
+
+    return render_template(
+        'visualize.html',
+        latest_analysis=la,
+        latest_visualization=latest_visualization # Передаем одну запись, а не список
+    )
+
+
+@app.route('/visualize/run', methods=['POST'])
+@login_required
+def visualize_run():
+    u = get_current_user()
+    if not u:
+        abort(401)
+
+    if not getattr(u, 'face_consent', False):
+        return jsonify({"success": False,
+                        "error": "Чтобы сгенерировать визуализацию, нужно разрешить использование аватара (галочка в профиле)."}), 400
+
+    latest = BodyAnalysis.query.filter_by(user_id=u.id).order_by(BodyAnalysis.timestamp.desc()).first()
+    if not latest:
+        return jsonify(
+            {"success": False, "error": "Загрузите актуальный анализ тела — без него визуализация не строится."}), 400
+
+    # --- avatar_abs_path ---
+    avatar_abs_path = None
+    if u.avatar:
+        candidate = os.path.join(app.config['UPLOAD_FOLDER'], u.avatar)
+        if os.path.exists(candidate):
+            avatar_abs_path = candidate
+    if not avatar_abs_path:
+        avatar_abs_path = os.path.join(app.static_folder, 'default-avatar.png')
+
+    # --- metrics_current ---
+    current_weight = latest.weight or 0
+    metrics_current = {
+        "height_cm": latest.height,
+        "weight_kg": current_weight,
+        "fat_mass": latest.fat_mass,
+        "muscle_mass": latest.muscle_mass,
+        "metabolism": latest.metabolism,
+        "fat_pct": _compute_pct(latest.fat_mass, current_weight),
+        "muscle_pct": _compute_pct(latest.muscle_mass, current_weight),
+        "sex": getattr(u, "sex", None),
+    }
+
+    # --- metrics_target (Полный расчет) ---
+    metrics_target = metrics_current.copy()  # Начинаем с копии текущих
+    fat_mass_goal = getattr(u, "fat_mass_goal", None)
+    muscle_mass_goal = getattr(u, "muscle_mass_goal", None)
+
+    # Рассчитываем новые метрики только если обе цели установлены
+    if fat_mass_goal is not None and muscle_mass_goal is not None:
+        metrics_target["fat_mass"] = fat_mass_goal
+        metrics_target["muscle_mass"] = muscle_mass_goal
+
+        delta_fat = (metrics_current.get("fat_mass") or 0) - fat_mass_goal
+        delta_muscle = muscle_mass_goal - (metrics_current.get("muscle_mass") or 0)
+        target_weight = current_weight - delta_fat + delta_muscle
+        metrics_target["weight_kg"] = target_weight
+
+        metrics_target["fat_pct"] = _compute_pct(fat_mass_goal, target_weight)
+        metrics_target["muscle_pct"] = _compute_pct(muscle_mass_goal, target_weight)
+
+    # --- upload_root ---
+    upload_root = os.path.join(app.config['UPLOAD_FOLDER'], 'visualizations', str(u.id))
+    os.makedirs(upload_root, exist_ok=True)
+
+    try:
+        current_image_path, target_image_path = generate_for_user(
+            user=u,
+            avatar_abs_path=avatar_abs_path,
+            metrics_current=metrics_current,
+            metrics_target=metrics_target,
+            upload_root=upload_root,
+            main_upload_folder=app.config['UPLOAD_FOLDER']
+        )
+
+        new_viz_record = create_record(
+            user=u,
+            curr_rel=current_image_path,
+            tgt_rel=target_image_path,
+            metrics_current=metrics_current,
+            metrics_target=metrics_target
+        )
+
+        return jsonify({
+            "success": True,
+            "visualization": {
+                "image_current_path": url_for('serve_uploaded_file', filename=new_viz_record.image_current_path),
+                "image_target_path": url_for('serve_uploaded_file', filename=new_viz_record.image_target_path),
+                "created_at": new_viz_record.created_at.strftime('%d.%m.%Y %H:%M')
+            }
+        })
+
+    except Exception as e:
+        app.logger.error("[visualize] generation failed: %s", e, exc_info=True)
+        return jsonify({"success": False, "error": f"Не удалось сгенерировать визуализацию: {e}"}), 500
 
 # ===== ADMIN: Аудит =====
 
@@ -4074,6 +4145,7 @@ def admin_audit():
 
 # регистрация блюпринта (добавь после определения маршрутов)
 app.register_blueprint(bp)
+app.register_blueprint(shopping_bp, url_prefix="/shopping")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

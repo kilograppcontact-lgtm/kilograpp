@@ -29,6 +29,10 @@ class User(db.Model):
     is_trainer = db.Column(db.Boolean, default=False, nullable=False, server_default=expression.false())
     avatar = db.Column(db.String(200), nullable=False, default='i.webp')
 
+    # Новые поля для визуализации тела
+    sex = db.Column(db.String(10), nullable=False, server_default='male', default='male')  # 'male' | 'female'
+    face_consent = db.Column(db.Boolean, nullable=False, server_default=expression.false(), default=False)
+
     analysis_comment = db.Column(db.Text)
     telegram_chat_id = db.Column(db.String(50), nullable=True)
     telegram_code = db.Column(db.String(10), nullable=True)
@@ -528,6 +532,68 @@ class StagedDiet(db.Model):
     __table_args__ = (db.UniqueConstraint('user_id', 'date', name='uq_staged_user_date'),)
 
     user = db.relationship("User", backref=db.backref("staged_diets", lazy=True))
+
+# === NEW: файлы в БД ===
+class UploadedFile(db.Model):
+    __tablename__ = 'uploaded_files'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    filename = db.Column(db.String(255), unique=True, nullable=False)
+    content_type = db.Column(db.String(120))
+    data = db.Column(db.LargeBinary, nullable=False)
+    size = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+# === Shopping cart (NEW) ===
+class ShoppingCart(db.Model):
+    __tablename__ = "shopping_cart"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), index=True, nullable=False)
+    diet_id = db.Column(db.Integer, db.ForeignKey("diet.id"), index=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    user = db.relationship("User", backref=db.backref("shopping_carts", lazy=True))
+    diet = db.relationship("Diet", backref=db.backref("shopping_cart", uselist=False))
+
+class ShoppingCartItem(db.Model):
+    __tablename__ = "shopping_cart_item"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cart_id = db.Column(db.Integer, db.ForeignKey("shopping_cart.id"), nullable=False, index=True)
+    meal_type = db.Column(db.String(20), nullable=False)  # breakfast/lunch/dinner/snack
+
+    product_name = db.Column(db.String(255), nullable=False)
+    kaspi_query  = db.Column(db.String(255))
+    kaspi_url    = db.Column(db.String(1024))
+
+    total_grams    = db.Column(db.Float)   # суммарно по позиции (если имеет смысл)
+    pack_grams     = db.Column(db.Float)   # предложенная фасовка
+    quantity_packs = db.Column(db.Integer, default=1)
+
+    cart = db.relationship("ShoppingCart", backref=db.backref("items", lazy=True))
+
+
+class BodyVisualization(db.Model):
+    __tablename__ = "body_visualization"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), index=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # исходные метрики и целевые (для восстановления промптов)
+    metrics_current = db.Column(db.JSON, nullable=False)
+    metrics_target  = db.Column(db.JSON, nullable=False)
+
+    image_current_path = db.Column(db.String(300), nullable=False)
+    image_target_path  = db.Column(db.String(300), nullable=False)
+
+    provider = db.Column(db.String(50), nullable=False, default="gemini")  # 'gemini'
+    provider_job_id = db.Column(db.String(100), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="done")      # 'done'|'error'
+    error  = db.Column(db.Text, nullable=True)
+
+    user = db.relationship("User", backref=db.backref("visualizations", lazy=True, order_by="desc(BodyVisualization.created_at)"))
 
 # ------------------ AUTO-DEFAULTS HOOK ------------------
 

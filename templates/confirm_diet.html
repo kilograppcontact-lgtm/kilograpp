@@ -2,71 +2,26 @@
 {% block content %}
 
 <style>
-  .flip-card {
-    perspective: 1200px;
-    transition: transform 0.4s ease;
+  .flip-card { perspective: 1200px; transition: transform .4s ease; }
+  .flip-card:hover { transform: scale(1.03); }
+  .flip-inner { transition: transform 1s ease; transform-style: preserve-3d; position: relative; width: 100%; height: 100%; }
+  .flipped .flip-inner { transform: rotateY(180deg); }
+  .flip-front, .flip-back {
+    backface-visibility: hidden; position: absolute; inset: 0;
+    padding: 1.5rem; border-radius: 1.25rem; box-shadow: 0 12px 25px rgba(0,0,0,.2);
+    display: flex; flex-direction: column; justify-content: space-between;
   }
-
-  .flip-card:hover {
-    transform: scale(1.03);
-  }
-
-  .flip-inner {
-    transition: transform 1s ease;
-    transform-style: preserve-3d;
-    position: relative;
-    width: 100%;
-    height: 100%;
-  }
-
-  .flipped .flip-inner {
-    transform: rotateY(180deg);
-  }
-
-  .flip-front,
-  .flip-back {
-    backface-visibility: hidden;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    padding: 1.5rem;
-    border-radius: 1.25rem;
-    box-shadow: 0 12px 25px rgba(0, 0, 0, 0.2);
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-
-  .flip-back {
-    transform: rotateY(180deg);
-    overflow-y: auto;
-  }
-
-  .click-arrow {
-    position: absolute;
-    bottom: 1rem;
-    right: 1rem;
-    font-size: 1.4rem;
-    transform: rotate(-45deg);
-    transition: transform 0.3s ease, scale 0.3s ease;
-    color: rgba(255, 255, 255, 0.5);
-  }
-
-  .flip-card:hover .click-arrow {
-    transform: rotate(-45deg) translate(5px, -5px) scale(1.2);
-    color: white;
-  }
-
-  .flip-back .click-arrow {
-    color: #444;
-  }
-
-  .flip-card:hover .flip-back .click-arrow {
-    transform: rotate(-45deg) translate(5px, -5px) scale(1.2);
-    color: black;
-  }
+  .flip-back { transform: rotateY(180deg); overflow-y: auto; }
+  .click-arrow { position: absolute; bottom: 1rem; right: 1rem; font-size: 1.4rem; transform: rotate(-45deg); transition: .3s ease; color: rgba(255,255,255,.5); }
+  .flip-card:hover .click-arrow { transform: rotate(-45deg) translate(5px,-5px) scale(1.2); color:#fff; }
+  .flip-back .click-arrow { color:#444; }
+  .flip-card:hover .flip-back .click-arrow { color:#000; }
+  /* mini skeleton */
+  .skeleton { position: relative; overflow: hidden; background: #eef2f7; border-radius: .5rem; }
+  .skeleton::after { content:""; position:absolute; inset:0; transform: translateX(-100%);
+    background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.6), rgba(255,255,255,0));
+    animation: shimmer 1.2s infinite; }
+  @keyframes shimmer { 100% { transform: translateX(100%); } }
 </style>
 
 <div class="container mx-auto px-4 py-10">
@@ -78,20 +33,23 @@
     'Ужин': {'items': dinner, 'color': 'bg-gradient-to-br from-purple-300 to-purple-500'}
   } %}
 
-  <!-- Основные приемы пищи -->
+  <!-- Основные приёмы пищи -->
   <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-    {% for meal_name, meal_data in meals.items() %}
+    {% for meal_name, meal in meals.items() %}
       <div class="flip-card h-[420px] cursor-pointer w-[90%] mx-auto" onclick="this.classList.toggle('flipped')">
         <div class="flip-inner rounded-2xl">
           <!-- FRONT -->
-          <div class="flip-front {{ meal_data.color }} text-gray-900 relative overflow-hidden">
+          <div class="flip-front {{ meal.color }} text-gray-900 relative overflow-hidden">
             <div>
-              <h2 class="text-2xl font-bold mb-5 tracking-wide">{{ meal_name }}</h2>
+              <div class="flex items-center justify-between">
+                <h2 class="text-2xl font-bold mb-5 tracking-wide">{{ meal_name }}</h2>
+                <span class="text-xs opacity-70">{{ (meal['items']|length) }} блюд(а)</span>
+              </div>
               <ul class="space-y-3 text-sm leading-relaxed">
-                {% for food in meal_data['items'] %}
+                {% for food in meal['items'] %}
                   <li class="bg-white bg-opacity-40 rounded-lg px-3 py-2 shadow-sm">
                     <p class="font-semibold">{{ food.name }}</p>
-                    <div class="flex gap-2 mt-1">
+                    <div class="flex flex-wrap gap-2 mt-1">
                       <span class="inline-block bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">{{ food.kcal }} ккал</span>
                       <span class="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">{{ food.grams }} г</span>
                     </div>
@@ -106,7 +64,7 @@
             <div>
               <h3 class="text-2xl font-bold mb-4">{{ meal_name }} — Рецепты</h3>
               <div class="space-y-4 text-sm leading-relaxed max-h-60 overflow-y-auto pr-2">
-                {% for food in meal_data['items'] %}
+                {% for food in meal['items'] %}
                   <div>
                     <p class="font-semibold">{{ food.name }}</p>
                     <p class="whitespace-pre-line text-gray-600">{{ food.recipe }}</p>
@@ -121,27 +79,28 @@
     {% endfor %}
   </div>
 
-  <!-- Перекус по центру -->
-  {% if snack %}
+  <!-- Перекус -->
+  {% if snack|default([]) %}
     <div class="flex justify-center mt-12">
       <div class="flip-card h-[420px] cursor-pointer w-[90%] md:w-1/3" onclick="this.classList.toggle('flipped')">
         <div class="flip-inner rounded-2xl">
           <!-- FRONT -->
           <div class="flip-front bg-gradient-to-br from-lime-200 to-lime-400 text-gray-900 relative overflow-hidden">
-            <div>
+            <div class="flex items-center justify-between">
               <h2 class="text-2xl font-bold mb-5 tracking-wide">Перекус</h2>
-              <ul class="space-y-3 text-sm leading-relaxed">
-                {% for food in snack %}
-                  <li class="bg-white bg-opacity-40 rounded-lg px-3 py-2 shadow-sm">
-                    <p class="font-semibold">{{ food.name }}</p>
-                    <div class="flex gap-2 mt-1">
-                      <span class="inline-block bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">{{ food.kcal }} ккал</span>
-                      <span class="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">{{ food.grams }} г</span>
-                    </div>
-                  </li>
-                {% endfor %}
-              </ul>
+              <span class="text-xs opacity-70">{{ (snack|default([]))|length }} блюд(а)</span>
             </div>
+            <ul class="space-y-3 text-sm leading-relaxed">
+              {% for food in (snack|default([])) %}
+                <li class="bg-white bg-opacity-40 rounded-lg px-3 py-2 shadow-sm">
+                  <p class="font-semibold">{{ food.name }}</p>
+                  <div class="flex flex-wrap gap-2 mt-1">
+                    <span class="inline-block bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">{{ food.kcal }} ккал</span>
+                    <span class="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded-full">{{ food.grams }} г</span>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
             <div class="click-arrow">➜</div>
           </div>
           <!-- BACK -->
@@ -149,7 +108,7 @@
             <div>
               <h3 class="text-2xl font-bold mb-4">Перекус — Рецепты</h3>
               <div class="space-y-4 text-sm leading-relaxed max-h-60 overflow-y-auto pr-2">
-                {% for food in snack %}
+                {% for food in (snack|default([])) %}
                   <div>
                     <p class="font-semibold">{{ food.name }}</p>
                     <p class="whitespace-pre-line text-gray-600">{{ food.recipe }}</p>
@@ -164,28 +123,241 @@
     </div>
   {% endif %}
 
-  <!-- Итог -->
+  <!-- Итоги -->
   <div class="mt-16 bg-white p-6 rounded-xl text-center shadow-xl">
     <h2 class="text-2xl font-bold mb-4">Суточный итог</h2>
     <div class="flex flex-wrap justify-center gap-8 text-lg font-medium text-gray-700">
-      <div>
-        <p class="text-gray-500">Калории</p>
-        <p class="text-2xl text-green-600 font-bold">{{ diet.total_kcal }} ккал</p>
+      <div><p class="text-gray-500">Калории</p><p class="text-2xl text-green-600 font-bold">{{ diet.total_kcal }} ккал</p></div>
+      <div><p class="text-gray-500">Белки</p><p class="text-2xl text-blue-600 font-bold">{{ diet.protein }} г</p></div>
+      <div><p class="text-gray-500">Жиры</p><p class="text-2xl text-yellow-600 font-bold">{{ diet.fat }} г</p></div>
+      <div><p class="text-gray-500">Углеводы</p><p class="text-2xl text-pink-600 font-bold">{{ diet.carbs }} г</p></div>
+    </div>
+  </div>
+
+  <!-- 🛒 Корзина продуктов -->
+  <div id="cartSection" class="mt-10 bg-white rounded-xl shadow-xl p-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <h2 class="text-xl font-bold text-slate-900">🛒 Корзина по этой диете</h2>
+        <span id="cartStatus" class="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700">Статус: —</span>
       </div>
-      <div>
-        <p class="text-gray-500">Белки</p>
-        <p class="text-2xl text-blue-600 font-bold">{{ diet.protein }} г</p>
+      <div class="flex gap-2">
+        <button id="buildCartBtn" class="btn btn-primary">Создать корзину</button>
+        <button id="resetCartBtn" class="btn btn-outline hidden">Сбросить</button>
       </div>
-      <div>
-        <p class="text-gray-500">Жиры</p>
-        <p class="text-2xl text-yellow-600 font-bold">{{ diet.fat }} г</p>
-      </div>
-      <div>
-        <p class="text-gray-500">Углеводы</p>
-        <p class="text-2xl text-pink-600 font-bold">{{ diet.carbs }} г</p>
-      </div>
+    </div>
+
+    <div id="cartHint" class="mt-2 text-sm text-slate-500">
+      Сформируем список товаров и ссылки на Kaspi, чтобы купить всё за пару кликов.
+    </div>
+
+    <!-- Прогресс/сообщения -->
+    <div id="cartFlash" class="mt-4 text-sm"></div>
+
+    <div id="cartContent" class="mt-5 space-y-6">
+      <!-- сюда рендерятся блоки -->
     </div>
   </div>
 </div>
+
+<script>
+(function(){
+  const dietId = {{ diet.id }};
+  const $status = document.getElementById('cartStatus');
+  const $btnBuild = document.getElementById('buildCartBtn');
+  const $btnReset = document.getElementById('resetCartBtn');
+  const $flash = document.getElementById('cartFlash');
+  const $content = document.getElementById('cartContent');
+
+  function setStatus(text, tone){
+    $status.textContent = 'Статус: ' + text;
+    $status.className = 'text-xs px-2 py-1 rounded-full ' + (tone === 'ok'
+      ? 'bg-green-100 text-green-700'
+      : tone === 'warn' ? 'bg-yellow-100 text-yellow-700'
+      : 'bg-slate-100 text-slate-700');
+  }
+
+  function showFlash(msg, kind='info'){
+    const classes = {
+      info: 'text-slate-700',
+      ok: 'text-green-700',
+      err: 'text-red-700',
+      warn: 'text-yellow-700'
+    };
+    $flash.className = 'mt-4 text-sm ' + (classes[kind]||classes.info);
+    $flash.textContent = msg || '';
+  }
+
+  function toggleButtons(hasCart){
+    if(hasCart){
+      $btnBuild.classList.add('hidden');
+      $btnReset.classList.remove('hidden');
+    }else{
+      $btnBuild.classList.remove('hidden');
+      $btnReset.classList.add('hidden');
+    }
+  }
+
+  function skeleton(){
+    $content.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="skeleton h-24"></div>
+        <div class="skeleton h-24"></div>
+        <div class="skeleton h-24"></div>
+        <div class="skeleton h-24"></div>
+      </div>
+    `;
+  }
+
+  function groupItemsFlat(items){
+    const out = {breakfast:[],lunch:[],dinner:[],snack:[]};
+    (items||[]).forEach(it=>{
+      const k = (it.meal_type || 'other').toLowerCase();
+      (out[k] || (out[k]=[])).push(it);
+    });
+    return out;
+  }
+
+  function render(itemsByMeal){
+    const order = [
+      ['breakfast','🍳 Завтрак'],
+      ['lunch','🍲 Обед'],
+      ['dinner','🍝 Ужин'],
+      ['snack','🍎 Перекус'],
+    ];
+    let totalCount = 0;
+    let html = '';
+    order.forEach(([key, title])=>{
+      const items = (itemsByMeal && itemsByMeal[key]) || [];
+      totalCount += items.length;
+
+      const cards = items.map(it=>{
+        const name = it.product_name || it.item_name || it.name || '';
+        const qty = (it.quantity_packs ?? it.qty ?? 1);
+        const unit = it.unit || 'шт';
+        const totalGr = it.total_grams || it.total_g || null;
+        const packGr = it.pack_grams || it.pack_g || null;
+        const price = it.price ? String(it.price) : null;
+        const kaspiUrl = (it.kaspi_url && it.kaspi_url.trim()) || null;
+        const kaspiQuery = (it.kaspi_query && it.kaspi_query.trim()) || (name ? name.trim() : '');
+        const link = kaspiUrl || (kaspiQuery ? ('https://kaspi.kz/shop/search/?text=' + encodeURIComponent(kaspiQuery)) : null);
+
+        return `
+          <div class="p-4 rounded-lg border border-slate-200 bg-slate-50">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="font-semibold text-slate-900">${name || 'Товар'}</div>
+                <div class="text-xs text-slate-500 mt-1">
+                  ${ totalGr ? `Нужно: <b>${totalGr}</b> г · ` : '' }
+                  ${ packGr ? `Фасовка: <b>${packGr}</b> г · ` : '' }
+                  Кол-во: <b>${qty}</b> ${unit}
+                  ${ price ? ` · ≈ <b>${price}</b> ₸` : '' }
+                </div>
+              </div>
+              ${ link ? `<a href="${link}" target="_blank" rel="noopener" class="text-sm text-blue-600 hover:underline shrink-0">Открыть</a>` : '' }
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      html += `
+        <div>
+          <div class="text-sm font-semibold text-slate-700 mb-2">${title}</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            ${cards || ''}
+            ${items.length ? '' : '<div class="text-slate-400 text-xs">Нет позиций</div>'}
+          </div>
+        </div>
+      `;
+    });
+
+    $content.innerHTML = html;
+    toggleButtons(totalCount > 0);
+    setStatus(totalCount > 0 ? 'готово' : 'нужно создать', totalCount > 0 ? 'ok' : 'warn');
+    showFlash(totalCount > 0 ? 'Корзина сформирована. Можно открывать товары в Kaspi.' : 'Корзина пока пустая. Нажми «Создать корзину».',
+      totalCount > 0 ? 'ok' : 'info');
+  }
+
+  async function loadCart(){
+    try{
+      skeleton();
+      const r = await fetch(`/shopping/list?diet_id=${dietId}`, {cache:'no-store'});
+      const j = await r.json();
+      if(!r.ok || j.ok === false){
+        setStatus('ошибка', 'err');
+        toggleButtons(false);
+        showFlash(j.message || 'Не удалось загрузить корзину', 'err');
+        $content.innerHTML = '';
+        return;
+      }
+      const byMeal = j.items_by_meal || groupItemsFlat(j.items || []);
+      render(byMeal);
+    }catch(e){
+      setStatus('ошибка', 'err');
+      toggleButtons(false);
+      showFlash('Ошибка загрузки корзины', 'err');
+      $content.innerHTML = '';
+    }
+  }
+
+  async function buildCart(){
+    try{
+      $btnBuild.disabled = true;
+      skeleton();
+      setStatus('собираем…', 'warn');
+      showFlash('Формируем предложения с GPT и Kaspi…', 'info');
+      const r = await fetch('/shopping/build', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','Accept':'application/json'},
+        body: JSON.stringify({diet_id: dietId})
+      });
+      const j = await r.json();
+      if(!r.ok || j.ok === false){
+        throw new Error(j.message || j.error || 'Ошибка');
+      }
+      const byMeal = j.items_by_meal || groupItemsFlat(j.items || []);
+      render(byMeal);
+    }catch(e){
+      setStatus('ошибка', 'err');
+      toggleButtons(false);
+      showFlash(`Не удалось создать корзину: ${e.message || e}`, 'err');
+      $content.innerHTML = '';
+    }finally{
+      $btnBuild.disabled = false;
+    }
+  }
+
+  async function resetCart(){
+    if(!confirm('Сбросить текущую корзину?')) return;
+    try{
+      $btnReset.disabled = true;
+      setStatus('сбрасываем…', 'warn');
+      showFlash('Удаляем текущие позиции…', 'info');
+      const r = await fetch('/shopping/reset', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','Accept':'application/json'},
+        body: JSON.stringify({diet_id: dietId})
+      });
+      const j = await r.json();
+      if(!r.ok || j.ok === false){
+        throw new Error(j.message || j.error || 'Ошибка');
+      }
+      // после сброса — пустой рендер
+      render({breakfast:[],lunch:[],dinner:[],snack:[]});
+    }catch(e){
+      setStatus('ошибка', 'err');
+      showFlash(`Не удалось сбросить корзину: ${e.message || e}`, 'err');
+    }finally{
+      $btnReset.disabled = false;
+    }
+  }
+
+  $btnBuild?.addEventListener('click', buildCart, {passive:true});
+  $btnReset?.addEventListener('click', resetCart, {passive:true});
+
+  // авто-загрузка
+  loadCart();
+})();
+</script>
 
 {% endblock %}

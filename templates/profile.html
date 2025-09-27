@@ -795,6 +795,12 @@ lockScroll(false);
               {% endfor %}
               {% if user.analysis_comment %}<div class="!mt-5 p-4 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800"><strong class="font-semibold">💬 AI-комментарий:</strong> {{ user.analysis_comment }}</div>{% endif %}
             </div>
+            <div class="mt-4">
+  <a href="{{ url_for('visualize') }}" class="inline-flex items-center px-5 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition">
+    🎨 Перейти на страницу визуализации
+  </a>
+</div>
+
         </div>
     </div>
 
@@ -2648,5 +2654,45 @@ function setDimHole(x, y, w, h){
   });
 }
 
+</script>
+
+<div id="uploadAnalysisPreloader" class="fixed inset-0 bg-white/80 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fade-in">
+  <div class="text-center">
+    <svg class="animate-spin h-10 w-10 text-blue-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+    <p class="mt-4 text-lg font-semibold text-slate-700">Анализируем ваше изображение...</p>
+    <p class="text-slate-500">Это может занять несколько секунд.</p>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const uploadForm = document.getElementById('uploadForm');
+    const preloader = document.getElementById('uploadAnalysisPreloader');
+
+    if (uploadForm && preloader) {
+      uploadForm.addEventListener('submit', function() {
+        const fileInput = uploadForm.querySelector('input[type="file"]');
+
+        // Показываем прелоадер, только если файл действительно выбран
+        if (fileInput && fileInput.files.length > 0) {
+          preloader.classList.remove('hidden');
+          preloader.classList.add('flex');
+
+          // Блокируем кнопку, чтобы избежать повторной отправки
+          const submitButton = uploadForm.querySelector('button[type="submit"]');
+          if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.innerHTML = `
+              <span class="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-white"></span>
+              <span class="ml-2">Загрузка...</span>
+            `;
+          }
+        }
+      });
+    }
+  });
 </script>
 {% endblock %}
