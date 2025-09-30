@@ -27,7 +27,6 @@ class User(db.Model):
     muscle_mass_goal = db.Column(db.Float, nullable=True)
 
     is_trainer = db.Column(db.Boolean, default=False, nullable=False, server_default=expression.false())
-    avatar = db.Column(db.String(200), nullable=False, default='i.webp')
 
     # Новые поля для визуализации тела
     sex = db.Column(db.String(10), nullable=False, server_default='male', default='male')  # 'male' | 'female'
@@ -45,6 +44,9 @@ class User(db.Model):
         backref=db.backref('user', uselist=False),
         uselist=False
     )
+
+    avatar_file_id = db.Column(db.Integer, db.ForeignKey('uploaded_files.id'), nullable=True)
+    avatar = db.relationship('UploadedFile', foreign_keys=[avatar_file_id], lazy='joined')
 
     @property
     def has_subscription(self):
@@ -135,7 +137,6 @@ class User(db.Model):
     def fat_free_body_weight(self):
         a = self._get_latest_analysis()
         return a.fat_free_body_weight if a else None
-
 
 class Subscription(db.Model):
     __tablename__ = "subscription"

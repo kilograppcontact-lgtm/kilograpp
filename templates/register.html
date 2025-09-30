@@ -75,8 +75,8 @@
     <p class="text-gray-600 mt-4">Отслеживайте свой прогресс, достигайте целей и становитесь лучшей версией себя вместе с нами.</p>
   </div>
 
-  <div class="w-full p-8 sm:p-10">
-    <div class="text-center mb-6">
+  <div class="w-full p-8 sm:p-10 flex flex-col justify-center">
+    <div class="text-center mb-6" style="margin-top:100px">
       <h1 id="form-title" class="text-2xl font-bold text-dark">Создание аккаунта</h1>
     </div>
 
@@ -86,9 +86,10 @@
         <div id="progress-3" class="h-2 flex-1 rounded-full bg-gray-200 transition-colors"></div>
     </div>
 
-    <form id="registerForm" method="POST" enctype="multipart/form-data" class="relative min-h-[420px]">
-      <div id="error-container" class="text-red-600 text-sm mb-4 hidden"></div>
+    <form id="registerForm" action="{{ url_for('register') }}" method="POST" enctype="multipart/form-data" class="relative min-h-[420px]">
+      <div id="error-container" class="text-red-600 text-sm mb-4 hidden font-medium p-3 bg-red-50 border border-red-200 rounded-lg"></div>
 
+      <!-- Шаг 1: Основные данные -->
       <div id="step-1" class="step-panel space-y-4">
           <div>
             <label for="name" class="sr-only">Имя</label>
@@ -109,6 +110,7 @@
           <button type="button" id="next-1" class="w-full bg-primary text-white py-3 rounded-xl font-medium text-lg transition-all duration-300 hover:bg-accent hover:shadow-lg">Далее</button>
       </div>
 
+      <!-- Шаг 2: Личные данные -->
       <div id="step-2" class="step-panel hidden space-y-4">
            <div>
             <label for="date_of_birth" class="sr-only">Дата рождения</label>
@@ -134,7 +136,10 @@
               <label for="avatar" class="block text-sm font-medium text-gray-700 mb-2">Аватар (фото лица)</label>
               <div class="flex items-center gap-4">
                   <div class="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border">
-                      <img id="avatar-preview" src="{{ url_for('serve_uploaded_file', filename='i.webp') }}" alt="Preview" class="w-full h-full object-cover">
+                      <!-- ======================================================= -->
+                      <!-- ИСПРАВЛЕНИЕ ЗДЕСЬ                                      -->
+                      <!-- ======================================================= -->
+                      <img id="avatar-preview" src="{{ url_for('static', filename='uploads/i.webp') }}" alt="Preview" class="w-full h-full object-cover">
                   </div>
                   <input id="avatar" type="file" name="avatar" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
               </div>
@@ -145,9 +150,10 @@
           </div>
       </div>
 
+      <!-- Шаг 3: Соглашения -->
       <div id="step-3" class="step-panel hidden space-y-5">
            <div class="flex items-start gap-3 p-4 bg-blue-50/50 border border-blue-200 rounded-xl">
-            <input id="face_consent" name="face_consent" type="checkbox" class="mt-1 h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent">
+            <input id="face_consent" name="face_consent" type="checkbox" value="true" class="mt-1 h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent">
             <label for="face_consent" class="text-sm text-gray-800">
               <span class="font-semibold">Даю согласие на использование аватара</span> для генерации AI-визуализаций моего телосложения (данные не передаются третьим лицам).
             </label>
@@ -165,7 +171,7 @@
 
     <p class="mt-8 text-center text-sm text-gray-500">
       Уже есть аккаунт?
-      <a href="/login" class="font-medium text-accent hover:underline">Войти</a>
+      <a href="{{ url_for('login') }}" class="font-medium text-accent hover:underline">Войти</a>
     </p>
   </div>
 </div>
@@ -216,7 +222,8 @@ document.addEventListener('DOMContentLoaded', function () {
         let isValid = true;
 
         for (const input of inputs) {
-            if (!input.reportValidity()) {
+            // Убираем reportValidity(), чтобы не показывать стандартные подсказки браузера
+            if (!input.checkValidity()) {
                 input.classList.add('input-error');
                 isValid = false;
             }
@@ -232,15 +239,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 password.classList.add('input-error');
                 passwordConfirm.classList.add('input-error');
                 isValid = false;
-            }
-            if (password.value.length < 6) {
+            } else if (password.value.length < 6) {
                 showError('Пароль должен быть не менее 6 символов.');
                 password.classList.add('input-error');
                 isValid = false;
             }
 
-            if (isValid && emailInput.value) {
-                // Проверка email на сервере
+            if (isValid && emailInput.checkValidity()) {
                 try {
                     const response = await fetch('/api/check_email', {
                         method: 'POST',
@@ -257,6 +262,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     showError('Не удалось проверить email. Попробуйте позже.');
                     isValid = false;
                 }
+            } else if (!emailInput.checkValidity()) {
+                 showError('Пожалуйста, введите корректный email.');
+                 isValid = false;
             }
         }
 
@@ -265,6 +273,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 showError('Пожалуйста, выберите ваш пол.');
                 isValid = false;
             }
+             const dob = document.getElementById('date_of_birth');
+             if (!dob.value) {
+                showError('Пожалуйста, укажите дату рождения.');
+                dob.classList.add('input-error');
+                isValid = false;
+             }
+        }
+
+        if(stepIndex === 2) {
+             const terms = document.getElementById('terms');
+             if (!terms.checked) {
+                showError('Необходимо согласиться с Условиями использования.');
+                isValid = false;
+             }
         }
 
         return isValid;
@@ -309,10 +331,19 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     form.addEventListener('submit', async function (e) {
+        const submitBtn = e.submitter;
         e.preventDefault();
+
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<span class="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-white"></span>';
+        submitBtn.disabled = true;
+
         const isValid = await validateStep(currentStep);
         if (isValid) {
             form.submit();
+        } else {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
         }
     });
 
@@ -322,3 +353,4 @@ document.addEventListener('DOMContentLoaded', function () {
 
 </body>
 </html>
+

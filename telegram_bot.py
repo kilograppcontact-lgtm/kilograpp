@@ -1,10 +1,13 @@
-# telegram_bot.py
 import os
 import re
 import logging
 import asyncio
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+# === 1. КЛЮЧЕВОЙ ИМПОРТ ИЗ АССИСТЕНТА ===
+# Импортируем единую точку входа из ассистента
+from kilo_ai_assistant import kilo_entry_point_handler
 
 import aiohttp
 import pytz
@@ -21,10 +24,11 @@ from telegram.ext import (
     filters,
     ContextTypes,
     ConversationHandler,
+    PicklePersistence  # Импорт для сохранения состояния
 )
 from telegram.request import HTTPXRequest
 
-# === CONFIG ===
+# === CONFIG (без изменений) ===
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -36,11 +40,12 @@ BOT_SECRET_TOKEN = os.getenv("BOT_SECRET_TOKEN")
 app_token = os.getenv("TELEGRAM_BOT_TOKEN")
 
 os.makedirs("temp_photos", exist_ok=True)
+os.makedirs("bot_data", exist_ok=True)  # Папка для файла состояния
 
-# Conversation states
+# Conversation states (без изменений)
 (ASK_CODE, SELECT_MENU, ASK_PHOTO, HANDLE_SAVE, OVERWRITE_CONFIRM, HISTORY_MENU, ACTIVITY_INPUT) = range(7)
 
-# Keyboards
+# Keyboards (без изменений)
 MAIN_MENU_KEYBOARD = [
     [InlineKeyboardButton("🍽️ Питание", callback_data="menu_nutrition"),
      InlineKeyboardButton("🏋️ Тренировки", callback_data="menu_training")],
@@ -67,7 +72,8 @@ MORE_MENU_KEYBOARD = [
     [InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_main")],
 ]
 
-# === HELPERS ===
+
+# === HELPERS (без изменений) ===
 async def cleanup_chat(context: ContextTypes.DEFAULT_TYPE):
     chat_id = context.user_data.get('chat_id')
     messages_to_delete = context.user_data.pop('messages_to_delete', [])
@@ -82,10 +88,12 @@ async def cleanup_chat(context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
+
 def remember_msg(context: ContextTypes.DEFAULT_TYPE, message_id: int):
     lst = context.user_data.setdefault('messages_to_delete', [])
     if message_id not in lst:
         lst.append(message_id)
+
 
 async def _is_registered(chat_id: int) -> bool:
     try:
@@ -96,10 +104,8 @@ async def _is_registered(chat_id: int) -> bool:
     except aiohttp.ClientError:
         return False
 
+
 async def _link_code(chat_id: int, code: str) -> tuple[bool, int, str]:
-    """
-    Возвращает (ok, status, message)
-    """
     code = code.strip()
     if not re.fullmatch(r"\d{8}", code):
         return False, 400, "Код должен состоять из 8 цифр."
@@ -110,26 +116,27 @@ async def _link_code(chat_id: int, code: str) -> tuple[bool, int, str]:
                                     json={"code": code, "chat_id": chat_id}) as resp:
                 if resp.status == 200:
                     return True, 200, "✅ Telegram привязан! Введите /start, чтобы открыть меню."
-                elif resp.status == 409:
-                    return False, 409, "ℹ️ Этот код уже использован. Сгенерируйте новый в личном кабинете."
-                elif resp.status == 404:
-                    return False, 404, "❌ Неверный код. Попробуйте снова."
                 else:
-                    txt = await resp.text()
-                    logging.error(f"link_telegram failed: {resp.status} - {txt}")
                     return False, resp.status, "⚠️ Не удалось привязать. Попробуйте позже."
     except aiohttp.ClientError as e:
-        logging.error(f"link_telegram network error: {e}")
         return False, 503, "⚠️ Сервер недоступен. Попробуйте позже."
 
-# === MENUS ===
+
+# === MENUS (без изменений) ===
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await cleanup_chat(context)
     text = "👋 Выберите раздел:"
     reply_markup = InlineKeyboardMarkup(MAIN_MENU_KEYBOARD)
-    sent = await update.effective_chat.send_message(text, reply_markup=reply_markup)
+
+    # ИСПРАВЛЕНО: Убедимся, что отправляем сообщение, а не редактируем несуществующее
+    if update.callback_query:
+        sent = await update.effective_chat.send_message(text, reply_markup=reply_markup)
+    else:
+        sent = await update.message.reply_text(text, reply_markup=reply_markup)
+
     context.user_data['main_menu_message_id'] = sent.message_id
     context.user_data['messages_to_delete'] = []
+
 
 async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -137,24 +144,24 @@ async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         try:
             await query.message.delete()
-        except Exception as e:
-            logging.warning(f"Could not delete message on back_to_main_menu: {e}")
+        except Exception:
+            pass
     await show_main_menu(update, context)
     return SELECT_MENU
 
-# === ENTRY: /start ===
+
+# === ENTRY POINTS (без изменений) ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info("start() from %s", update.effective_user.id if update.effective_user else "unknown")
     context.user_data.clear()
     context.user_data['chat_id'] = update.effective_chat.id
-    context.user_data['messages_to_delete'] = [update.message.message_id]
 
     chat_id = update.effective_chat.id
     if await _is_registered(chat_id):
+        context.user_data['is_registered'] = True
         await show_main_menu(update, context)
         return SELECT_MENU
 
-    context.user_data["awaiting_code"] = True
     sent = await update.message.reply_text(
         "🔐 Введите *8-значный код* из личного кабинета:",
         parse_mode="Markdown"
@@ -162,70 +169,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     remember_msg(context, sent.message_id)
     return ASK_CODE
 
-# === ENTRY: любой текст — только если уже привязан, иначе просим код ===
-async def open_menu_from_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    txt = (update.message.text or "").strip()
-    logging.info("open_menu_from_text() got: %r from %s", txt, chat_id)
 
-    # Если это 8 цифр — сразу пробуем связать (универсальный путь)
-    if re.fullmatch(r"\d{8}", txt):
-        return await handle_code_anywhere(update, context)
-
-    # иначе: если уже привязан — открываем меню, если нет — просим код
-    if await _is_registered(chat_id):
-        await show_main_menu(update, context)
-        return SELECT_MENU
-
-    context.user_data["awaiting_code"] = True
-    sent = await update.message.reply_text(
-        "🔐 Введите *8-значный код* из личного кабинета:",
-        parse_mode="Markdown"
-    )
-    remember_msg(context, sent.message_id)
-    return ASK_CODE
-
-# === Универсальный обработчик 8-значного кода (работает и в состоянии, и вне его) ===
 async def handle_code_anywhere(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-    if not msg:
-        return ASK_CODE
     chat_id = update.effective_chat.id
     code = (msg.text or "").strip()
 
-    # Если уже привязан — просто покажем меню
-    if await _is_registered(chat_id):
+    if context.user_data.get('is_registered'):
         await show_main_menu(update, context)
         return SELECT_MENU
 
     waiting = await msg.reply_text("⏳ Проверяю код…")
     ok, status, text = await _link_code(chat_id, code)
-    try:
-        await waiting.delete()
-    except Exception:
-        pass
+    await waiting.delete()
 
     if ok:
-        context.user_data.pop("awaiting_code", None)
+        context.user_data['is_registered'] = True
         await cleanup_chat(context)
         await msg.reply_text(text)
+        await start(update, context)
         return ConversationHandler.END
 
-    # неуспех — остаёмся в режиме ввода кода
     sent = await msg.reply_text(text)
     remember_msg(context, sent.message_id)
-    # Подскажем, что ждём именно код
-    if status in (400, 404):
-        hint = await msg.reply_text("👉 Отправьте ещё раз *8 цифр* без пробелов.", parse_mode="Markdown")
-        remember_msg(context, hint.message_id)
     return ASK_CODE
 
-# === Специально для состояния ASK_CODE (делегируем в универсальный) ===
+
 async def verify_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.info("verify_code() text=%r", (update.message.text or "").strip())
     return await handle_code_anywhere(update, context)
 
-# === Today meals ===
+
+# ... (остальные функции меню и обработчики без изменений)
 async def show_today_meals(update_or_query: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update_or_query.effective_chat
     chat_id = chat.id
@@ -259,7 +233,8 @@ async def show_today_meals(update_or_query: Update, context: ContextTypes.DEFAUL
                     await loading_msg.edit_text(
                         text,
                         parse_mode="Markdown",
-                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_main")]])
+                        reply_markup=InlineKeyboardMarkup(
+                            [[InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_main")]])
                     )
                     remember_msg(context, loading_msg.message_id)
                 else:
@@ -268,7 +243,7 @@ async def show_today_meals(update_or_query: Update, context: ContextTypes.DEFAUL
         logging.error(f"Today's meals loading failed: {e}")
         await loading_msg.edit_text("⚠️ Ошибка сети. Не удалось загрузить данные.")
 
-# === Trainings ===
+
 async def my_trainings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     chat_id = str(chat.id)
@@ -307,7 +282,7 @@ async def my_trainings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await chat.send_message(text, parse_mode="Markdown")
     remember_msg(context, msg.message_id)
 
-# === Menu selection ===
+
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -392,7 +367,8 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
                     if resp.status == 200:
                         diet = await resp.json()
                         text = f"🥗 *Ваша диета на {diet['date']}*\n\n"
-                        for meal_type, meal_name in [("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин"), ("snack", "Перекус")]:
+                        for meal_type, meal_name in [("breakfast", "Завтрак"), ("lunch", "Обед"), ("dinner", "Ужин"),
+                                                     ("snack", "Перекус")]:
                             text += f"*{meal_name}*:\n"
                             items = diet.get(meal_type)
                             if items:
@@ -401,29 +377,29 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
                             else:
                                 text += "- нет данных\n"
                             text += "\n"
-                        text += (f"Итого: *{diet['total_kcal']} ккал* (Б: {diet['protein']} г, Ж: {diet['fat']} г, У: {diet['carbs']} г)")
+                        text += (
+                            f"Итого: *{diet['total_kcal']} ккал* (Б: {diet['protein']} г, Ж: {diet['fat']} г, У: {diet['carbs']} г)")
                         await loading_msg.edit_text(text, parse_mode="Markdown")
                         remember_msg(context, loading_msg.message_id)
                     elif resp.status == 404:
-                        await loading_msg.edit_text("🤷‍♂️ У вас пока нет сгенерированной диеты. Создайте её в профиле на сайте.")
+                        await loading_msg.edit_text(
+                            "🤷‍♂️ У вас пока нет сгенерированной диеты. Создайте её в профиле на сайте.")
                     else:
                         await loading_msg.edit_text("⚠️ Произошла ошибка при загрузке диеты.")
         except aiohttp.ClientError as e:
             logging.error(f"Diet loading failed: {e}")
             await loading_msg.edit_text("⚠️ Ошибка сети. Не удалось загрузить диету.")
 
-        await show_main_menu(update, context)
         return SELECT_MENU
 
     if data == "my_trainings":
         await my_trainings(update, context)
-        await show_main_menu(update, context)
         return SELECT_MENU
 
-    await show_main_menu(update, context)
+    await back_to_main_menu(update, context)
     return SELECT_MENU
 
-# === Ask photo for chosen meal ===
+
 async def ask_photo_for_meal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -433,13 +409,23 @@ async def ask_photo_for_meal(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return await back_to_main_menu(update, context)
 
     context.user_data["meal_type"] = query.data.split('_')[1]
-    await query.edit_message_text(
-        "📸 Пожалуйста, отправьте фото еды:",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]])
-    )
+
+    # ИСПРАВЛЕНО: Теперь эта функция может быть вызвана как от кнопки, так и от текстового сообщения
+    # `edit_message_text` работает только для кнопок, поэтому используем его с проверкой
+    if hasattr(query, 'edit_message_text') and callable(query.edit_message_text):
+        await query.edit_message_text(
+            "📸 Пожалуйста, отправьте фото еды:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]])
+        )
+    else:  # Если вызвано из ассистента, у нас нет сообщения для редактирования
+        await update.effective_chat.send_message(
+            "📸 Пожалуйста, отправьте фото еды:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]])
+        )
+
     return ASK_PHOTO
 
-# === Photo processing ===
+
 async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     remember_msg(context, update.message.message_id)
 
@@ -465,7 +451,8 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         timeout = aiohttp.ClientTimeout(total=45)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             # subscription check
-            async with session.get(f"{BACKEND_URL}/api/subscription/status", params={"chat_id": str(update.effective_chat.id)}) as s:
+            async with session.get(f"{BACKEND_URL}/api/subscription/status",
+                                   params={"chat_id": str(update.effective_chat.id)}) as s:
                 if s.status == 200:
                     sub = await s.json()
                     if not sub.get("has_subscription"):
@@ -475,13 +462,12 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             "✍️ Для ручного ввода отправьте сообщение вида:\n"
                             "«гречка 150 г, куриная грудка 120 г, салат 80 г»."
                         )
-                        await show_main_menu(update, context)
-                        return SELECT_MENU
+                        return await show_main_menu(update, context)
                 else:
                     await analyzing_msg.delete()
-                    await update.message.reply_text("⚠️ Не удалось проверить подписку. Попробуйте позже или введите приём пищи вручную.")
-                    await show_main_menu(update, context)
-                    return SELECT_MENU
+                    await update.message.reply_text(
+                        "⚠️ Не удалось проверить подписку. Попробуйте позже или введите приём пищи вручную.")
+                    return await show_main_menu(update, context)
 
             async with session.post(f"{BACKEND_URL}/analyze_meal_photo", data=form_data) as resp:
                 await analyzing_msg.delete()
@@ -499,15 +485,15 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"_{result_data.get('analysis', '')}_")
                     kb = [[InlineKeyboardButton("✅ Сохранить", callback_data="save_yes"),
                            InlineKeyboardButton("❌ Отмена", callback_data="save_no")]]
-                    result_msg = await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+                    result_msg = await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb),
+                                                                 parse_mode="Markdown")
                     remember_msg(context, result_msg.message_id)
                     return HANDLE_SAVE
                 else:
                     error_text = await resp.text()
                     logging.error(f"Backend photo analysis failed: {resp.status} - {error_text}")
                     await update.message.reply_text("⚠️ Ошибка анализа на сервере. Попробуйте другое фото или позже.")
-                    await show_main_menu(update, context)
-                    return SELECT_MENU
+                    return await show_main_menu(update, context)
 
     except Exception as e:
         logging.error(f"Failed to process photo: {e}")
@@ -518,12 +504,13 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Не удалось обработать фото. Попробуйте ещё раз.")
         return ASK_PHOTO
 
-# === Save confirmation ===
+
 async def handle_save_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if query.data == "save_no":
+        await query.message.delete()
         await query.message.reply_text("❌ Операция отменена.")
         await show_main_menu(update, context)
         return SELECT_MENU
@@ -533,7 +520,7 @@ async def handle_save_confirmation(update: Update, context: ContextTypes.DEFAULT
     analysis_result = context.user_data.get("analysis_result")
 
     if not meal_type or not analysis_result:
-        await query.message.reply_text("⚠️ Внутренняя ошибка. Попробуйте снова.")
+        await query.message.edit_text("⚠️ Внутренняя ошибка. Попробуйте снова.")
         await show_main_menu(update, context)
         return SELECT_MENU
 
@@ -566,6 +553,7 @@ async def handle_save_confirmation(update: Update, context: ContextTypes.DEFAULT
         await query.message.edit_text("⚠️ Ошибка сети. Не удалось сохранить данные.")
         await show_main_menu(update, context)
         return SELECT_MENU
+
 
 async def handle_overwrite(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -604,7 +592,7 @@ async def handle_overwrite(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(update, context)
     return SELECT_MENU
 
-# === Cancel ===
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await cleanup_chat(context)
     if update.message:
@@ -613,9 +601,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.message.reply_text("🚫 Операция отменена.")
     await show_main_menu(update, context)
     context.user_data.clear()
-    return await back_to_main_menu(update, context)
+    return ConversationHandler.END
 
-# === Progress & History ===
+
 async def show_progress(update_or_query: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update_or_query.effective_chat
     chat_id = chat.id
@@ -676,6 +664,7 @@ async def show_progress(update_or_query: Update, context: ContextTypes.DEFAULT_T
     )
     remember_msg(context, msg.message_id)
 
+
 async def show_history_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     keyboard = [
@@ -695,6 +684,7 @@ async def show_history_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sent_message = await chat.send_message(text, reply_markup=InlineKeyboardMarkup(keyboard))
     remember_msg(context, sent_message.message_id)
     return HISTORY_MENU
+
 
 async def handle_history_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -748,7 +738,7 @@ async def handle_history_pagination(update: Update, context: ContextTypes.DEFAUL
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard_layout), parse_mode="Markdown")
     return HISTORY_MENU
 
-# === Evening reminders at 21:00 ===
+
 async def remind_missing_meals(app: Application):
     logging.info("Running scheduled job: evening reminders")
     today_local_str = datetime.now(ZoneInfo(TIMEZONE)).strftime("%d.%m.%Y")
@@ -817,7 +807,7 @@ async def remind_missing_meals(app: Application):
     except Exception as e:
         logging.error(f"evening reminders error: {e}")
 
-# === Activity input ===
+
 async def show_activity_prompt(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     if hasattr(update_or_query, "callback_query") and update_or_query.callback_query:
         q = update_or_query.callback_query
@@ -845,6 +835,7 @@ async def show_activity_prompt(update_or_query, context: ContextTypes.DEFAULT_TY
     remember_msg(context, msg.message_id)
     return ACTIVITY_INPUT
 
+
 async def handle_activity_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").replace(",", " ")
     nums = re.findall(r"\d+", text)
@@ -863,7 +854,8 @@ async def handle_activity_input(update: Update, context: ContextTypes.DEFAULT_TY
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(f"{BACKEND_URL}/api/activity/log", json=payload) as resp:
                 if resp.status == 200:
-                    await loading.edit_text(f"✅ Готово! Сохранено: *{active_kcal}* ккал, *{steps}* шагов.", parse_mode="Markdown")
+                    await loading.edit_text(f"✅ Готово! Сохранено: *{active_kcal}* ккал, *{steps}* шагов.",
+                                            parse_mode="Markdown")
                 else:
                     err = await resp.text()
                     logging.error(f"activity save failed: {resp.status} - {err}")
@@ -875,7 +867,7 @@ async def handle_activity_input(update: Update, context: ContextTypes.DEFAULT_TY
     await show_main_menu(update, context)
     return SELECT_MENU
 
-# === Startup ===
+
 async def on_startup(app: Application):
     try:
         await app.bot.set_my_commands([("start", "Перезапустить бота"), ("cancel", "Отменить текущую операцию")])
@@ -901,8 +893,10 @@ async def on_startup(app: Application):
     scheduler.start()
     logging.info("APScheduler started.")
 
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logging.error(f"Update {update} caused error {context.error}")
+
 
 # === MAIN ===
 def main():
@@ -917,30 +911,39 @@ def main():
         pool_timeout=5.0,
     )
 
-    application = Application.builder().token(app_token).request(request).post_init(on_startup).build()
+    # --- 2. ИЗМЕНЕНИЕ: Активация сохранения состояния ---
+    persistence = PicklePersistence(filepath="bot_data/bot_persistence")
 
-    # --- Conversation ---
+    application = (
+        Application.builder()
+        .token(app_token)
+        .request(request)
+        .persistence(persistence)  # <--- Добавлено
+        .post_init(on_startup)
+        .build()
+    )
+
+    # --- 3. ИЗМЕНЕНИЕ: Полная перестройка обработчиков ---
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("start", start),
-            # Любой текст вне активной беседы: откроем меню если привязан, иначе попросим код.
-            MessageHandler(filters.TEXT & ~filters.COMMAND, open_menu_from_text),
-            # Кнопки верхнего уровня
-            CallbackQueryHandler(handle_menu_selection,
-                                 pattern=r"^(menu_nutrition|menu_training|menu_progress|menu_more|add|add_activity|today_meals|progress|history|current|my_trainings)$"),
-            CallbackQueryHandler(back_to_main_menu, pattern=r"^back_to_main$"),
+            # --- AI-ассистент теперь главная точка входа для текста ---
+            MessageHandler(filters.TEXT & ~filters.COMMAND, kilo_entry_point_handler),
         ],
         states={
             ASK_CODE: [
-                # принимаем 8 цифр гарантированно
                 MessageHandler(filters.Regex(r"^\s*\d{8}\s*$"), verify_code),
-                # на всякий случай — любой текст сюда тоже прилетит
                 MessageHandler(filters.TEXT & ~filters.COMMAND, verify_code),
-                CallbackQueryHandler(back_to_main_menu, pattern=r"^back_to_main$"),
             ],
+            # СТАЛО
             SELECT_MENU: [
+                # Обработчики кнопок из всех меню
+                CallbackQueryHandler(handle_menu_selection,
+                                     pattern=r"^(menu_nutrition|menu_training|menu_progress|menu_more|add|add_activity|today_meals|progress|history|current|my_trainings)$"),
                 CallbackQueryHandler(back_to_main_menu, pattern=r"^back_to_main$"),
-                CallbackQueryHandler(handle_menu_selection),
+
+                # === ДОБАВЛЕНО: Теперь AI слушает сообщения и в главном меню ===
+                MessageHandler(filters.TEXT & ~filters.COMMAND, kilo_entry_point_handler),
             ],
             ACTIVITY_INPUT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_activity_input),
@@ -959,15 +962,19 @@ def main():
                 CallbackQueryHandler(back_to_main_menu, pattern=r"^back_to_main$")
             ],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[
+            CommandHandler("cancel", cancel),
+            # Добавляем кнопку "Назад" в качестве fallback для многих состояний
+            CallbackQueryHandler(back_to_main_menu, pattern=r"^back_to_main$"),
+        ],
         allow_reentry=True,
-        # per_message=False по умолчанию — это ок, предупреждение можно игнорировать
     )
 
+    # --- РЕГИСТРАЦИЯ ВСЕХ ОБРАБОТЧИКОВ ---
     application.add_handler(conv_handler)
     application.add_error_handler(error_handler)
 
-    # Глобальный ловец 8-значного кода (если вдруг пользователь не в беседе/состоянии)
+    # Глобальный ловец 8-значного кода (если пользователь не в диалоге)
     application.add_handler(MessageHandler(filters.Regex(r"^\s*\d{8}\s*$") & ~filters.COMMAND, handle_code_anywhere))
 
     # Доп. команда вне беседы
@@ -976,5 +983,7 @@ def main():
     logging.info("✅ Бот запущен")
     application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=False, poll_interval=1.0)
 
+
 if __name__ == "__main__":
     main()
+

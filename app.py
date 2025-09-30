@@ -1,6 +1,7 @@
 from datetime import datetime, date, timedelta, time as dt_time
 from urllib.parse import urlparse
 import base64
+from io import BytesIO
 from flask import Flask, render_template, redirect, session, url_for, flash, send_file, abort, \
     send_from_directory
 from flask_bcrypt import Bcrypt
@@ -16,6 +17,7 @@ from PIL import Image
 from meal_reminders import start_meal_scheduler, get_scheduler, run_tick_now, pause_job, resume_job
 from diet_autogen import start_diet_autogen_scheduler
 from gemini_visualizer import generate_for_user, create_record, _compute_pct
+from assistant_bp import assistant_bp
 from flask import Blueprint, request
 from flask_login import current_user
 from shopping_bp import shopping_bp
@@ -23,18 +25,17 @@ import json, os
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from flask import make_response
 from sqlalchemy import inspect
-import uuid  # для генерации уникальных имён файлов
+import uuid
 from pathlib import Path
 from models import BodyVisualization
+from flask import send_file
+from io import BytesIO
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "supersecret")
 app.jinja_env.globals.update(getattr=getattr)
-
-app.config['UPLOAD_FOLDER'] = 'uploads'
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Config DB — задаём ДО init_app
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL", "sqlite:///35healthclubs.db")
@@ -46,8 +47,7 @@ db.init_app(app)
 from models import (
     User, Subscription, Order, Group, GroupMember, GroupMessage, MessageReaction,
     GroupTask, MealLog, Activity, Diet, Training, TrainingSignup, BodyAnalysis,
-    UserSettings, MealReminderLog, AuditLog, PromptTemplate)
-
+    UserSettings, MealReminderLog, AuditLog, PromptTemplate, UploadedFile)
 
 
 
@@ -66,10 +66,6 @@ def resize_image(filepath, max_size):
     except Exception as e:
         print(f"ERROR: Failed to resize image {filepath}: {e}")
 
-
-@app.route('/uploads/<path:filename>')
-def serve_uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 
 ADMIN_EMAIL = "admin@healthclub.local"
@@ -768,6 +764,7 @@ def check_email():
 
     return jsonify({"exists": user is not None})
 
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     errors = []
@@ -798,8 +795,8 @@ def register():
         date_of_birth = None
         if date_str:
             try:
-                date_of_birth = datetime.strptime(date_str, "%Y-%m-%d")
-                if date_of_birth > datetime.now():
+                date_of_birth = datetime.strptime(date_str, "%Y-%m-%d").date()
+                if date_of_birth > datetime.now().date():
                     errors.append("Дата рождения не может быть в будущем.")
             except ValueError:
                 errors.append("Некорректный формат даты рождения.")
@@ -810,17 +807,24 @@ def register():
             return render_template('register.html', errors=errors)
 
         # Обработка аватара (опционально)
-        avatar_relpath = 'i.webp'  # дефолтный
+        avatar_file_id = None
         file = request.files.get('avatar')
         if file and file.filename:
             filename = secure_filename(file.filename)
             ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-            if ext in {'jpg','jpeg','png','webp'}:
-                os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'avatars'), exist_ok=True)
-                stored = f"{uuid.uuid4().hex}.{ext}"
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'avatars', stored)
-                file.save(filepath)
-                avatar_relpath = f"avatars/{stored}"
+            if ext in {'jpg', 'jpeg', 'png', 'webp'}:
+                unique_filename = f"avatar_{uuid.uuid4().hex}.{ext}"
+                file_data = file.read()
+
+                new_file = UploadedFile(
+                    filename=unique_filename,
+                    content_type=file.mimetype,
+                    data=file_data,
+                    size=len(file_data)
+                )
+                db.session.add(new_file)
+                db.session.flush()
+                avatar_file_id = new_file.id
             else:
                 errors.append("Неверный формат аватара (разрешены: jpg, jpeg, png, webp).")
                 return render_template('register.html', errors=errors)
@@ -834,7 +838,7 @@ def register():
             date_of_birth=date_of_birth,
             sex=sex,
             face_consent=face_consent,
-            avatar=avatar_relpath
+            avatar_file_id=avatar_file_id
         )
 
         db.session.add(user)
@@ -842,7 +846,6 @@ def register():
         return redirect('/login')
 
     return render_template('register.html')
-
 
 @app.route('/profile')
 @login_required
@@ -1079,23 +1082,28 @@ def logout():
     return redirect('/login')
 
 
+# Убедитесь, что jsonify импортирован в начале файла: from flask import jsonify
+
 @app.route('/upload_analysis', methods=['POST'])
+@login_required
 def upload_analysis():
     file = request.files.get('file')
-    user_id = session.get('user_id')
-    user = db.session.get(User, user_id)
+    user = get_current_user()
     if not file or not user:
-        flash("Файл не загружен или пользователь не авторизован.", "error")
-        return redirect('/profile')
+        return jsonify({"success": False, "error": "Файл не загружен или вы не авторизованы."}), 400
 
+    # Временно сохраняем файл
     filename = secure_filename(file.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    upload_folder = app.config.get('UPLOAD_FOLDER', 'uploads')
+    if not os.path.exists(upload_folder):
+        os.makedirs(upload_folder)
+    filepath = os.path.join(upload_folder, filename)
     file.save(filepath)
 
-    with open(filepath, "rb") as image_file:
-        base64_image = base64.b64encode(image_file.read()).decode("utf-8")
-
     try:
+        with open(filepath, "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode("utf-8")
+
         # --- ШАГ 1: Извлечение данных с изображения ---
         response_metrics = client.chat.completions.create(
             model="gpt-4o",
@@ -1124,14 +1132,35 @@ def upload_analysis():
         content = response_metrics.choices[0].message.content.strip()
         result = json.loads(content)
 
-        if "error" in result:
-            missing = ', '.join(result.get("missing", []))
-            flash(f"Недостаточно данных в анализе: {missing}.", "error")
-            return redirect('/profile')
+        # --- НАЧАЛО ИЗМЕНЕНИЙ ---
 
-        # --- ШАГ 2: Генерация целей на основе извлеченных данных ---
+        # Если рост не найден, пытаемся взять его из последнего анализа
+        if not result.get('height'):
+            last_analysis = BodyAnalysis.query.filter_by(user_id=user.id).order_by(BodyAnalysis.timestamp.desc()).first()
+            if last_analysis and last_analysis.height:
+                result['height'] = last_analysis.height
+
+        # Список обязательных полей (рост теперь не в нем)
+        required_keys = [
+            'weight', 'muscle_mass', 'muscle_percentage', 'body_water',
+            'protein_percentage', 'bone_mineral_percentage', 'skeletal_muscle_mass',
+            'visceral_fat_rating', 'metabolism', 'waist_hip_ratio', 'body_age',
+            'fat_mass', 'bmi', 'fat_free_body_weight'
+        ]
+        missing_keys = [key for key in required_keys if key not in result or result.get(key) is None]
+
+        if missing_keys:
+            missing_str = ', '.join(missing_keys)
+            return jsonify({
+                "success": False,
+                "error": f"Не удалось распознать все показатели. Попробуйте другое фото. Отсутствуют: {missing_str}"
+            }), 400
+        # --- КОНЕЦ ИЗМЕНЕНИЙ ---
+
+        # --- ШАГ 2: Генерация целей ---
         age = calculate_age(user.date_of_birth) if user.date_of_birth else 'не указан'
         prompt_goals = (
+            # Промпт теперь будет использовать либо новый, либо старый рост
             f"Для пользователя с параметрами: возраст {age}, рост {result.get('height')} см, "
             f"вес {result.get('weight')} кг, жировая масса {result.get('fat_mass')} кг, "
             f"мышечная масса {result.get('muscle_mass')} кг. "
@@ -1150,26 +1179,21 @@ def upload_analysis():
         )
         goals_content = response_goals.choices[0].message.content.strip()
         goals_result = json.loads(goals_content)
-
-        # Объединяем результаты
         result.update(goals_result)
 
         session['temp_analysis'] = result
-        return render_template('confirm_analysis.html', data=result)
-
+        return jsonify({"success": True, "redirect_url": url_for('confirm_analysis')})
 
     except Exception as e:
-
-        # ДОБАВЬТЕ ЭТУ СТРОКУ ДЛЯ ДИАГНОСТИКИ
-
         print(f"!!! ОШИБКА В UPLOAD_ANALYSIS: {e}")
+        return jsonify({
+            "success": False,
+            "error": "Не удалось проанализировать изображение. Пожалуйста, попробуйте другое фото или загрузите файл лучшего качества."
+        }), 500
+    finally:
+        if os.path.exists(filepath):
+            os.remove(filepath)
 
-        flash(f"Не удалось проанализировать изображение. Проверьте консоль сервера для деталей.", "error")
-
-        return redirect('/profile')
-
-
-# УДАЛИТЕ СТАРУЮ ФУНКЦИЮ @app.route('/add_meal')
 
 # ЗАМЕНИТЕ СТАРУЮ ФУНКЦИЮ meals НА ЭТУ
 @app.route("/meals", methods=["GET", "POST"])
@@ -1244,40 +1268,52 @@ def meals():
 # --- НАЧАЛО ИЗМЕНЕНИЙ: Обновлённая функция для сохранения анализа ---
 from flask import jsonify # Убедись, что jsonify импортирован вверху файла
 
-@app.route('/confirm_analysis', methods=['POST'])
+
+@app.route('/confirm_analysis', methods=['GET', 'POST'])
+@login_required
 def confirm_analysis():
     user_id = session.get('user_id')
-    # Для AJAX-запроса возвращаем ошибку в JSON
-    if not user_id or 'temp_analysis' not in session:
-        return jsonify({"success": False, "error": "Нет данных для подтверждения."}), 400
+    if 'temp_analysis' not in session:
+        flash("Нет данных для подтверждения. Пожалуйста, загрузите анализ снова.", "warning")
+        return redirect(url_for('profile'))
 
-    analysis_data = session.pop('temp_analysis')
     user = db.session.get(User, user_id)
+    analysis_data = session['temp_analysis']
 
-    user.fat_mass_goal = request.form.get('fat_mass_goal', user.fat_mass_goal, type=float)
-    user.muscle_mass_goal = request.form.get('muscle_mass_goal', user.muscle_mass_goal, type=float)
-    user.analysis_comment = analysis_data.get("analysis")
-    user.updated_at = datetime.utcnow()
+    if request.method == 'POST':
+        # Логика сохранения данных (бывшая единственная логика функции)
+        user.fat_mass_goal = request.form.get('fat_mass_goal', user.fat_mass_goal, type=float)
+        user.muscle_mass_goal = request.form.get('muscle_mass_goal', user.muscle_mass_goal, type=float)
+        user.analysis_comment = analysis_data.get("analysis")
+        user.updated_at = datetime.utcnow()
 
-    new_analysis_entry = BodyAnalysis(
-        user_id=user.id,
-        timestamp=datetime.utcnow()
-    )
+        new_analysis_entry = BodyAnalysis(
+            user_id=user.id,
+            timestamp=datetime.utcnow()
+        )
 
-    for field, value in analysis_data.items():
-        if hasattr(new_analysis_entry, field):
-            setattr(new_analysis_entry, field, value)
+        # Переносим данные из временной сессии в новую запись анализа
+        for field, value in analysis_data.items():
+            if hasattr(new_analysis_entry, field):
+                setattr(new_analysis_entry, field, value)
 
-    edited_height = request.form.get('height', type=int)
-    if edited_height is not None:
-        new_analysis_entry.height = edited_height
+        # Обновляем рост, если он был изменен в форме
+        edited_height = request.form.get('height', type=float)
+        if edited_height is not None:
+            new_analysis_entry.height = edited_height
 
-    db.session.add(new_analysis_entry)
-    db.session.commit()
+        db.session.add(new_analysis_entry)
+        db.session.commit()
 
-    # Вместо редиректа возвращаем JSON об успехе
-    return jsonify({"success": True, "message": "Анализ и цели успешно сохранены."})
+        # Очищаем временные данные из сессии
+        session.pop('temp_analysis', None)
 
+        flash("Анализ и цели успешно сохранены!", "success")
+        return redirect(url_for('profile'))
+
+    # Логика для GET-запроса: отображение страницы подтверждения
+    # ИСПРАВЛЕНИЕ: передаем данные в шаблон под именем 'data', как он того ожидает
+    return render_template('confirm_analysis.html', data=analysis_data, user=user)
 
 @app.route('/generate_telegram_code')
 def generate_telegram_code():
@@ -1429,68 +1465,87 @@ def generate_diet():
 def edit_profile():
     user = get_current_user()
     if not user:
-        # Эта проверка на всякий случай, т.к. login_required уже есть
         return redirect(url_for('login'))
 
-    # --- Обновление текстовых полей ---
-    user.name = request.form.get('name', user.name)
-    user.email = request.form.get('email', user.email)
-    date_of_birth_str = request.form.get('date_of_birth')
-    if date_of_birth_str:
-        try:
-            user.date_of_birth = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()
-        except ValueError:
-            flash("Неверный формат даты рождения.", "error")
-            return redirect(url_for('profile'))
-
-    # --- Проверка на уникальность нового email ---
-    # Проверяем, только если email был изменен
-    if 'email' in request.form and user.email != session.get('user_email_before_edit'):
-        existing_user = User.query.filter(User.email == user.email, User.id != user.id).first()
-        if existing_user:
-            flash("Этот email уже используется другим пользователем.", "error")
-            # Откатываем изменение email обратно, чтобы не сохранять
-            user.email = session.get('user_email_before_edit')
-            return redirect(url_for('profile'))
-
-    # --- Обновление пароля (если он был введен) ---
-    new_password = request.form.get('new_password')
-    confirm_password = request.form.get('confirm_password')
-
-    if new_password:
-        if new_password != confirm_password:
-            flash("Пароли не совпадают.", "error")
-            return redirect(url_for('profile'))
-        if len(new_password) < 6:
-            flash("Пароль должен содержать не менее 6 символов.", "error")
-            return redirect(url_for('profile'))
-
-        user.password = bcrypt.generate_password_hash(new_password).decode('utf-8')
-
-    # --- Загрузка новой аватарки (если она была отправлена) ---
-    if 'avatar' in request.files:
-        file = request.files['avatar']
-        if file.filename != '':
-            # Удаляем старый аватар, если он есть и это не дефолтный
-            if user.avatar:
-                old_avatar_path = os.path.join(app.config['UPLOAD_FOLDER'], user.avatar)
-                if os.path.exists(old_avatar_path):
-                    try:
-                        os.remove(old_avatar_path)
-                    except OSError as e:
-                        print(f"Error deleting old avatar: {e}")
-
-            filename = secure_filename(f"avatar_{user.id}_{file.filename}")
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
-            user.avatar = filename
-
     try:
+        # --- Обновление текстовых полей ---
+        new_name = request.form.get('name')
+        if new_name and new_name.strip():
+            user.name = new_name.strip()
+
+        new_email = request.form.get('email')
+        if new_email and new_email.strip() and new_email.strip().lower() != (user.email or '').lower():
+            if User.query.filter(func.lower(User.email) == new_email.strip().lower(), User.id != user.id).first():
+                flash("Этот email уже используется другим пользователем.", "error")
+                return redirect(url_for('profile'))
+            user.email = new_email.strip()
+
+        date_of_birth_str = request.form.get('date_of_birth')
+        if date_of_birth_str:
+            user.date_of_birth = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()
+
+        # --- Обновление пароля ---
+        new_password = request.form.get('new_password')
+        if new_password:
+            confirm_password = request.form.get('confirm_password')
+            if new_password != confirm_password:
+                flash("Пароли не совпадают.", "error")
+                return redirect(url_for('profile'))
+            if len(new_password) < 6:
+                flash("Пароль должен содержать не менее 6 символов.", "error")
+                return redirect(url_for('profile'))
+            user.password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+
+        # --- Обработка аватара (ИСПРАВЛЕННАЯ ПОСЛЕДОВАТЕЛЬНОСТЬ) ---
+        file = request.files.get('avatar')
+        if file and file.filename:
+            # 1. Проверяем формат файла
+            filename = secure_filename(file.filename)
+            ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+            if ext not in {'jpg', 'jpeg', 'png', 'webp'}:
+                flash("Неверный формат аватара (разрешены: jpg, jpeg, png, webp).", "error")
+                return redirect(url_for('profile'))
+
+            # 2. Если есть старый аватар, запоминаем его объект
+            old_avatar_to_delete = user.avatar if user.avatar_file_id else None
+
+            # 3. "Отвязываем" старый аватар от пользователя в сессии
+            if old_avatar_to_delete:
+                user.avatar_file_id = None
+                # Важно! Не коммитим, а используем flush, чтобы эта операция была первой в транзакции
+                db.session.flush()
+
+            # 4. Создаем и сохраняем новый файл
+            unique_filename = f"avatar_{user.id}_{uuid.uuid4().hex}.{ext}"
+            file_data = file.read()
+            new_file = UploadedFile(
+                filename=unique_filename,
+                content_type=file.mimetype,
+                data=file_data,
+                size=len(file_data),
+                user_id=user.id
+            )
+            db.session.add(new_file)
+            db.session.flush() # Получаем ID нового файла
+
+            # 5. Привязываем новый аватар к пользователю
+            user.avatar_file_id = new_file.id
+
+            # 6. Теперь, когда пользователь отвязан, безопасно удаляем старый объект
+            if old_avatar_to_delete:
+                db.session.delete(old_avatar_to_delete)
+
+        # Единственный коммит для всех изменений
         db.session.commit()
         flash("Профиль успешно обновлен!", "success")
+
+    except ValueError:
+        db.session.rollback()
+        flash("Неверный формат даты рождения.", "error")
     except Exception as e:
         db.session.rollback()
-        flash(f"Произошла ошибка при обновлении профиля: {e}", "error")
+        print(f"!!! ОШИБКА ПРИ ОБНОВЛЕНИИ ПРОФИЛЯ: {e}") # Для отладки
+        flash("Произошла ошибка при обновлении профиля.", "error")
 
     return redirect(url_for('profile'))
 
@@ -2732,17 +2787,16 @@ def get_group_messages(group_id):
         results.append({
             "id": msg.id,
             "text": msg.text,
-            "image_url": url_for('serve_uploaded_file', filename=msg.image_file) if msg.image_file else None,
+            "image_url": url_for('serve_file', filename=msg.image_file) if msg.image_file else None,
             "user": {
                 "name": msg.user.name,
-                "avatar_url": url_for('serve_uploaded_file', filename=msg.user.avatar) if msg.user.avatar else url_for(
+                "avatar_url": url_for('serve_file', filename=msg.user.avatar.filename) if msg.user.avatar else url_for(
                     'static', filename='default-avatar.png')
             },
             "is_current_user": msg.user_id == user_id,
             "reactions_count": len(reactions_data),
             "current_user_reacted": user_has_reacted
         })
-
     return jsonify(results)
 
 @app.route('/groups/<int:group_id>/tasks/new', methods=['POST'])
@@ -2917,12 +2971,24 @@ def post_group_image_message(group_id):
 
     image_filename = None
     if file and file.filename != '':
-        filename = secure_filename(file.filename)
-        # ... (здесь может быть ваша логика проверки расширений)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-        resize_image(filepath, CHAT_IMAGE_MAX_SIZE)
-        image_filename = filename
+        unique_filename = f"chat_{group_id}_{uuid.uuid4().hex}.png"
+        image_data = file.read()
+
+        output_buffer = BytesIO()
+        with Image.open(BytesIO(image_data)) as img:
+            img.thumbnail(CHAT_IMAGE_MAX_SIZE, Image.Resampling.LANCZOS)
+            img.save(output_buffer, format="PNG")
+        resized_data = output_buffer.getvalue()
+
+        new_file = UploadedFile(
+            filename=unique_filename,
+            content_type='image/png',
+            data=resized_data,
+            size=len(resized_data),
+            user_id=user.id
+        )
+        db.session.add(new_file)
+        image_filename = unique_filename
 
     if not text and not image_filename:
         return jsonify({"error": "Сообщение не может быть пустым"}), 400
@@ -2937,15 +3003,17 @@ def post_group_image_message(group_id):
         "message": {
             "id": msg.id,
             "text": msg.text,
-            "image_url": url_for('serve_uploaded_file', filename=msg.image_file) if msg.image_file else None,
+            "image_url": url_for('serve_file', filename=msg.image_file) if msg.image_file else None,
             "user": {
                 "name": user.name,
-                "avatar_url": url_for('serve_uploaded_file', filename=user.avatar) if user.avatar else url_for('static', filename='default-avatar.png')
+                "avatar_url": url_for('serve_file', filename=user.avatar.filename) if user.avatar else url_for('static',
+                                                                                                               filename='default-avatar.png')
             },
             "is_current_user": True,
             "reactions": []
         }
     })
+
 @app.route('/groups/<int:group_id>/join', methods=['POST'])
 @login_required
 def join_group(group_id):
@@ -4032,15 +4100,90 @@ def _latest_analysis_for(user_id: int):
 @login_required
 def visualize_page():
     u = get_current_user()
-    la = _latest_analysis_for(u.id)
+    latest_analysis = _latest_analysis_for(u.id)
 
-    # --- ИЗМЕНЕНИЕ 1: Загружаем только последнюю запись, а не все ---
+    fat_loss_progress = None
+    if latest_analysis and latest_analysis.fat_mass and u.fat_mass_goal and latest_analysis.fat_mass > u.fat_mass_goal:
+        start_datetime = latest_analysis.timestamp
+        today = date.today()
+        user_id = u.id
+        metabolism = latest_analysis.metabolism or 0
+
+        meal_data = (db.session.query(MealLog.date, func.sum(MealLog.calories))
+                     .filter(MealLog.user_id == user_id, MealLog.date >= start_datetime.date())
+                     .group_by(MealLog.date)
+                     .all())
+        meal_map = dict(meal_data)
+
+        activity_data = (db.session.query(Activity.date, Activity.active_kcal)
+                         .filter(Activity.user_id == user_id, Activity.date >= start_datetime.date())
+                         .all())
+        activity_map = dict(activity_data)
+
+        total_accumulated_deficit = 0
+        delta_days = (today - start_datetime.date()).days
+
+        if delta_days >= 0:
+            for i in range(delta_days + 1):
+                current_day = start_datetime.date() + timedelta(days=i)
+                consumed = meal_map.get(current_day, 0)
+                burned_active = activity_map.get(current_day, 0)
+
+                if i == 0:
+                    calories_before_analysis = (db.session.query(func.sum(MealLog.calories))
+                                                .filter(MealLog.user_id == user_id,
+                                                        MealLog.date == current_day,
+                                                        MealLog.created_at < start_datetime)
+                                                .scalar() or 0)
+                    consumed -= calories_before_analysis
+                    burned_active = 0
+
+                daily_deficit = (metabolism + (burned_active or 0)) - (consumed or 0)
+                if daily_deficit > 0:
+                    total_accumulated_deficit += daily_deficit
+
+        KCAL_PER_KG_FAT = 7700
+        total_fat_to_lose_kg = latest_analysis.fat_mass - u.fat_mass_goal
+        estimated_fat_burned_kg = min(total_accumulated_deficit / KCAL_PER_KG_FAT, total_fat_to_lose_kg)
+
+        percentage = 0
+        if total_fat_to_lose_kg > 0:
+            percentage = (estimated_fat_burned_kg / total_fat_to_lose_kg) * 100
+        percentage = min(100, max(0, percentage))
+
+        # --- НАЧАЛО ИЗМЕНЕНИЙ: Выбор мотивационного сообщения ---
+        motivation_text = ""
+        if percentage == 0:
+            motivation_text = "Путь в тысячу ли начинается с первого шага. Начнем?"
+        elif 0 < percentage < 10:
+            motivation_text = "Отличное начало! Первые результаты уже есть."
+        elif 10 <= percentage < 40:
+            motivation_text = "Вы на верном пути! Продолжайте в том же духе."
+        elif 40 <= percentage < 70:
+            motivation_text = "Больше половины позади! Выглядит впечатляюще."
+        elif 70 <= percentage < 100:
+            motivation_text = "Финишная прямая! Цель совсем близко."
+        elif percentage >= 100:
+            motivation_text = "Поздравляю! Цель достигнута. Вы великолепны!"
+        # --- КОНЕЦ ИЗМЕНЕНИЙ ---
+
+        fat_loss_progress = {
+            'percentage': percentage,
+            'burned_kg': estimated_fat_burned_kg,
+            'total_to_lose_kg': total_fat_to_lose_kg,
+            'initial_kg': latest_analysis.fat_mass,
+            'goal_kg': u.fat_mass_goal,
+            'current_kg': latest_analysis.fat_mass - estimated_fat_burned_kg,
+            'motivation_text': motivation_text  # Добавляем сообщение в словарь
+        }
+
     latest_visualization = BodyVisualization.query.filter_by(user_id=u.id).order_by(BodyVisualization.id.desc()).first()
 
     return render_template(
         'visualize.html',
-        latest_analysis=la,
-        latest_visualization=latest_visualization # Передаем одну запись, а не список
+        latest_analysis=latest_analysis,
+        latest_visualization=latest_visualization,
+        fat_loss_progress=fat_loss_progress
     )
 
 
@@ -4060,14 +4203,19 @@ def visualize_run():
         return jsonify(
             {"success": False, "error": "Загрузите актуальный анализ тела — без него визуализация не строится."}), 400
 
-    # --- avatar_abs_path ---
-    avatar_abs_path = None
+    # --- Получаем байты аватара ---
+    avatar_bytes = None
     if u.avatar:
-        candidate = os.path.join(app.config['UPLOAD_FOLDER'], u.avatar)
-        if os.path.exists(candidate):
-            avatar_abs_path = candidate
-    if not avatar_abs_path:
-        avatar_abs_path = os.path.join(app.static_folder, 'default-avatar.png')
+        avatar_bytes = u.avatar.data
+
+    if not avatar_bytes:
+        # Если у пользователя нет аватара, загружаем дефолтный из static
+        try:
+            with open(os.path.join(app.static_folder, 'i.webp'), 'rb') as f:
+                avatar_bytes = f.read()
+        except FileNotFoundError:
+            app.logger.error("[visualize] Default avatar i.webp not found in static folder.")
+            return jsonify({"success": False, "error": "Файл аватара по умолчанию не найден."}), 500
 
     # --- metrics_current ---
     current_weight = latest.weight or 0
@@ -4083,11 +4231,10 @@ def visualize_run():
     }
 
     # --- metrics_target (Полный расчет) ---
-    metrics_target = metrics_current.copy()  # Начинаем с копии текущих
+    metrics_target = metrics_current.copy()
     fat_mass_goal = getattr(u, "fat_mass_goal", None)
     muscle_mass_goal = getattr(u, "muscle_mass_goal", None)
 
-    # Рассчитываем новые метрики только если обе цели установлены
     if fat_mass_goal is not None and muscle_mass_goal is not None:
         metrics_target["fat_mass"] = fat_mass_goal
         metrics_target["muscle_mass"] = muscle_mass_goal
@@ -4100,39 +4247,37 @@ def visualize_run():
         metrics_target["fat_pct"] = _compute_pct(fat_mass_goal, target_weight)
         metrics_target["muscle_pct"] = _compute_pct(muscle_mass_goal, target_weight)
 
-    # --- upload_root ---
-    upload_root = os.path.join(app.config['UPLOAD_FOLDER'], 'visualizations', str(u.id))
-    os.makedirs(upload_root, exist_ok=True)
-
     try:
-        current_image_path, target_image_path = generate_for_user(
+        # Вызываем обновленную функцию, передавая байты аватара
+        current_image_filename, target_image_filename = generate_for_user(
             user=u,
-            avatar_abs_path=avatar_abs_path,
-            metrics_current=metrics_current,
-            metrics_target=metrics_target,
-            upload_root=upload_root,
-            main_upload_folder=app.config['UPLOAD_FOLDER']
-        )
-
-        new_viz_record = create_record(
-            user=u,
-            curr_rel=current_image_path,
-            tgt_rel=target_image_path,
+            avatar_bytes=avatar_bytes,
             metrics_current=metrics_current,
             metrics_target=metrics_target
         )
 
+        # Функция create_record теперь принимает имена файлов
+        new_viz_record = create_record(
+            user=u,
+            curr_filename=current_image_filename,
+            tgt_filename=target_image_filename,
+            metrics_current=metrics_current,
+            metrics_target=metrics_target
+        )
+
+        # Используем новый маршрут 'serve_file'
         return jsonify({
             "success": True,
             "visualization": {
-                "image_current_path": url_for('serve_uploaded_file', filename=new_viz_record.image_current_path),
-                "image_target_path": url_for('serve_uploaded_file', filename=new_viz_record.image_target_path),
+                "image_current_path": url_for('serve_file', filename=new_viz_record.image_current_path),
+                "image_target_path": url_for('serve_file', filename=new_viz_record.image_target_path),
                 "created_at": new_viz_record.created_at.strftime('%d.%m.%Y %H:%M')
             }
         })
 
     except Exception as e:
         app.logger.error("[visualize] generation failed: %s", e, exc_info=True)
+        db.session.rollback()  # Откатываем транзакцию в случае ошибки
         return jsonify({"success": False, "error": f"Не удалось сгенерировать визуализацию: {e}"}), 500
 
 # ===== ADMIN: Аудит =====
@@ -4146,6 +4291,13 @@ def admin_audit():
 # регистрация блюпринта (добавь после определения маршрутов)
 app.register_blueprint(bp)
 app.register_blueprint(shopping_bp, url_prefix="/shopping")
+app.register_blueprint(assistant_bp) # <--- И ЭТУ СТРОКУ
+
+@app.route('/files/<path:filename>')
+def serve_file(filename):
+    """Отдаёт загруженный файл из БД."""
+    f = UploadedFile.query.filter_by(filename=filename).first_or_404()
+    return send_file(BytesIO(f.data), mimetype=f.content_type)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

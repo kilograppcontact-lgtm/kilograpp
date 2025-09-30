@@ -5,20 +5,24 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="3fd51ef2-c522-4b09-b8bb-159666be30fe" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/gemini_visualizer.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/shopping_bp.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/templates/errors/403.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/templates/errors/404.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/templates/errors/500.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/templates/visualize.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.env" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/assistant_bp.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/helpers.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/kilo_ai_assistant.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gemini_visualizer.py" beforeDir="false" afterPath="$PROJECT_DIR$/gemini_visualizer.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/models.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/confirm_analysis.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/confirm_analysis.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/confirm_diet.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/confirm_diet.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/telegram_bot.py" beforeDir="false" afterPath="$PROJECT_DIR$/telegram_bot.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/admin_user_detail.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/admin_user_detail.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/base.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/base.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/group_detail.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/group_detail.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/profile.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/profile.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/templates/register.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/register.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/visualize.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/visualize.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/uploads/2025-09-25_140140.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/uploads/2025-09-25_143949.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/uploads/meal.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/uploads/meal.jpg" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

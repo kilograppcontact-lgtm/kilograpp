@@ -10,7 +10,7 @@ from google import genai
 from google.genai import types
 
 from extensions import db
-from models import BodyVisualization
+from models import BodyVisualization, UploadedFile
 
 MODEL_NAME = "gemini-2.5-flash-image-preview"
 
@@ -98,10 +98,18 @@ def _extract_first_image_bytes(response) -> bytes:
     raise RuntimeError("No image returned by Gemini model")
 
 
-def _save_png(raw_bytes: bytes, path: str):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with Image.open(io.BytesIO(raw_bytes)) as im:
-        im.save(path, format="PNG")
+def _save_png_to_db(raw_bytes: bytes, user_id: int, base_name: str) -> str:
+    """Сохраняет PNG в БД и возвращает уникальное имя файла."""
+    unique_filename = f"viz_{user_id}_{base_name}_{uuid.uuid4().hex}.png"
+    new_file = UploadedFile(
+        filename=unique_filename,
+        content_type='image/png',
+        data=raw_bytes,
+        size=len(raw_bytes),
+        user_id=user_id
+    )
+    db.session.add(new_file)
+    return unique_filename
 
 
 def _compute_pct(value: float, weight: float) -> float:
@@ -110,10 +118,10 @@ def _compute_pct(value: float, weight: float) -> float:
     return round(100.0 * float(value) / float(weight), 2)
 
 
-def generate_for_user(user, avatar_abs_path: str, metrics_current: Dict[str, float], metrics_target: Dict[str, float],
-                      upload_root: str, main_upload_folder: str) -> Tuple[str, str]:
+def generate_for_user(user, avatar_bytes: bytes, metrics_current: Dict[str, float], metrics_target: Dict[str, float]) -> Tuple[str, str]:
     """
-    Генерирует 2 изображения: текущее и целевое.
+    Генерирует 2 изображения и СОХРАНЯЕТ В БД.
+    Возвращает имена файлов.
     """
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -122,14 +130,7 @@ def generate_for_user(user, avatar_abs_path: str, metrics_current: Dict[str, flo
     client = genai.Client(api_key=api_key)
 
     ts = int(time.time())
-    base_dir = os.path.join(upload_root, "visuals", str(user.id), datetime.utcnow().strftime("%Y%m%d"))
-    os.makedirs(base_dir, exist_ok=True)
-    rel_dir = os.path.relpath(base_dir, main_upload_folder).replace("\\", "/")
-
     scene_id = f"scene-{uuid.uuid4().hex}"
-
-    with open(avatar_abs_path, "rb") as f:
-        avatar_bytes = f.read()
 
     # текущая
     prompt_curr = _build_prompt(user.sex or "male", metrics_current, "current", scene_id)
@@ -149,29 +150,21 @@ def generate_for_user(user, avatar_abs_path: str, metrics_current: Dict[str, flo
     resp_tgt = client.models.generate_content(model=MODEL_NAME, contents=contents_tgt)
     tgt_png = _extract_first_image_bytes(resp_tgt)
 
-    # сохраняем
-    curr_name = f"{ts}_current.png"
-    tgt_name = f"{ts}_target.png"
-    curr_abs = os.path.join(base_dir, curr_name)
-    tgt_abs = os.path.join(base_dir, tgt_name)
+    # сохраняем в БД
+    curr_filename = _save_png_to_db(curr_png, user.id, f"{ts}_current")
+    tgt_filename = _save_png_to_db(tgt_png, user.id, f"{ts}_target")
 
-    _save_png(curr_png, curr_abs)
-    _save_png(tgt_png, tgt_abs)
-
-    curr_rel = f"{rel_dir}/{curr_name}"
-    tgt_rel = f"{rel_dir}/{tgt_name}"
-
-    return curr_rel, tgt_rel
+    return curr_filename, tgt_filename
 
 
-def create_record(user, curr_rel: str, tgt_rel: str, metrics_current: Dict[str, float],
+def create_record(user, curr_filename: str, tgt_filename: str, metrics_current: Dict[str, float],
                   metrics_target: Dict[str, float]):
     vis = BodyVisualization(
         user_id=user.id,
         metrics_current=metrics_current,
         metrics_target=metrics_target,
-        image_current_path=curr_rel,
-        image_target_path=tgt_rel,
+        image_current_path=curr_filename,
+        image_target_path=tgt_filename,
         status="done",
         provider="gemini"
     )

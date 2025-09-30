@@ -249,77 +249,130 @@
       </div>
 
       <!-- Подписка (модалка внутри) -->
-      <div class="bg-white shadow rounded-lg p-6">
+    <div class="bg-white shadow rounded-lg p-6" >
         <h2 class="text-lg font-semibold mb-3">Подписка</h2>
         <button @click="isModalOpen=true" type="button"
-                class="w-full px-4 py-2 rounded-lg text-white
+                class="w-full px-4 py-2 rounded-lg text-white text-sm font-medium
                   {% if user.subscription and user.subscription.is_active %} bg-green-600 hover:bg-green-700
-                  {% elif user.subscription and user.subscription.status == 'frozen' %} bg-blue-600 hover:bg-blue-700
+                  {% elif user.subscription and user.subscription.status == 'frozen' %} bg-sky-600 hover:bg-sky-700
                   {% else %} bg-gray-500 hover:bg-gray-600 {% endif %}">
           {% if user.subscription and user.subscription.is_active %}
-            {% if user.subscription.end_date %} Активна до {{ user.subscription.end_date.strftime('%d.%m.%Y') }} {% else %} ✅ Безлимитная {% endif %}
+            {% if user.subscription.end_date %} ✅ Активна до {{ user.subscription.end_date.strftime('%d.%m.%Y') }} {% else %} ✅ Безлимитная {% endif %}
           {% elif user.subscription and user.subscription.status == 'frozen' %}
             ❄️ Заморожена (осталось {{ user.subscription.remaining_days_on_freeze }} дн.)
           {% else %}
-            Неактивна
+            ❌ Неактивна
           {% endif %}
           (Управлять)
         </button>
 
-        <!-- Встроенная модалка -->
-        <div x-show="isModalOpen" x-cloak class="fixed inset-0 z-40 flex items-center justify-center">
+        <div style="z-index:17" x-show="isModalOpen" x-cloak class="fixed inset-0 z-40 flex items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/40" @click="isModalOpen=false"></div>
-          <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6">
+
+          <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6" @click.stop>
             <div class="flex items-start justify-between gap-4">
               <div>
                 <h3 class="text-xl font-semibold">Управление подпиской</h3>
                 {% if user.subscription %}
                   <p class="text-sm text-gray-600 mt-1">
-                    Статус:
-                    <span class="font-medium">
+                    Текущий статус:
+                    <span class="font-medium px-2 py-0.5 rounded
+                      {% if user.subscription.is_active %} bg-green-100 text-green-800
+                      {% elif user.subscription.status == 'frozen' %} bg-sky-100 text-sky-800
+                      {% else %} bg-gray-100 text-gray-800 {% endif %}">
                       {% if user.subscription.is_active %}Активна{% elif user.subscription.status=='frozen' %}Заморожена{% else %}Неактивна{% endif %}
                     </span>
                     {% if user.subscription.start_date %} • Начало: {{ user.subscription.start_date.strftime('%d.%m.%Y') }}{% endif %}
                     {% if user.subscription.end_date %} • Конец: {{ user.subscription.end_date.strftime('%d.%m.%Y') }}{% endif %}
                   </p>
                 {% else %}
-                  <p class="text-sm text-gray-600 mt-1">Подписка отсутствует.</p>
+                  <p class="text-sm text-gray-600 mt-1">Подписка у пользователя отсутствует.</p>
                 {% endif %}
               </div>
-              <button class="p-2 rounded-lg hover:bg-gray-100" @click="isModalOpen=false" aria-label="Закрыть">✕</button>
+              <button class="p-1 rounded-full text-gray-500 hover:bg-gray-100" @click="isModalOpen=false" aria-label="Закрыть">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
             </div>
 
-            <div class="mt-4 grid sm:grid-cols-2 gap-4">
-              <div class="border rounded-lg p-4">
-                <div class="text-sm text-gray-500">Текущее состояние</div>
-                <div class="mt-1 text-lg font-semibold">
+            <div class="mt-6 grid md:grid-cols-2 gap-6">
+              <div class="space-y-4">
+                <h4 class="font-semibold text-gray-800">
+                  {% if user.subscription %}Обновить подписку{% else %}Выдать новую подписку{% endif %}
+                </h4>
+                <form method="post" action="{{ url_for('manage_subscription', user_id=user.id) }}" class="space-y-4">
+                  <input type="hidden" name="action" value="grant">
+
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1.5">Длительность</label>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                      {% set durations = [('1m', '1 месяц'), ('3m', '3 месяца'), ('6m', '6 месяцев'), ('12m', '12 месяцев')] %}
+                      {% for value, label in durations %}
+                      <label class="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50">
+                        <input type="radio" name="duration" value="{{ value }}" class="h-4 w-4 text-blue-600 border-gray-300">
+                        <span>{{ label }}</span>
+                      </label>
+                      {% endfor %}
+                      <label class="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-gray-50 col-span-2">
+                        <input type="radio" name="duration" value="unlimited" class="h-4 w-4 text-blue-600 border-gray-300">
+                        <span>Безлимитная</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label for="start_date" class="block text-sm font-medium text-gray-700">Дата начала (если пусто - сегодня)</label>
+                    <input type="date" name="start_date" id="start_date" value="{{ today.isoformat() }}"
+                           class="mt-1 w-full border rounded-md px-3 py-2 text-sm">
+                  </div>
+
+                  <button type="submit" class="w-full px-4 py-2 rounded-lg text-white bg-blue-600 hover:bg-blue-700 font-semibold">
+                    Выдать / Обновить
+                  </button>
+                </form>
+              </div>
+
+              <div class="space-y-4">
+                <h4 class="font-semibold text-gray-800">Другие действия</h4>
+                <div class="p-4 border rounded-lg space-y-3">
+                  {% if user.subscription and user.subscription.is_active and user.subscription.end_date %}
+                  <form method="post" action="{{ url_for('manage_subscription', user_id=user.id) }}">
+                      <input type="hidden" name="action" value="freeze">
+                      <button type="submit" class="w-full px-4 py-2 text-sm rounded-lg text-white bg-sky-500 hover:bg-sky-600">
+                        ❄️ Заморозить подписку
+                      </button>
+                  </form>
+                  {% endif %}
+
+                  {% if user.subscription and user.subscription.status == 'frozen' %}
+                  <form method="post" action="{{ url_for('manage_subscription', user_id=user.id) }}">
+                      <input type="hidden" name="action" value="unfreeze">
+                      <button type="submit" class="w-full px-4 py-2 text-sm rounded-lg text-white bg-green-500 hover:bg-green-600">
+                        ▶️ Разморозить подписку
+                      </button>
+                  </form>
+                  {% endif %}
+
                   {% if user.subscription %}
-                    {% if user.subscription.is_active %}Активна{% elif user.subscription.status=='frozen' %}Заморожена{% else %}Неактивна{% endif %}
-                  {% else %}Нет{% endif %}
+                  <form method="post" action="{{ url_for('manage_subscription', user_id=user.id) }}"
+                        onsubmit="return confirm('Вы уверены, что хотите удалить подписку этого пользователя?');">
+                      <input type="hidden" name="action" value="remove">
+                      <button type="submit" class="w-full px-4 py-2 text-sm rounded-lg text-white bg-red-600 hover:bg-red-700">
+                        🗑️ Удалить подписку
+                      </button>
+                  </form>
+                  {% else %}
+                  <p class="text-sm text-gray-500 text-center py-4">Нет действий, так как подписка отсутствует.</p>
+                  {% endif %}
                 </div>
-                {% if user.subscription and user.subscription.end_date %}
-                  <div class="text-sm mt-1">До: {{ user.subscription.end_date.strftime('%d.%m.%Y') }}</div>
-                {% endif %}
-              </div>
-
-              <div class="border rounded-lg p-4">
-                <div class="text-sm text-gray-500">Опции</div>
-                <ul class="mt-2 space-y-2 text-sm text-gray-700 list-disc pl-5">
-                  <li>Продлить или заморозить подписку (нужны серверные эндпоинты).</li>
-                  <li>Выслать ссылку на оплату пользователю.</li>
-                  <li>Снять заморозку при необходимости.</li>
-                </ul>
               </div>
             </div>
 
-            <div class="mt-6 flex justify-end gap-2">
-              <button class="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200" @click="isModalOpen=false">Закрыть</button>
-              <button class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700" @click="isModalOpen=false">Сохранить</button>
+            <div class="mt-6 flex justify-end">
+              <button class="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm" @click="isModalOpen=false">Закрыть</button>
             </div>
           </div>
         </div>
-        <!-- /Встроенная модалка -->
-      </div>
+        </div>
 
       <!-- Удаление -->
       <div class="bg-white shadow rounded-lg p-6">

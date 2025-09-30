@@ -6,52 +6,38 @@
   <title>Kilogr.app</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <style>[x-cloak] { display: none !important; }</style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" />
   <style>
-/* Простой и заметный: Golos Text */
-body {
-  font-family: 'Golos Text', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
-  background: linear-gradient(to bottom, #f0f4f8 0%, #ffffff 100%);
-  min-height: 100vh;
-  font-weight: 500;         /* чуть плотнее базовый текст — ощущается «заметнее» */
-  letter-spacing: 0.1px;    /* деликатная разрядка для читабельности */
-}
-
-/* Заголовки — выразительнее, но без лишней декоративности */
-h1, h2, h3, h4 {
-  font-weight: 700;
-  letter-spacing: 0.2px;
-}
-
-/* Навигация и кнопки — уверенный medium */
-.nav-link, .mobile-nav-link, .btn {
-  font-weight: 600;
-}
-
-
-
+    body {
+      font-family: 'Golos Text', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+      background: linear-gradient(to bottom, #f0f4f8 0%, #ffffff 100%);
+      min-height: 100vh;
+      font-weight: 500;
+      letter-spacing: 0.1px;
+    }
+    h1, h2, h3, h4 {
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+    .nav-link, .mobile-nav-link, .btn {
+      font-weight: 600;
+    }
     .nav-link {
       @apply text-gray-600 font-medium hover:text-blue-600 transition duration-200;
     }
-
-    /* Стили для ссылок в мобильном меню */
     .mobile-nav-link {
         @apply block text-gray-700 py-2 px-4 text-base hover:bg-gray-100 rounded-md;
     }
-
     .nav-link-active {
       @apply text-blue-600 font-semibold;
     }
-
     .hover-scale {
       transition: transform 0.2s ease;
     }
-
     .hover-scale:hover {
       transform: scale(1.04);
     }
@@ -64,13 +50,10 @@ h1, h2, h3, h4 {
   class="sticky top-0 z-50 bg-white shadow-sm border-b border-slate-200
          md:bg-white/70 md:backdrop-blur-xl md:supports-[backdrop-filter]:bg-white/60 md:border-white/20">
 
-  <!-- Градиентная линия -->
   <div class="h-0.5 w-full bg-gradient-to-r from-indigo-400 via-sky-400 to-emerald-400"></div>
 
-  <!-- Топбар -->
   <div class="max-w-7xl mx-auto px-4">
     <div class="flex items-center justify-between py-3">
-      <!-- Лого -->
       <a href="/profile" class="flex items-center gap-2 hover:opacity-90 transition">
         <img
           src="{{ url_for('static', filename='logo.png') }}"
@@ -80,7 +63,6 @@ h1, h2, h3, h4 {
         />
       </a>
 
-      <!-- Десктоп-меню -->
       <nav class="hidden md:flex items-center gap-2">
         {% if session.user_id %}
           {% if current_user and current_user.email == 'admin@healthclub.local' %}
@@ -90,19 +72,16 @@ h1, h2, h3, h4 {
               <span>Админ панель</span>
             </a>
           {% endif %}
-
           <a href="/manual_activity"
              class="inline-flex px-4 py-2 rounded-full text-sm font-medium transition
                     {% if request.path == '/manual_activity' %} bg-slate-900 text-white shadow {% else %} text-slate-600 hover:text-slate-900 hover:bg-slate-100 {% endif %}">
             Добавить активность
           </a>
-
           <a href="/trainings-calendar"
              class="inline-flex px-4 py-2 rounded-full text-sm font-medium transition
                     {% if request.path == '/trainings-calendar' %} bg-slate-900 text-white shadow {% else %} text-slate-600 hover:text-slate-900 hover:bg-slate-100 {% endif %}">
             Расписание
           </a>
-
           {% if is_trainer_user %}
           <a href="/trainings"
              class="inline-flex px-4 py-2 rounded-full text-sm font-medium transition
@@ -110,7 +89,6 @@ h1, h2, h3, h4 {
             Тренировки
           </a>
           {% endif %}
-
           <a href="/logout"
              class="ml-2 inline-flex px-4 py-2 rounded-full text-sm font-semibold text-red-600 hover:bg-red-50 transition">
             Выйти
@@ -128,7 +106,6 @@ h1, h2, h3, h4 {
         {% endif %}
       </nav>
 
-      <!-- Бургер -->
       <button
         @click="open = true"
         class="md:hidden inline-flex items-center justify-center h-10 w-10 rounded-xl text-slate-700 hover:bg-slate-100 transition"
@@ -138,47 +115,29 @@ h1, h2, h3, h4 {
     </div>
   </div>
 
-  <!-- Мобильная шторка -->
-  <div
-    x-show="open"
-    x-cloak
-    class="fixed inset-0 z-50 md:hidden"
-    role="dialog" aria-modal="true">
-
-    <!-- Подложка (мягкое появление/исчезание) -->
-    <div class="absolute inset-0 bg-black/50"
-         @click="open=false"
+  <div x-show="open" x-cloak class="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-black/50" @click="open=false"
          x-transition:enter="transition-opacity ease-out duration-250"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100"
          x-transition:leave="transition-opacity ease-in duration-200"
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0"></div>
-
-    <!-- Панель (слайд справа + лёгкий fade) -->
     <aside
-      class="absolute right-0 top-0 h-full w-[88vw] max-w-[380px] bg-white shadow-2xl
-             rounded-l-2xl p-5 flex flex-col will-change-transform will-change-opacity"
+      class="absolute right-0 top-0 h-full w-[88vw] max-w-[380px] bg-white shadow-2xl rounded-l-2xl p-5 flex flex-col will-change-transform will-change-opacity"
       x-transition:enter="transform transition ease-out duration-300"
       x-transition:enter-start="translate-x-full opacity-0"
       x-transition:enter-end="translate-x-0 opacity-100"
       x-transition:leave="transform transition ease-in duration-200"
       x-transition:leave-start="translate-x-0 opacity-100"
       x-transition:leave-end="translate-x-full opacity-0">
-
-      <!-- Заголовок панели -->
       <div class="flex items-center justify-between mb-3">
         <span class="text-sm font-semibold text-slate-500">Меню</span>
         <button @click="open=false" class="h-9 w-9 rounded-lg hover:bg-slate-100 text-slate-700">
           <i class="bi bi-x-lg text-xl"></i>
         </button>
       </div>
-
-      <!-- Ссылки: стэггер анимация пунктов -->
-      <nav class="space-y-2"
-           x-data
-           x-init="$watch('open', v => { /* просто триггер для повторной анимации при каждом открытии */ })">
-
+      <nav class="space-y-2" x-data x-init="$watch('open', v => {})">
         {% if session.user_id %}
           {% if current_user and current_user.email == 'admin@healthclub.local' %}
           <a href="/admin"
@@ -186,68 +145,49 @@ h1, h2, h3, h4 {
              x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="opacity-0 translate-y-2"
              x-transition:enter-end="opacity-100 translate-y-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-y-0"
-             x-transition:leave-end="opacity-0 translate-y-2"
              :style="{ transitionDelay: (0*60)+'ms' }"
              class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-yellow-200 bg-yellow-50 text-yellow-800 font-semibold shadow-sm hover:bg-yellow-100 transition">
             <i class="bi bi-shield-lock text-lg"></i>
             <span>Админ панель</span>
           </a>
           {% endif %}
-
           <a href="/manual_activity"
              x-show="open"
              x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="opacity-0 translate-y-2"
              x-transition:enter-end="opacity-100 translate-y-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-y-0"
-             x-transition:leave-end="opacity-0 translate-y-2"
              :style="{ transitionDelay: (1*60)+'ms' }"
              class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-semibold shadow-sm hover:bg-slate-50 active:bg-slate-100 transition">
             <i class="bi bi-plus-circle text-lg"></i>
             <span>Добавить активность</span>
           </a>
-
           <a href="/trainings-calendar"
              x-show="open"
              x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="opacity-0 translate-y-2"
              x-transition:enter-end="opacity-100 translate-y-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-y-0"
-             x-transition:leave-end="opacity-0 translate-y-2"
              :style="{ transitionDelay: (2*60)+'ms' }"
              class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-semibold shadow-sm hover:bg-slate-50 active:bg-slate-100 transition">
             <i class="bi bi-calendar3 text-lg"></i>
             <span>Расписание</span>
           </a>
-
           {% if is_trainer_user %}
           <a href="/trainings"
              x-show="open"
              x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="opacity-0 translate-y-2"
              x-transition:enter-end="opacity-100 translate-y-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-y-0"
-             x-transition:leave-end="opacity-0 translate-y-2"
              :style="{ transitionDelay: (3*60)+'ms' }"
              class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-semibold shadow-sm hover:bg-slate-50 active:bg-slate-100 transition">
             <i class="bi bi-dumbbell text-lg"></i>
             <span>Тренировки</span>
           </a>
           {% endif %}
-
           <a href="/logout"
              x-show="open"
              x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="opacity-0 translate-y-2"
              x-transition:enter-end="opacity-100 translate-y-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-y-0"
-             x-transition:leave-end="opacity-0 translate-y-2"
              :style="{ transitionDelay: (4*60)+'ms' }"
              class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-red-200 bg-red-50 text-red-700 font-semibold shadow-sm hover:bg-red-100 transition">
             <i class="bi bi-box-arrow-right text-lg"></i>
@@ -259,23 +199,16 @@ h1, h2, h3, h4 {
              x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="opacity-0 translate-y-2"
              x-transition:enter-end="opacity-100 translate-y-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-y-0"
-             x-transition:leave-end="opacity-0 translate-y-2"
              :style="{ transitionDelay: (0*60)+'ms' }"
              class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-semibold shadow-sm hover:bg-slate-50 active:bg-slate-100 transition">
             <i class="bi bi-person text-lg"></i>
             <span>Вход</span>
           </a>
-
           <a href="/register"
              x-show="open"
              x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="opacity-0 translate-y-2"
              x-transition:enter-end="opacity-100 translate-y-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-y-0"
-             x-transition:leave-end="opacity-0 translate-y-2"
              :style="{ transitionDelay: (1*60)+'ms' }"
              class="flex w-full items-center gap-3 h-12 px-4 rounded-xl border border-transparent text-white font-semibold shadow
                     bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500 hover:from-indigo-600 hover:via-blue-600 hover:to-sky-600 transition">
@@ -284,122 +217,334 @@ h1, h2, h3, h4 {
           </a>
         {% endif %}
       </nav>
-
-      <!-- Футер панели (плавный fade) -->
-      <div class="mt-auto pt-4 text-xs text-slate-400"
-           x-show="open"
+      <div class="mt-auto pt-4 text-xs text-slate-400" x-show="open"
            x-transition:enter="transition-opacity ease-out duration-300"
            x-transition:enter-start="opacity-0"
-           x-transition:enter-end="opacity-100"
-           x-transition:leave="transition-opacity ease-in duration-150"
-           x-transition:leave-start="opacity-100"
-           x-transition:leave-end="opacity-0">
+           x-transition:enter-end="opacity-100">
         © 2025 <span class="font-semibold text-slate-500">Kilogr.app</span>
       </div>
     </aside>
   </div>
 </header>
 
-
-  <main class="flex-grow">
+<main class="flex-grow">
     {% block content %}{% endblock %}
-  </main>
+</main>
 
-  {# напоминание о продлении — оставлено без изменений #}
-  {% if renewal_reminder_due and subscription_days_left and subscription_days_left > 0 %}
-  <div id="renewalPopupOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div id="renewalPopupContent" class="card w-full max-w-lg p-6 sm:p-8 relative text-center animate-fade-in" onclick="event.stopPropagation()">
-      <button onclick="closeRenewalPopup()" class="absolute top-4 right-4 text-slate-400 text-2xl hover:text-slate-600 transition-colors" aria-label="Закрыть">&times;</button>
-
-      <div class="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-gradient-to-br from-amber-400 to-pink-500 mb-5 shadow-lg animate-pulse">
-        <span class="text-4xl text-white">⌛</span>
-      </div>
-
-      <h2 class="text-2xl font-bold text-slate-900">Подписка заканчивается через {{ subscription_days_left }} дн.</h2>
-      <p class="text-slate-600 mt-2">Не теряйте доступ к тренировкам и ИИ-диетам — продлите сейчас.</p>
-
-      <div class="mt-6 grid grid-cols-2 gap-3 text-left">
-        <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
-          <div class="text-xs font-semibold text-emerald-700">Сожжено жира за месяц</div>
-          <div class="mt-1 text-2xl font-extrabold text-emerald-700">
-            {{ (monthly_summary.fat_delta * -1)|round(2) if monthly_summary.fat_delta < 0 else 0 }} <span class="text-base">кг</span>
-          </div>
-          <div class="mt-2 w-full bg-emerald-100 h-2 rounded-full overflow-hidden">
-            <div class="h-2 bg-emerald-500 progress-bar-animate" style="width: {{ (monthly_summary.fat_delta < 0) and (min(100, (monthly_summary.fat_delta * -1) * 20)) or 0 }}%"></div>
-          </div>
-        </div>
-
-        <div class="p-4 rounded-xl border border-indigo-200 bg-indigo-50">
-          <div class="text-xs font-semibold text-indigo-700">Прирост мышц за месяц</div>
-          <div class="mt-1 text-2xl font-extrabold text-indigo-700">
-            {{ (monthly_summary.muscle_delta > 0) and (monthly_summary.muscle_delta|round(2)) or 0 }} <span class="text-base">кг</span>
-          </div>
-          <div class="mt-2 w-full bg-indigo-100 h-2 rounded-full overflow-hidden">
-            <div class="h-2 bg-indigo-500 progress-bar-animate" style="width: {{ (monthly_summary.muscle_delta > 0) and (min(100, monthly_summary.muscle_delta * 20)) or 0 }}%"></div>
-          </div>
+{% if renewal_reminder_due and subscription_days_left and subscription_days_left > 0 %}
+<div id="renewalPopupOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+  <div id="renewalPopupContent" class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 sm:p-8 relative text-center" onclick="event.stopPropagation()">
+    <button onclick="closeRenewalPopup()" class="absolute top-4 right-4 text-slate-400 text-2xl hover:text-slate-600 transition-colors" aria-label="Закрыть">&times;</button>
+    <div class="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-gradient-to-br from-amber-400 to-pink-500 mb-5 shadow-lg">
+      <span class="text-4xl text-white">⌛</span>
+    </div>
+    <h2 class="text-2xl font-bold text-slate-900">Подписка заканчивается через {{ subscription_days_left }} дн.</h2>
+    <p class="text-slate-600 mt-2">Не теряйте доступ к тренировкам и ИИ-диетам — продлите сейчас.</p>
+    <div class="mt-6 grid grid-cols-2 gap-3 text-left">
+      <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
+        <div class="text-xs font-semibold text-emerald-700">Сожжено жира за месяц</div>
+        <div class="mt-1 text-2xl font-extrabold text-emerald-700">
+          {{ (monthly_summary.fat_delta * -1)|round(2) if monthly_summary.fat_delta < 0 else 0 }} <span class="text-base">кг</span>
         </div>
       </div>
-
-      <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-        <a href="{{ url_for('purchase_page') }}" class="btn btn-primary">Продлить подписку</a>
-        <button onclick="closeRenewalPopup()" class="btn btn-secondary">Пока позже</button>
+      <div class="p-4 rounded-xl border border-indigo-200 bg-indigo-50">
+        <div class="text-xs font-semibold text-indigo-700">Прирост мышц за месяц</div>
+        <div class="mt-1 text-2xl font-extrabold text-indigo-700">
+          {{ (monthly_summary.muscle_delta > 0) and (monthly_summary.muscle_delta|round(2)) or 0 }} <span class="text-base">кг</span>
+        </div>
       </div>
     </div>
+    <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+      <a href="{{ url_for('purchase_page') }}" class="w-full sm:w-auto px-6 py-3 rounded-full text-white font-semibold bg-indigo-600 hover:bg-indigo-700 transition">Продлить подписку</a>
+      <button onclick="closeRenewalPopup()" class="w-full sm:w-auto px-6 py-3 rounded-full text-slate-700 font-semibold bg-slate-200 hover:bg-slate-300 transition">Напомнить позже</button>
+    </div>
   </div>
-
-  <script>
-    const renewalOverlay = document.getElementById('renewalPopupOverlay');
-
-    function closeRenewalPopup() {
-      if (!renewalOverlay) return;
-      fetch('/api/dismiss_renewal_reminder', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-        .catch(()=>{});
-      renewalOverlay.style.transition = 'opacity 0.3s ease';
-      renewalOverlay.style.opacity = '0';
-      setTimeout(() => {
-        renewalOverlay.style.display = 'none';
-        lockScroll(false);
-      }, 300);
-    }
-
-    if (renewalOverlay) {
-      lockScroll(true);
-      renewalOverlay.addEventListener('click', function(e){
-        if (e.target === renewalOverlay) closeRenewalPopup();
-      });
-      document.addEventListener('keydown', function(e){
-        if (e.key === 'Escape') closeRenewalPopup();
-      });
-    }
-  </script>
-  {% endif %}
-{% if show_help_button %}
-<!-- Броская кнопка помощи для новичков -->
-<div class="fixed bottom-5 right-5 z-40 group">
-  <!-- Пульсирующий индикатор внимания -->
-  <span class="absolute -top-1 -right-1 inline-flex h-3 w-3">
-    <span class="absolute inline-flex h-full w-full rounded-full bg-indigo-400/60 animate-ping"></span>
-    <span class="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
-  </span>
-
-  <!-- Подсказка-лейбл (видна всегда на десктопе, на мобилках скрыта) -->
-  <span class="hidden sm:inline-block mb-2 mr-1 px-2 py-1 text-xs font-medium rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 shadow">
-    Как пользоваться
-  </span>
-
-  <a href="{{ url_for('instructions_page') }}"
-     class="inline-flex items-center justify-center w-14 h-14 rounded-full shadow-xl ring-2 ring-indigo-200/70
-            bg-gradient-to-br from-white via-indigo-50 to-indigo-100 hover:from-white hover:via-white hover:to-white
-            border border-slate-200 text-indigo-600 transition transform hover:scale-105 active:scale-95">
-    <span class="sr-only">Как пользоваться</span>
-    <i class="bi bi-question-circle text-2xl"></i>
-  </a>
 </div>
+<script>
+  function closeRenewalPopup() {
+    const renewalOverlay = document.getElementById('renewalPopupOverlay');
+    if (!renewalOverlay) return;
+    fetch('/api/dismiss_renewal_reminder', { method: 'POST' }).catch(()=>{});
+    renewalOverlay.style.transition = 'opacity 0.3s ease';
+    renewalOverlay.style.opacity = '0';
+    setTimeout(() => { renewalOverlay.style.display = 'none'; }, 300);
+  }
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') closeRenewalPopup();
+  });
+</script>
 {% endif %}
+
+<div class="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-4">
+
+    {% if show_help_button %}
+    <div x-data="{ open: true }" x-show="open"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 translate-x-4"
+         x-transition:enter-end="opacity-100 translate-x-0"
+         class="group flex items-center gap-3">
+      <div class="hidden sm:block px-3 py-1.5 text-sm font-medium rounded-full bg-white text-indigo-800 border border-indigo-200 shadow-lg">
+        С чего начать?
+      </div>
+      <a href="{{ url_for('instructions_page') }}"
+         class="relative inline-flex items-center justify-center w-14 h-14 rounded-full shadow-xl
+                bg-white border border-slate-200 text-indigo-600 transition transform hover:scale-105 active:scale-95">
+        <span class="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
+        </span>
+        <i class="bi bi-question-circle text-2xl"></i>
+      </a>
+    </div>
+    {% endif %}
+
+    <!-- чат: x-init загружает историю с сервера -->
+    <div x-data="chatWidget()" x-init="loadHistory()">
+      <div x-show="open" x-cloak
+           x-transition:enter="transition ease-out duration-300"
+           x-transition:enter-start="opacity-0 translate-y-4"
+           x-transition:enter-end="opacity-100 translate-y-0"
+           x-transition:leave="transition ease-in duration-200"
+           x-transition:leave-start="opacity-100 translate-y-0"
+           x-transition:leave-end="opacity-0 translate-y-4"
+           @click.outside="open = false"
+           class="absolute bottom-[80px] right-0 w-[90vw] max-w-sm h-[70vh] max-h-[500px] bg-white rounded-2xl shadow-2xl flex flex-col border border-slate-200/80">
+
+        <div class="flex-shrink-0 flex items-center justify-between p-3 border-b bg-slate-50 rounded-t-2xl">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-sky-400 flex items-center justify-center text-white">
+              <i class="bi bi-stars"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-800 text-sm">AI-Ассистент</h3>
+              <p class="text-xs text-slate-500">Помогу с платформой</p>
+            </div>
+          </div>
+          <button @click="open = false" class="w-8 h-8 rounded-lg text-slate-500 hover:bg-slate-200/60 transition">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+
+        <!-- сообщения будут рендериться из messages -->
+        <div x-ref="messages" class="flex-grow p-4 overflow-y-auto space-y-4">
+          <template x-for="message in messages" :key="message._id">
+            <div class="flex items-start gap-2.5" :class="message.role === 'user' ? 'justify-end' : ''">
+              <div x-show="message.role === 'bot'" class="flex-shrink-0 w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600"><i class="bi bi-robot"></i></div>
+              <div class="leading-relaxed p-3 rounded-xl text-sm max-w-[85%]"
+                   :class="message.role === 'user' ? 'rounded-br-none bg-indigo-500 text-white' : 'rounded-bl-none bg-slate-100 text-slate-800'">
+                <div x-html="message.content"></div>
+              </div>
+            </div>
+          </template>
+
+          <div x-show="loading" class="flex items-start gap-2.5">
+              <div class="flex-shrink-0 w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600"><i class="bi bi-robot"></i></div>
+              <div class="leading-relaxed p-3 rounded-xl rounded-bl-none bg-slate-100 text-slate-800 text-sm">
+                <div class="flex items-center gap-1">
+                    <span class="w-2 h-2 bg-slate-400 rounded-full animate-pulse" style="animation-delay: 0s;"></span>
+                    <span class="w-2 h-2 bg-slate-400 rounded-full animate-pulse" style="animation-delay: 0.2s;"></span>
+                    <span class="w-2 h-2 bg-slate-400 rounded-full animate-pulse" style="animation-delay: 0.4s;"></span>
+                </div>
+              </div>
+          </div>
+        </div>
+
+        <div class="flex-shrink-0 p-3 border-t bg-white rounded-b-2xl">
+          <form @submit.prevent="sendMessage" class="flex items-center gap-2">
+            <input x-model="userInput" type="text" placeholder="Спросите что-нибудь..."
+                   class="w-full h-10 px-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                   :disabled="loading">
+            <button type="submit" class="w-10 h-10 flex-shrink-0 rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 transition disabled:bg-indigo-300" :disabled="loading || userInput.trim() === ''">
+              <i class="bi bi-send"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <button @click="open = !open"
+              class="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-sky-500 text-white shadow-xl
+                     flex items-center justify-center transition transform hover:scale-105 active:scale-95">
+        <i class="bi text-3xl transition-transform duration-300" :class="open ? 'bi-x-lg rotate-90' : 'bi-chat-dots'"></i>
+      </button>
+    </div>
+</div>
+
+<script>
+  function chatWidget() {
+    return {
+      open: false,
+      loading: false,        // true когда идёт сетевой запрос или печать
+      userInput: '',
+      messages: [],
+      nextId: 1,
+      isTyping: false,       // отдельный флаг для анимации "печати"
+      typeSpeedMs: 18,       // скорость печати: миллисекунд на символ (подберите под вкус)
+
+      // ------- Общий парсер для содержимого сообщений (как у вас был) -------
+      formatMessageContent(raw) {
+        if (!raw && raw !== "") return "";
+        let escaped = (raw + '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+
+        // **bold**
+        escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+        // строки -> p / li
+        const lines = escaped.split(/\r?\n/);
+        const transformed = lines.map(line => {
+          const m = line.match(/^\s*[-*]\s+(.*)/);
+          if (m) return `<li>${m[1]}</li>`;
+          if (line.trim() === '') return '';
+          return `<p>${line}</p>`;
+        }).join('');
+
+        if (transformed.includes('<li>')) {
+          const liMatches = transformed.match(/<li>.*?<\/li>/gs) || [];
+          const liHtml = liMatches.join('');
+          const paras = transformed.replace(/<li>.*?<\/li>/gs, '');
+          const result = (paras.trim() ? paras : '') + `<ul class="list-disc list-inside space-y-1 mt-2">${liHtml}</ul>`;
+          return result;
+        }
+
+        return transformed;
+      },
+
+      scrollToBottom() {
+        this.$nextTick(() => {
+          if (!this.$refs.messages) return;
+          this.$refs.messages.scrollTop = this.$refs.messages.scrollHeight;
+        });
+      },
+
+      // ------- Загружаем историю с сервера и форматируем каждое сообщение (без анимации) -------
+      async loadHistory() {
+        try {
+          const resp = await fetch('/assistant/history');
+          if (!resp.ok) throw new Error('Failed to load history');
+          const data = await resp.json();
+          const history = data.history || [];
+
+          this.messages = history.map((m, idx) => {
+            const role = (m.role === 'assistant' || m.role === 'bot') ? 'bot' : 'user';
+            const content = this.formatMessageContent(m.content || '');
+            return { _id: `h-${idx}-${this.nextId++}`, role, content };
+          });
+
+          if (this.messages.length === 0) {
+            const welcome = "<p>Привет! Я — Kilo, ваш дружелюбный AI-ассистент на платформе Kilogr.app. 💪😊</p>";
+            this.messages.push({ _id: `welcome-${this.nextId++}`, role: 'bot', content: welcome });
+          }
+        } catch (err) {
+          console.error('Не удалось загрузить историю чата:', err);
+          this.messages = [{ _id: `err-${this.nextId++}`, role: 'bot', content: '<strong>Ошибка:</strong> не удалось загрузить историю.' }];
+        } finally {
+          this.scrollToBottom();
+        }
+      },
+
+      // ------- Анимация печати: постепенно раскрывает текст в messages[idx] -------
+      async _typeOutMessage(idx, fullText) {
+        // Защита: если уже печатается — не запускать второй раз
+        if (this.isTyping) return;
+        this.isTyping = true;
+        // Блокируем взаимодействие: loading true уже блокирует ввод,
+        // но мы дополнительно делаем pointer-events: none для контейнера через css binding
+        // Создаём пустой контент (если на месте idx сейчас пусто)
+        this.messages[idx].content = ''; // будет уже без форматирования до конца
+        const total = fullText.length;
+        let cur = '';
+        for (let i = 0; i < total; i++) {
+          cur += fullText[i];
+          // Экранируем для безопасного вывода (без markdown пока)
+          const escapedPart = (cur + '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+          // Заменим переносы на <br> визуально, но не применяем markdown пока
+          const previewHtml = escapedPart.replace(/\r?\n/g, '<br>');
+          this.messages[idx].content = previewHtml;
+          // скроллим вниз для ощущения "печати"
+          this.scrollToBottom();
+          // пауза
+          await new Promise(res => setTimeout(res, this.typeSpeedMs));
+        }
+        // По завершении — применяем полное форматирование markdown -> html
+        this.messages[idx].content = this.formatMessageContent(fullText || '');
+        this.isTyping = false;
+        this.loading = false; // разблокируем ввод
+        this.scrollToBottom();
+      },
+
+      // ------- Отправка сообщения и добавление ответа c анимацией -------
+      async sendMessage() {
+        if (this.loading || this.isTyping) return;
+        const text = this.userInput.trim();
+        if (!text) return;
+
+        // локально показываем сообщение пользователя (форматируем)
+        const userMsg = { _id: `u-${this.nextId++}`, role: 'user', content: this.formatMessageContent(text) };
+        this.messages.push(userMsg);
+        this.userInput = '';
+        this.scrollToBottom();
+
+        // заблокируем ввод и покажем загрузочный индикатор
+        this.loading = true;
+
+        try {
+          const response = await fetch('/assistant/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+          });
+
+          if (!response.ok) {
+            const errText = await response.text().catch(()=>null);
+            throw new Error(errText || 'Network response was not ok');
+          }
+
+          const data = await response.json();
+          const replyRaw = data.reply || '...';
+
+          // добавляем пустое сообщение бота — именно его будем "печать"
+          const botIndex = this.messages.length;
+          this.messages.push({ _id: `b-${this.nextId++}`, role: 'bot', content: '' });
+
+          // Делаем анимацию печати
+          // Заметим: во время печати контейнер сообщений будет заблокирован через class binding
+          await this._typeOutMessage(botIndex, replyRaw);
+
+        } catch (error) {
+          console.error('Chat error:', error);
+          // добавляем сообщение об ошибке — без анимации
+          this.messages.push({ _id: `err-${this.nextId++}`, role: 'bot', content: '<strong>Ошибка!</strong> Не удалось получить ответ.' });
+          this.loading = false;
+          this.isTyping = false;
+        } finally {
+          // гарантируем, что ввод разблокирован
+          this.loading = false;
+          this.isTyping = false;
+          this.scrollToBottom();
+        }
+      },
+
+      // helper (если нужен в другом месте)
+      escapeHtml(text) {
+        return (text + '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+    }
+  }
+</script>
+
 
 <footer class="bg-gray-50 border-t mt-12">
   <div class="max-w-7xl mx-auto px-4 py-6 text-center text-sm">
-    <!-- Постоянная ссылка на инструкцию для всех пользователей -->
     <div class="mb-2">
       <a href="{{ url_for('instructions_page') }}"
          class="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium">
