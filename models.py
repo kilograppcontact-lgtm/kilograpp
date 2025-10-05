@@ -26,6 +26,9 @@ class User(db.Model):
     fat_mass_goal = db.Column(db.Float, nullable=True)
     muscle_mass_goal = db.Column(db.Float, nullable=True)
 
+    initial_body_analysis_id = db.Column(db.Integer, db.ForeignKey('body_analysis.id'), nullable=True)
+    last_measurement_reminder_sent_at = db.Column(db.DateTime, nullable=True)
+
     is_trainer = db.Column(db.Boolean, default=False, nullable=False, server_default=expression.false())
 
     # Новые поля для визуализации тела
@@ -450,9 +453,12 @@ class BodyAnalysis(db.Model):
     fat_mass = db.Column(db.Float)
     bmi = db.Column(db.Float)
     fat_free_body_weight = db.Column(db.Float)
+    ai_comment = db.Column(db.Text, nullable=True)
+
 
     user = db.relationship(
         'User',
+        foreign_keys=[user_id],  # <--- ДОБАВЬТЕ ЭТУ СТРОКУ
         backref=db.backref('analyses', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
     )
 

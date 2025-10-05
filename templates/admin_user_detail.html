@@ -183,8 +183,8 @@
             <label class="block text-sm font-medium">Аватар</label>
             <input type="file" name="avatar" accept="image/*" class="mt-1 w-full border rounded-md px-3 py-2">
             {% if user.avatar %}
-              <img src="{{ url_for('serve_uploaded_file', filename=user.avatar) }}" alt="Аватар"
-                   class="mt-2 w-16 h-16 rounded-full object-cover">
+                            <img src="{{ url_for('serve_file', filename=user.avatar.filename) }}" alt="Avatar" class="w-16 h-16 rounded-full object-cover">
+
             {% endif %}
           </div>
 

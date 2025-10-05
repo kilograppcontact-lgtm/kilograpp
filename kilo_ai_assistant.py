@@ -60,14 +60,41 @@ GENERAL_PROMPT_TEMPLATE = """
 """
 
 
-# === Декоратор для проверки регистрации (без изменений) ===
+# === Декоратор для проверки регистрации (ИЗМЕНЕНО) ===
 def registered_user_only(func):
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        # Локальный импорт для предотвращения циклических зависимостей
+        from telegram_bot import _link_code
+
         chat_id = update.effective_chat.id
         if context.user_data.get('is_registered'):
             return await func(update, context, *args, **kwargs)
 
+        # НОВАЯ ЛОГИКА: Проверяем, не пытается ли пользователь привязать аккаунт кодом
+        user_message = update.message.text if update.message and update.message.text else ''
+        code = user_message.strip()
+        if code.isdigit() and len(code) == 8:
+            logging.info(f"AI Assistant: Unregistered user {chat_id} sent a potential link code.")
+
+            # Вызываем функцию привязки из telegram_bot.py
+            success, status_code, response_message = await _link_code(chat_id, code)
+
+            if success:
+                logging.info(f"AI Assistant: Successfully linked user {chat_id} via direct code message.")
+                context.user_data['is_registered'] = True
+                await update.message.reply_text(
+                    "✅ Аккаунт успешно привязан! Теперь ассистент готов к работе. Спросите что-нибудь.")
+                return ConversationHandler.END
+            else:
+                logging.warning(f"AI Assistant: Code linking failed for {chat_id}. Reason: {response_message}")
+                # Если код неверный, сообщаем об этом и предлагаем стандартный путь
+                await update.message.reply_text(
+                    f"Не удалось привязать аккаунт: {response_message}.\n\n"
+                    "Пожалуйста, проверьте код или пройдите регистрацию через команду /start.")
+                return ConversationHandler.END
+
+        # Стандартная проверка, если сообщение не является кодом
         try:
             timeout = aiohttp.ClientTimeout(total=5)
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -79,7 +106,8 @@ def registered_user_only(func):
                         logging.info(f"AI Assistant: Ignoring action from unregistered user {chat_id}.")
                         if update.message:
                             await update.message.reply_text(
-                                "Чтобы пользоваться ассистентом, пожалуйста, привяжите ваш аккаунт. Отправьте /start и введите код из личного кабинета.")
+                                "Чтобы пользоваться ассистентом, привяжите ваш аккаунт.\n\n"
+                                "Отправьте /start и следуйте инструкциям, или просто отправьте мне 8-значный код из вашего профиля на сайте.")
                         return ConversationHandler.END
         except aiohttp.ClientError:
             logging.error(f"AI Assistant: Network error checking registration for {chat_id}.")
@@ -89,7 +117,6 @@ def registered_user_only(func):
             return ConversationHandler.END
 
     return wrapper
-
 
 # === Специализированные обработчики (ИЗМЕНЕНО) ===
 async def _handle_diet_intent(update: Update, context: ContextTypes.DEFAULT_TYPE):

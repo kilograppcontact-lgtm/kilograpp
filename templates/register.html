@@ -56,23 +56,41 @@
         border-color: #2563EB; background-color: #eff6ff;
         box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
     }
+
+    #avatar-recommendation-block {
+        transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+        transition-delay: 0.1s;
+    }
   </style>
 </head>
 <body class="bg-light min-h-screen flex items-center justify-center font-sans p-4 aurora-background">
 
-<div class="relative z-10 w-full max-w-4xl grid md:grid-cols-2 bg-white/70 backdrop-blur-xl border border-gray-200 shadow-2xl rounded-3xl overflow-hidden animate-fade-in">
+<div class="relative z-10 w-full max-w-5xl grid md:grid-cols-2 bg-white/70 backdrop-blur-xl border border-gray-200 shadow-2xl rounded-3xl overflow-hidden animate-fade-in">
 
   <div class="hidden md:flex flex-col justify-center p-12 bg-gray-50/50">
-    <div class="flex items-center gap-3">
-      <img
-        src="{{ url_for('static', filename='logo.png') }}"
-        alt="Kilogr.app"
-        class="h-10 md:h-12 w-auto object-contain"
-        loading="lazy"
-      />
+    <div id="left-panel-content">
+        <div class="flex items-center gap-3">
+          <img
+            src="{{ url_for('static', filename='logo.png') }}"
+            alt="Kilogr.app"
+            class="h-10 md:h-12 w-auto object-contain"
+            loading="lazy"
+          />
+        </div>
+        <h2 class="text-3xl font-bold text-dark mt-8">Ваш личный путь к здоровью</h2>
+        <p class="text-gray-600 mt-4">Отслеживайте свой прогресс, достигайте целей и становитесь лучшей версией себя вместе с нами.</p>
     </div>
-    <h2 class="text-3xl font-bold text-dark mt-8">Ваш личный путь к здоровью</h2>
-    <p class="text-gray-600 mt-4">Отслеживайте свой прогресс, достигайте целей и становитесь лучшей версией себя вместе с нами.</p>
+
+    <div id="avatar-recommendation-block" class="hidden opacity-0 transform translate-y-4">
+        <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-6 flex flex-col items-center text-center">
+            <div class="text-indigo-500 text-5xl">💡</div>
+            <h4 class="font-bold text-indigo-800 text-lg mt-4">Загрузите фото вашего лица</h4>
+            <p class="text-sm text-indigo-700 mt-2">
+                Это позволит нашему ИИ создавать персональные визуализации вашего прогресса — вы сможете увидеть, как будет меняться ваше тело.
+            </p>
+             <img src="{{ url_for('static', filename='uploads/visualizations/29/visuals/29/20250925/1758793562_target.png') }}" alt="AI Visualization" class="mt-4 rounded-lg shadow-md w-3/4">
+        </div>
+    </div>
   </div>
 
   <div class="w-full p-8 sm:p-10 flex flex-col justify-center">
@@ -89,7 +107,6 @@
     <form id="registerForm" action="{{ url_for('register') }}" method="POST" enctype="multipart/form-data" class="relative min-h-[420px]">
       <div id="error-container" class="text-red-600 text-sm mb-4 hidden font-medium p-3 bg-red-50 border border-red-200 rounded-lg"></div>
 
-      <!-- Шаг 1: Основные данные -->
       <div id="step-1" class="step-panel space-y-4">
           <div>
             <label for="name" class="sr-only">Имя</label>
@@ -110,7 +127,6 @@
           <button type="button" id="next-1" class="w-full bg-primary text-white py-3 rounded-xl font-medium text-lg transition-all duration-300 hover:bg-accent hover:shadow-lg">Далее</button>
       </div>
 
-      <!-- Шаг 2: Личные данные -->
       <div id="step-2" class="step-panel hidden space-y-4">
            <div>
             <label for="date_of_birth" class="sr-only">Дата рождения</label>
@@ -133,15 +149,15 @@
           </div>
 
           <div>
-              <label for="avatar" class="block text-sm font-medium text-gray-700 mb-2">Аватар (фото лица)</label>
+              <label for="avatar" class="block text-sm font-medium text-gray-700 mb-2">Ваш аватар</label>
               <div class="flex items-center gap-4">
-                  <div class="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border">
-                      <!-- ======================================================= -->
-                      <!-- ИСПРАВЛЕНИЕ ЗДЕСЬ                                      -->
-                      <!-- ======================================================= -->
+                  <div class="flex-shrink-0 w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border-2 border-dashed">
                       <img id="avatar-preview" src="{{ url_for('static', filename='uploads/i.webp') }}" alt="Preview" class="w-full h-full object-cover">
                   </div>
-                  <input id="avatar" type="file" name="avatar" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                  <label for="avatar" class="cursor-pointer w-full text-center px-4 py-3 rounded-xl border border-gray-300 bg-gray-50 hover:bg-gray-100 transition-colors">
+                      <span class="text-sm font-semibold text-gray-700">Выберите фото...</span>
+                      <input id="avatar" type="file" name="avatar" accept="image/*" class="sr-only">
+                  </label>
               </div>
           </div>
           <div class="flex gap-3">
@@ -150,7 +166,6 @@
           </div>
       </div>
 
-      <!-- Шаг 3: Соглашения -->
       <div id="step-3" class="step-panel hidden space-y-5">
            <div class="flex items-start gap-3 p-4 bg-blue-50/50 border border-blue-200 rounded-xl">
             <input id="face_consent" name="face_consent" type="checkbox" value="true" class="mt-1 h-5 w-5 rounded border-gray-300 text-accent focus:ring-accent">
@@ -191,6 +206,10 @@ document.addEventListener('DOMContentLoaded', function () {
     const avatarInput = document.getElementById('avatar');
     const avatarPreview = document.getElementById('avatar-preview');
 
+    // Новые элементы для управления боковой панелью
+    const leftPanelContent = document.getElementById('left-panel-content');
+    const avatarRecommendationBlock = document.getElementById('avatar-recommendation-block');
+
     let currentStep = 0;
     const stepTitles = ["Создание аккаунта", "Личные данные", "Завершение"];
 
@@ -204,6 +223,20 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         formTitle.textContent = stepTitles[stepIndex];
         currentStep = stepIndex;
+
+        // --- ЛОГИКА ОТОБРАЖЕНИЯ БОКОВОЙ ПАНЕЛИ ---
+        const isSecondStep = stepIndex === 1;
+        leftPanelContent.classList.toggle('hidden', isSecondStep);
+        avatarRecommendationBlock.classList.toggle('hidden', !isSecondStep);
+
+        // Плавное появление блока рекомендации
+        if (isSecondStep) {
+            setTimeout(() => {
+                avatarRecommendationBlock.classList.remove('opacity-0', 'translate-y-4');
+            }, 50);
+        } else {
+            avatarRecommendationBlock.classList.add('opacity-0', 'translate-y-4');
+        }
     };
 
     const showError = (message) => {
@@ -222,7 +255,6 @@ document.addEventListener('DOMContentLoaded', function () {
         let isValid = true;
 
         for (const input of inputs) {
-            // Убираем reportValidity(), чтобы не показывать стандартные подсказки браузера
             if (!input.checkValidity()) {
                 input.classList.add('input-error');
                 isValid = false;
@@ -353,4 +385,3 @@ document.addEventListener('DOMContentLoaded', function () {
 
 </body>
 </html>
-

@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Возможности ИИ-Ассистента Kilo{% endblock %}
+
+{% block content %}
+<style>
+    /* Плавное появление элементов при скролле */
+    .reveal-on-scroll {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: opacity 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275), transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .reveal-on-scroll.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    /* Стили для сообщений в демо-чате */
+    .demo-chat-message {
+        opacity: 0;
+        transform: scale(0.9);
+        transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .demo-chat-message.visible {
+        opacity: 1;
+        transform: scale(1);
+    }
+</style>
+
+<div class="bg-gray-50">
+    <div class="container mx-auto px-4 pt-16 pb-20 md:pt-24 md:pb-28">
+
+        <header class="text-center max-w-3xl mx-auto mb-16 md:mb-24 reveal-on-scroll">
+            <h1 class="text-5xl md:text-6xl font-bold text-gray-800 tracking-tight leading-tight">
+                Ваш персональный <br>
+                <span class="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-500">
+                    Health-ассистент Kilo
+                </span>
+            </h1>
+            <p class="mt-5 text-lg text-gray-600">
+                Используйте мощь искусственного интеллекта для анализа, планирования и достижения ваших фитнес-целей.
+            </p>
+        </header>
+
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+
+            <div class="reveal-on-scroll bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm hover:shadow-lg transition-shadow duration-300 flex flex-col">
+                <div class="flex-shrink-0 h-48 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center">
+                    <img src="{{ url_for('static', filename='uploads/meal.jpg') }}" alt="Анализ еды" class="w-full h-full object-cover">
+                </div>
+                <div class="mt-5 flex-grow">
+                    <h3 class="text-xl font-bold text-gray-800">📸 Мгновенный анализ еды</h3>
+                    <p class="mt-2 text-gray-600">Сфотографируйте блюдо, и Kilo определит его состав, калорийность и даст вердикт о пользе для вашей диеты.</p>
+                </div>
+            </div>
+
+            <div class="reveal-on-scroll bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm hover:shadow-lg transition-shadow duration-300 flex flex-col" style="transition-delay: 150ms;">
+                <div class="flex-shrink-0 h-48 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center">
+                    <img src="{{ url_for('static', filename='uploads/shutterstock_484908445.jpg') }}" alt="Планирование диеты" class="w-full h-full object-cover">
+                </div>
+                <div class="mt-5 flex-grow">
+                    <h3 class="text-xl font-bold text-gray-800">🍽️ Персональная диета</h3>
+                    <p class="mt-2 text-gray-600">Получите уникальный рацион с рецептами, созданный на основе ваших целей, биометрии и личных предпочтений.</p>
+                </div>
+            </div>
+
+            <div class="reveal-on-scroll bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm hover:shadow-lg transition-shadow duration-300 flex flex-col md:col-span-2 lg:col-span-1" style="transition-delay: 300ms;">
+                <div class="flex-shrink-0 h-48 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center p-4">
+                    <img src="{{ url_for('static', filename='uploads/visualizations/29/visuals/29/20250925/1758793562_target.png') }}" alt="Визуализация тела" class="max-h-full w-auto object-contain">
+                </div>
+                <div class="mt-5 flex-grow">
+                    <h3 class="text-xl font-bold text-gray-800">🤸‍♀️ Визуализация результата</h3>
+                    <p class="mt-2 text-gray-600">Увидьте, как изменится ваше тело. Kilo сгенерирует реалистичное изображение вашего будущего результата для максимальной мотивации.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="reveal-on-scroll mt-20 md:mt-28">
+            <div class="text-center max-w-2xl mx-auto">
+                 <h2 class="text-4xl font-bold text-gray-800">Kilo в действии</h2>
+                 <p class="mt-4 text-gray-600">Посмотрите, как легко получить экспертный совет в режиме реального времени.</p>
+            </div>
+
+            <div id="live-chat-demo-container" class="mt-10 max-w-2xl mx-auto bg-white border border-gray-200/80 rounded-2xl shadow-xl p-4 md:p-6 flex flex-col space-y-4 overflow-y-auto" style="height: 450px;">
+                </div>
+
+            <div class="text-center mt-8">
+                <button onclick="document.getElementById('main-chat-toggle-button')?.click()"
+                        class="inline-block bg-gradient-to-br from-indigo-500 to-sky-500 hover:from-indigo-600 hover:to-sky-600 px-8 py-3 rounded-lg font-semibold text-white transition-all transform hover:scale-105 shadow-md">
+                    Задать свой вопрос
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Анимация появления элементов
+    const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                observer.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.reveal-on-scroll').forEach(element => {
+        observer.observe(element);
+    });
+
+    // --- Логика для демонстрации чата ---
+    const chatContainer = document.getElementById('live-chat-demo-container');
+    const conversation = [
+        { from: 'user', text: 'Привет! Подскажи, что лучше съесть на ужин, если я хочу похудеть?' },
+        { from: 'kilo', text: 'Добрый вечер! Для легкого и питательного ужина отлично подойдет запеченная куриная грудка с овощами (брокколи, цветная капуста) и салат из свежей зелени. Это блюдо богато белком и клетчаткой, что поможет вам чувствовать сытость без лишних калорий.' },
+        { from: 'user', text: 'А можно рецепт?' },
+        { from: 'kilo', text: 'Конечно! Натрите 150-200г куриной грудки специями, заверните с овощами в фольгу и запекайте при 180°C около 25-30 минут. Приятного аппетита!' },
+    ];
+
+    let messageIndex = 0;
+
+    const createMessageHTML = (msg) => {
+        if (msg.from === 'user') {
+            return `
+                <div class="flex justify-end demo-chat-message">
+                    <div class="bg-indigo-500 text-white rounded-2xl rounded-br-none p-3 max-w-xs md:max-w-md">
+                        ${msg.text}
+                    </div>
+                </div>`;
+        } else {
+            return `
+                <div class="flex justify-start demo-chat-message">
+                    <div class="bg-gray-200 text-gray-800 rounded-2xl rounded-bl-none p-3 max-w-xs md:max-w-md">
+                        ${msg.text}
+                    </div>
+                </div>`;
+        }
+    };
+
+    const showNextMessage = () => {
+        if (messageIndex >= conversation.length) return;
+
+        const msg = conversation[messageIndex];
+        const msgHTML = createMessageHTML(msg);
+        chatContainer.insertAdjacentHTML('beforeend', msgHTML);
+
+        const newMessageElement = chatContainer.lastElementChild;
+
+        setTimeout(() => {
+            newMessageElement.classList.add('visible');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }, 100);
+
+        messageIndex++;
+        setTimeout(showNextMessage, 1800); // Интервал между сообщениями
+    };
+
+    // Запускаем демонстрацию, когда блок чата становится видимым
+    const chatObserver = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+            setTimeout(showNextMessage, 500);
+            chatObserver.unobserve(chatContainer);
+        }
+    }, { threshold: 0.5 });
+
+    chatObserver.observe(chatContainer);
+});
+</script>
+{% endblock %}

@@ -89,15 +89,32 @@ The final output must be an authentic, unedited, high-resolution photograph as i
 
 def _extract_first_image_bytes(response) -> bytes:
     """
-    Берём первый сгенерированный кадр из ответа.
+    Извлекает байты изображения из ответа модели, проверяя все возможные варианты.
     """
-    for cand in getattr(response, "candidates", []) or []:
-        for part in cand.content.parts:
-            if getattr(part, "inline_data", None) is not None:
-                return part.inline_data.data
-    raise RuntimeError("No image returned by Gemini model")
+    # 1. Проверяем, что ответ и кандидаты вообще существуют
+    if not response or not getattr(response, "candidates", []):
+        reason = "Response was empty"
+        # Попытка получить более детальную причину блокировки
+        if hasattr(response, "prompt_feedback") and hasattr(response.prompt_feedback, "block_reason"):
+            reason = f"Prompt blocked, reason: {response.prompt_feedback.block_reason.name}"
+        raise RuntimeError(f"No candidates returned by Gemini model. {reason}")
+
+    # 2. Ищем изображение во всех кандидатах и всех их частях
+    for cand in response.candidates:
+        if cand.content and cand.content.parts:
+            for part in cand.content.parts:
+                if part.inline_data and part.inline_data.data:
+                    return part.inline_data.data
 
 
+    # 3. Если изображение так и не найдено, выбрасываем более информативную ошибку
+    try:
+        # Пытаемся получить причину от API
+        finish_reason = response.candidates[0].finish_reason.name
+        raise RuntimeError(f"No image data found in response parts. Finish Reason: '{finish_reason}'")
+    except (IndexError, AttributeError):
+        # Общий фоллбэк, если структура ответа неожиданная
+        raise RuntimeError("No image data found in response and could not determine the reason.")
 def _save_png_to_db(raw_bytes: bytes, user_id: int, base_name: str) -> str:
     """Сохраняет PNG в БД и возвращает уникальное имя файла."""
     unique_filename = f"viz_{user_id}_{base_name}_{uuid.uuid4().hex}.png"

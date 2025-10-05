@@ -1,4 +1,4 @@
-from datetime import datetime, date, timedelta, time as dt_time
+from datetime import datetime, date, timedelta, time as dt_time, UTC
 from urllib.parse import urlparse
 import base64
 from io import BytesIO
@@ -30,6 +30,7 @@ from pathlib import Path
 from models import BodyVisualization
 from flask import send_file
 from io import BytesIO
+from progress_analyzer import generate_progress_commentary
 
 load_dotenv()
 
@@ -286,6 +287,38 @@ def _notification_worker():
                         except Exception:
                             pass
 
+                if now.minute == 0 and now.hour == 10:
+                    two_weeks_ago = now_d - timedelta(days=14)
+                    users_to_remind = User.query.filter(User.telegram_chat_id.isnot(None)).all()
+
+                    for u in users_to_remind:
+                        # Проверяем настройки уведомлений пользователя
+                        settings = get_effective_user_settings(u)
+                        if not settings.telegram_notify_enabled:
+                            continue
+
+                        # Найти последний замер пользователя
+                        latest_analysis = BodyAnalysis.query.filter_by(user_id=u.id).order_by(
+                            BodyAnalysis.timestamp.desc()).first()
+
+                        if latest_analysis:
+                            # Проверяем, прошло ли 14 дней с последнего замера
+                            if latest_analysis.timestamp.date() <= two_weeks_ago:
+                                # Проверяем, не отправляли ли мы уже напоминание в последние 13 дней
+                                if u.last_measurement_reminder_sent_at is None or \
+                                        (now - u.last_measurement_reminder_sent_at).days >= 14:
+
+                                    reminder_text = (
+                                        f"Привет, {u.name}! 👋 Прошло 2 недели с вашего последнего замера. "
+                                        "Пора обновить данные и посмотреть на свой прогресс! "
+                                        "Загрузите новое фото анализа тела в приложении, чтобы не терять динамику. "
+                                        "У вас все получится! 💪"
+                                    )
+
+                                    if _send_telegram(u.telegram_chat_id, reminder_text):
+                                        u.last_measurement_reminder_sent_at = now
+                                        db.session.commit()
+
                 db.session.commit()
             except Exception:
                 db.session.rollback()
@@ -430,6 +463,9 @@ def _month_bounds(yyyy_mm: str):
         next_month = date(y, m+1, 1)
     end = next_month - timedelta(days=1)
     return start, end
+
+
+
 
 @app.route('/trainings')
 def trainings_page():
@@ -847,6 +883,7 @@ def register():
 
     return render_template('register.html')
 
+
 @app.route('/profile')
 @login_required
 def profile():
@@ -902,7 +939,25 @@ def profile():
     user_memberships = GroupMember.query.filter_by(user_id=user.id).all()
     user_joined_group = user.own_group if user.own_group else (user_memberships[0].group if user_memberships else None)
 
-    diet_obj = Diet.query.filter_by(user_id=user_id).order_by(Diet.date.desc()).first()
+    all_analyses_for_progress_data = []  # Use a new variable name
+    if user.initial_body_analysis_id:
+        initial_analysis_for_chart = db.session.get(BodyAnalysis, user.initial_body_analysis_id)
+        if initial_analysis_for_chart:
+            # Fetch the SQLAlchemy objects
+            analyses_objects = BodyAnalysis.query.filter(
+                BodyAnalysis.user_id == user.id,
+                BodyAnalysis.timestamp >= initial_analysis_for_chart.timestamp
+            ).order_by(BodyAnalysis.timestamp.asc()).all()
+
+            # Convert objects to a list of dictionaries
+            all_analyses_for_progress_data = [
+                {
+                    "timestamp": analysis.timestamp.isoformat(),
+                    "fat_mass": analysis.fat_mass
+                }
+                for analysis in analyses_objects
+            ]
+
     diet = None
     if diet_obj:
         diet = {
@@ -913,20 +968,14 @@ def profile():
             "meals": {"breakfast": [], "lunch": [], "dinner": [], "snack": []}
         }
 
-        # Источники блюд могут быть разные: JSON-поле, Python-список словарей, relation items и т.п.
         meals_source = None
-
         if getattr(diet_obj, "meals", None):
             meals_source = diet_obj.meals
-
-            # 2) diet_obj.meals_json (строка JSON)
         if meals_source is None and getattr(diet_obj, "meals_json", None):
             try:
                 meals_source = json.loads(diet_obj.meals_json)
             except Exception:
                 meals_source = None
-
-            # 3) отдельные поля breakfast/lunch/dinner/snack (списки/JSON-строки)
         if meals_source is None:
             per_meal = {}
             for key in ("breakfast", "lunch", "dinner", "snack"):
@@ -941,23 +990,13 @@ def profile():
                         per_meal[key] = val
             if per_meal:
                 meals_source = per_meal
-
-            # 4) relation items (например Diet.items)
         if meals_source is None and getattr(diet_obj, "items", None):
             meals_source = diet_obj.items
-
-            # Утилита добавления пункта
 
         def push(meal_type, name, grams=None, kcal=None):
             mt = (meal_type or "").lower()
             if mt in diet["meals"]:
-                diet["meals"][mt].append({
-                    "name": name or "Блюдо",
-                    "grams": grams,
-                    "kcal": kcal
-                })
-
-            # Заполняем блюда из разных форматов
+                diet["meals"][mt].append({"name": name or "Блюдо", "grams": grams, "kcal": kcal})
 
         if isinstance(meals_source, dict):
             for k in ("breakfast", "lunch", "dinner", "snack"):
@@ -971,7 +1010,6 @@ def profile():
                         kcal = getattr(it, "kcal", None) or getattr(it, "calories", None)
                         name = getattr(it, "name", None) or getattr(it, "title", None)
                     push(k, name, grams, kcal)
-
         elif isinstance(meals_source, list):
             for it in meals_source:
                 if isinstance(it, dict):
@@ -986,78 +1024,106 @@ def profile():
                     name = getattr(it, "name", None) or getattr(it, "title", None)
                 push(mt, name, grams, kcal)
 
-            # Если суммарные калории не заданы — считаем из блюд
         if not diet["total_kcal"]:
             try:
-                diet["total_kcal"] = sum(
-                    (i.get("kcal") or 0)
-                    for lst in diet["meals"].values() for i in lst
-                ) or None
+                diet["total_kcal"] = sum((i.get("kcal") or 0) for lst in diet["meals"].values() for i in lst) or None
             except Exception:
                 pass
 
-    # --- Прогресс жиросжигания ---
+    # --- Прогресс жиросжигания (УЛУЧШЕННАЯ ЛОГИКА С ПРОГНОЗОМ) ---
     fat_loss_progress = None
-    if latest_analysis and latest_analysis.fat_mass and user.fat_mass_goal and latest_analysis.fat_mass > user.fat_mass_goal:
+    KCAL_PER_KG_FAT = 7700  # Энергетическая ценность 1 кг жира
+
+    # Получаем стартовый и последний анализы
+    initial_analysis = db.session.get(BodyAnalysis,
+                                      user.initial_body_analysis_id) if user.initial_body_analysis_id else None
+
+    if initial_analysis and latest_analysis and latest_analysis.fat_mass and user.fat_mass_goal and initial_analysis.fat_mass > user.fat_mass_goal:
+
+        # --- 1. Расчет фактического прогресса на момент последнего замера ---
+        initial_fat_mass = initial_analysis.fat_mass
+        last_measured_fat_mass = latest_analysis.fat_mass
+        goal_fat_mass = user.fat_mass_goal
+
+        total_fat_to_lose_kg = initial_fat_mass - goal_fat_mass
+        fact_lost_so_far_kg = initial_fat_mass - last_measured_fat_mass
+
+        # --- 2. Расчет прогнозируемого прогресса на основе дефицита калорий ПОСЛЕ последнего замера ---
         start_datetime = latest_analysis.timestamp
-        today = date.today()
+        today_date = date.today()
 
-        meal_data = (db.session.query(MealLog.date, func.sum(MealLog.calories))
-                     .filter(MealLog.user_id == user_id, MealLog.date >= start_datetime.date())
-                     .group_by(MealLog.date)
-                     .all())
-        meal_map = dict(meal_data)
+        # Получаем все логи приемов пищи и активности одним запросом
+        meal_logs_since_last_analysis = MealLog.query.filter(MealLog.user_id == user.id,
+                                                             MealLog.date >= start_datetime.date()).all()
+        activity_logs_since_last_analysis = Activity.query.filter(Activity.user_id == user.id,
+                                                                  Activity.date >= start_datetime.date()).all()
 
-        activity_data = (db.session.query(Activity.date, Activity.active_kcal)
-                         .filter(Activity.user_id == user_id, Activity.date >= start_datetime.date())
-                         .all())
-        activity_map = dict(activity_data)
+        # Создаем словари для быстрого доступа
+        meals_map = {}
+        for log in meal_logs_since_last_analysis:
+            meals_map.setdefault(log.date, 0)
+            meals_map[log.date] += log.calories
 
+        activity_map = {log.date: log.active_kcal for log in activity_logs_since_last_analysis}
+
+        # Считаем накопленный дефицит
         total_accumulated_deficit = 0
-        delta_days = (today - start_datetime.date()).days
+        metabolism = latest_analysis.metabolism or 0
+
+        # Убедимся, что не считаем дни из будущего
+        delta_days = (today_date - start_datetime.date()).days
 
         if delta_days >= 0:
             for i in range(delta_days + 1):
                 current_day = start_datetime.date() + timedelta(days=i)
-                consumed = meal_map.get(current_day, 0)
+                consumed = meals_map.get(current_day, 0)
                 burned_active = activity_map.get(current_day, 0)
 
-                # День анализа: исключаем еду до замера и не учитываем активность
+                # Особая логика для дня замера: не учитываем калории и активность ДО момента замера
                 if i == 0:
-                    calories_before_analysis = (db.session.query(func.sum(MealLog.calories))
-                                                .filter(MealLog.user_id == user_id,
-                                                        MealLog.date == current_day,
-                                                        MealLog.created_at < start_datetime)
-                                                .scalar() or 0)
+                    calories_before_analysis = db.session.query(func.sum(MealLog.calories)).filter(
+                        MealLog.user_id == user.id,
+                        MealLog.date == current_day,
+                        MealLog.created_at < start_datetime
+                    ).scalar() or 0
                     consumed -= calories_before_analysis
+                    # Активность за день замера игнорируем, т.к. нет точного времени
                     burned_active = 0
 
-                daily_deficit = ((metabolism or 0) + (burned_active or 0)) - (consumed or 0)
+                daily_deficit = (metabolism + burned_active) - consumed
                 if daily_deficit > 0:
                     total_accumulated_deficit += daily_deficit
 
-        KCAL_PER_KG_FAT = 7700
-        total_fat_to_lose_kg = latest_analysis.fat_mass - user.fat_mass_goal
-        estimated_fat_burned_kg = min(total_accumulated_deficit / KCAL_PER_KG_FAT, total_fat_to_lose_kg)
+        # Конвертируем дефицит в килограммы
+        estimated_burned_since_last_measurement_kg = total_accumulated_deficit / KCAL_PER_KG_FAT
 
+        # --- 3. Объединение фактического и прогнозируемого прогресса ---
+
+        # Текущая предполагаемая жировая масса
+        estimated_current_fat_mass = last_measured_fat_mass - estimated_burned_since_last_measurement_kg
+
+        # Общий прогресс от начальной точки
+        total_lost_so_far_kg = initial_fat_mass - estimated_current_fat_mass
+
+        # Итоговый процент
         percentage = 0
         if total_fat_to_lose_kg > 0:
-            percentage = (estimated_fat_burned_kg / total_fat_to_lose_kg) * 100
+            percentage = (total_lost_so_far_kg / total_fat_to_lose_kg) * 100
 
         fat_loss_progress = {
-            'percentage': min(100, max(0, percentage)),
-            'burned_kg': estimated_fat_burned_kg,
+            'percentage': min(100, max(0, percentage)),  # Ограничиваем 0-100%
+            'burned_kg': total_lost_so_far_kg,
             'total_to_lose_kg': total_fat_to_lose_kg,
-            'initial_kg': latest_analysis.fat_mass,
-            'goal_kg': user.fat_mass_goal,
-            'current_kg': latest_analysis.fat_mass - estimated_fat_burned_kg
+            'initial_kg': initial_fat_mass,
+            'goal_kg': goal_fat_mass,
+            'current_kg': estimated_current_fat_mass  # Теперь это расчетное значение
         }
 
     return render_template(
         'profile.html',
         user=user,
         age=age,
-        diet=diet,                          # <- нормализованная структура для шаблона
+        diet=diet,
         today_activity=today_activity,
         latest_analysis=latest_analysis,
         previous_analysis=previous_analysis,
@@ -1072,6 +1138,7 @@ def profile():
         missing_meals=missing_meals,
         missing_activity=missing_activity,
         user_joined_group=user_joined_group,
+        all_analyses_for_progress=all_analyses_for_progress_data,
         fat_loss_progress=fat_loss_progress,
         just_activated=just_activated
     )
@@ -1273,47 +1340,88 @@ from flask import jsonify # Убедись, что jsonify импортиров�
 @login_required
 def confirm_analysis():
     user_id = session.get('user_id')
-    if 'temp_analysis' not in session:
-        flash("Нет данных для подтверждения. Пожалуйста, загрузите анализ снова.", "warning")
-        return redirect(url_for('profile'))
-
     user = db.session.get(User, user_id)
-    analysis_data = session['temp_analysis']
 
+    # --- ЛОГИКА POST-ЗАПРОСА (Сохранение данных) ---
     if request.method == 'POST':
-        # Логика сохранения данных (бывшая единственная логика функции)
-        user.fat_mass_goal = request.form.get('fat_mass_goal', user.fat_mass_goal, type=float)
-        user.muscle_mass_goal = request.form.get('muscle_mass_goal', user.muscle_mass_goal, type=float)
-        user.analysis_comment = analysis_data.get("analysis")
-        user.updated_at = datetime.utcnow()
+        if 'temp_analysis' not in session:
+            flash("Данные для сохранения устарели. Пожалуйста, попробуйте снова.", "warning")
+            return redirect(url_for('profile'))
 
-        new_analysis_entry = BodyAnalysis(
-            user_id=user.id,
-            timestamp=datetime.utcnow()
-        )
+        analysis_data = session['temp_analysis']
 
-        # Переносим данные из временной сессии в новую запись анализа
+        # Получаем предыдущий замер ДО сохранения нового
+        previous_analysis = BodyAnalysis.query.filter_by(user_id=user.id).order_by(
+            BodyAnalysis.timestamp.desc()).first()
+
+        # Создаем и наполняем новую запись анализа
+        new_analysis_entry = BodyAnalysis(user_id=user.id, timestamp=datetime.now(UTC))
         for field, value in analysis_data.items():
             if hasattr(new_analysis_entry, field):
                 setattr(new_analysis_entry, field, value)
 
-        # Обновляем рост, если он был изменен в форме
         edited_height = request.form.get('height', type=float)
         if edited_height is not None:
             new_analysis_entry.height = edited_height
 
-        db.session.add(new_analysis_entry)
-        db.session.commit()
+        # Обновляем цели пользователя, если они были отправлены
+        if 'fat_mass_goal' in request.form:
+            user.fat_mass_goal = request.form.get('fat_mass_goal', type=float)
+        if 'muscle_mass_goal' in request.form:
+            user.muscle_mass_goal = request.form.get('muscle_mass_goal', type=float)
 
-        # Очищаем временные данные из сессии
-        session.pop('temp_analysis', None)
+        user.updated_at = datetime.now(UTC)
+
+        db.session.add(new_analysis_entry)
+        db.session.flush()  # Получаем ID новой записи до коммита
+
+        # Если это самый первый анализ, устанавливаем его как стартовую точку
+        if not user.initial_body_analysis_id:
+            user.initial_body_analysis_id = new_analysis_entry.id
+
+        # --- Вызов генератора комментария ИИ ---
+        if previous_analysis:
+            print("DEBUG: Найден предыдущий анализ. Вызываю генератор комментария ИИ...")
+            ai_comment_text = generate_progress_commentary(user, previous_analysis, new_analysis_entry)
+            print(f"DEBUG: Генератор ИИ вернул: {str(ai_comment_text)[:150]}...")  # Логгируем первые 150 символов
+            if ai_comment_text:
+                new_analysis_entry.ai_comment = ai_comment_text
+                # Сохраняем комментарий в сессии, чтобы сразу показать его пользователю
+                session['last_ai_comment'] = ai_comment_text
+
+        db.session.commit()
+        session.pop('temp_analysis', None)  # Очищаем временные данные
 
         flash("Анализ и цели успешно сохранены!", "success")
-        return redirect(url_for('profile'))
+        # Перенаправляем на GET-запрос этой же страницы, чтобы показать результат
+        return redirect(url_for('confirm_analysis'))
 
-    # Логика для GET-запроса: отображение страницы подтверждения
-    # ИСПРАВЛЕНИЕ: передаем данные в шаблон под именем 'data', как он того ожидает
-    return render_template('confirm_analysis.html', data=analysis_data, user=user)
+    # --- ЛОГИКА GET-ЗАПРОСА (Отображение страницы) ---
+
+    # 1. Проверяем, есть ли готовый комментарий для отображения (после редиректа)
+    last_ai_comment = session.pop('last_ai_comment', None)
+    if last_ai_comment:
+        # Комментарий есть, значит, мы только что сохранили данные.
+        # Показываем страницу с комментарием. Форма не нужна.
+        return render_template('confirm_analysis.html',
+                               data={},  # Передаем пустой словарь, т.к. форма не будет показана
+                               user=user,
+                               ai_comment=last_ai_comment)
+
+    # 2. Если комментария нет, проверяем, есть ли данные для подтверждения
+    if 'temp_analysis' in session:
+        analysis_data = session['temp_analysis']
+        # Показываем страницу с формой для подтверждения данных
+        return render_template('confirm_analysis.html',
+                               data=analysis_data,
+                               user=user,
+                               ai_comment=None)
+
+    # 3. Если нет ни комментария, ни данных для подтверждения — отправляем в профиль
+    # (Это может случиться, если пользователь просто зайдет по прямой ссылке)
+    flash("Нет данных для подтверждения. Пожалуйста, загрузите анализ снова.", "warning")
+    return redirect(url_for('profile'))
+
 
 @app.route('/generate_telegram_code')
 def generate_telegram_code():
@@ -3412,7 +3520,6 @@ def deficit_history():
     user = get_current_user()
     latest_analysis = user.latest_analysis
 
-    # Убедимся, что есть данные для расчета
     if not (latest_analysis and latest_analysis.fat_mass and user.fat_mass_goal):
         return jsonify({"error": "Недостаточно данных для расчета истории дефицита."}), 404
 
@@ -3429,6 +3536,16 @@ def deficit_history():
         Activity.date >= start_datetime.date()
     ).all()
 
+    # --- НАЧАЛО ИЗМЕНЕНИЙ ---
+    # Получаем все замеры тела за этот период
+    body_analyses = BodyAnalysis.query.filter(
+        BodyAnalysis.user_id == user.id,
+        func.date(BodyAnalysis.timestamp) >= start_datetime.date()
+    ).all()
+    # Создаем set для быстрой проверки дат
+    measurement_dates = {b.timestamp.date() for b in body_analyses}
+    # --- КОНЕЦ ИЗМЕНЕНИЙ ---
+
     # Создаем словари для быстрого доступа
     meals_map = {}
     for log in meal_logs:
@@ -3444,11 +3561,9 @@ def deficit_history():
 
     for i in range(delta_days + 1):
         current_day = start_datetime.date() + timedelta(days=i)
-
         consumed = meals_map.get(current_day, 0)
         burned_active = activity_map.get(current_day, 0)
 
-        # Особая логика для первого дня (как и в основном расчете)
         if i == 0:
             calories_before_analysis = db.session.query(func.sum(MealLog.calories)).filter(
                 MealLog.user_id == user.id,
@@ -3456,7 +3571,7 @@ def deficit_history():
                 MealLog.created_at < start_datetime
             ).scalar() or 0
             consumed -= calories_before_analysis
-            burned_active = 0  # Активность за первый день не учитываем для точности
+            burned_active = 0
 
         total_burned = metabolism + burned_active
         daily_deficit = total_burned - consumed
@@ -3467,7 +3582,8 @@ def deficit_history():
             "base_metabolism": metabolism,
             "burned_active": burned_active,
             "total_burned": total_burned,
-            "deficit": daily_deficit if daily_deficit > 0 else 0  # Считаем только положительный дефицит
+            "deficit": daily_deficit if daily_deficit > 0 else 0,
+            "is_measurement_day": current_day in measurement_dates  # <-- НОВЫЙ ФЛАГ
         })
 
     return jsonify(history_data)
@@ -4103,53 +4219,22 @@ def visualize_page():
     latest_analysis = _latest_analysis_for(u.id)
 
     fat_loss_progress = None
-    if latest_analysis and latest_analysis.fat_mass and u.fat_mass_goal and latest_analysis.fat_mass > u.fat_mass_goal:
-        start_datetime = latest_analysis.timestamp
-        today = date.today()
-        user_id = u.id
-        metabolism = latest_analysis.metabolism or 0
+    # --- НАЧАЛО ИЗМЕНЕНИЙ: Новая логика расчета прогресса ---
+    initial_analysis = db.session.get(BodyAnalysis, u.initial_body_analysis_id) if u.initial_body_analysis_id else None
 
-        meal_data = (db.session.query(MealLog.date, func.sum(MealLog.calories))
-                     .filter(MealLog.user_id == user_id, MealLog.date >= start_datetime.date())
-                     .group_by(MealLog.date)
-                     .all())
-        meal_map = dict(meal_data)
+    if initial_analysis and latest_analysis and latest_analysis.fat_mass and u.fat_mass_goal and initial_analysis.fat_mass > u.fat_mass_goal:
+        initial_fat_mass = initial_analysis.fat_mass
+        current_fat_mass = latest_analysis.fat_mass
+        goal_fat_mass = u.fat_mass_goal
 
-        activity_data = (db.session.query(Activity.date, Activity.active_kcal)
-                         .filter(Activity.user_id == user_id, Activity.date >= start_datetime.date())
-                         .all())
-        activity_map = dict(activity_data)
-
-        total_accumulated_deficit = 0
-        delta_days = (today - start_datetime.date()).days
-
-        if delta_days >= 0:
-            for i in range(delta_days + 1):
-                current_day = start_datetime.date() + timedelta(days=i)
-                consumed = meal_map.get(current_day, 0)
-                burned_active = activity_map.get(current_day, 0)
-
-                if i == 0:
-                    calories_before_analysis = (db.session.query(func.sum(MealLog.calories))
-                                                .filter(MealLog.user_id == user_id,
-                                                        MealLog.date == current_day,
-                                                        MealLog.created_at < start_datetime)
-                                                .scalar() or 0)
-                    consumed -= calories_before_analysis
-                    burned_active = 0
-
-                daily_deficit = (metabolism + (burned_active or 0)) - (consumed or 0)
-                if daily_deficit > 0:
-                    total_accumulated_deficit += daily_deficit
-
-        KCAL_PER_KG_FAT = 7700
-        total_fat_to_lose_kg = latest_analysis.fat_mass - u.fat_mass_goal
-        estimated_fat_burned_kg = min(total_accumulated_deficit / KCAL_PER_KG_FAT, total_fat_to_lose_kg)
+        total_fat_to_lose_kg = initial_fat_mass - goal_fat_mass
+        fat_lost_so_far_kg = initial_fat_mass - current_fat_mass
 
         percentage = 0
         if total_fat_to_lose_kg > 0:
-            percentage = (estimated_fat_burned_kg / total_fat_to_lose_kg) * 100
+            percentage = (fat_lost_so_far_kg / total_fat_to_lose_kg) * 100
         percentage = min(100, max(0, percentage))
+        # --- КОНЕЦ ИЗМЕНЕНИЙ ---
 
         # --- НАЧАЛО ИЗМЕНЕНИЙ: Выбор мотивационного сообщения ---
         motivation_text = ""
@@ -4169,11 +4254,11 @@ def visualize_page():
 
         fat_loss_progress = {
             'percentage': percentage,
-            'burned_kg': estimated_fat_burned_kg,
+            'burned_kg': fat_lost_so_far_kg,
             'total_to_lose_kg': total_fat_to_lose_kg,
-            'initial_kg': latest_analysis.fat_mass,
-            'goal_kg': u.fat_mass_goal,
-            'current_kg': latest_analysis.fat_mass - estimated_fat_burned_kg,
+            'initial_kg': initial_fat_mass,
+            'goal_kg': goal_fat_mass,
+            'current_kg': current_fat_mass,
             'motivation_text': motivation_text  # Добавляем сообщение в словарь
         }
 
@@ -4298,6 +4383,34 @@ def serve_file(filename):
     """Отдаёт загруженный файл из БД."""
     f = UploadedFile.query.filter_by(filename=filename).first_or_404()
     return send_file(BytesIO(f.data), mimetype=f.content_type)
+
+@app.route('/ai-instructions')
+@login_required
+def ai_instructions_page():
+    """Отображает страницу с инструкциями по работе с ИИ-ассистентом."""
+    return render_template('ai_instructions.html')
+
+
+# Добавьте этот код после функции logout или в конце блока с маршрутами профиля
+
+@app.route('/profile/reset_goals', methods=['POST'])
+@login_required
+def reset_goals():
+    """Сбрасывает цели пользователя и стартовую точку для нового отсчета."""
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('login'))
+
+    user.fat_mass_goal = None
+    user.muscle_mass_goal = None
+    user.initial_body_analysis_id = None
+
+    db.session.commit()
+
+    flash("Ваши цели сброшены. Загрузите новый анализ, чтобы начать отсчет заново!", "success")
+    return redirect(url_for('profile'))
+
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
