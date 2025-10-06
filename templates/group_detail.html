@@ -340,7 +340,7 @@
           <div class="border-t pt-3">
             <p class="text-xs text-gray-500 mb-1">Тренер</p>
             <div class="flex items-center gap-2">
-              <img src="{{ url_for('serve_uploaded_file', filename=group.trainer.avatar) if group.trainer and group.trainer.avatar else url_for('static', filename='default-avatar.png') }}"
+              <img src="{{ url_for('serve_file', filename=group.trainer.avatar) if group.trainer and group.trainer.avatar else url_for('static', filename='default-avatar.png') }}"
                    class="w-8 h-8 rounded-full object-cover" alt="Тренер">
               <span class="text-sm font-semibold text-gray-800">{{ group.trainer.name if group.trainer else '—' }}</span>
             </div>

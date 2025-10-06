@@ -115,7 +115,7 @@
 
             <div class="flex items-center gap-4">
               <img class="w-16 h-16 rounded-full object-cover ring-2 ring-offset-2 ring-indigo-500"
-                   src="{{ url_for('serve_uploaded_file', filename=current_user.avatar) if current_user.avatar else url_for('static', filename='default-avatar.png') }}"
+                   src="{{ url_for('serve_file', filename=current_user.avatar) if current_user.avatar else url_for('static', filename='default-avatar.png') }}"
                    alt="avatar">
               <div>
                 <div class="font-bold text-gray-900">{{ current_user.name }}</div>
@@ -174,13 +174,13 @@
                 <div class="text-center">
                   <h3 class="text-lg font-semibold text-gray-800 mb-3">Текущая форма</h3>
                   <div class="aspect-w-3 aspect-h-4 rounded-xl overflow-hidden transform hover:scale-105 transition-transform duration-300">
-                    <img id="viz-current-img" src="{{ url_for('serve_uploaded_file', filename=viz.image_current_path) }}" alt="Текущая форма" class="object-cover w-full h-full bg-gray-100">
+                    <img id="viz-current-img" src="{{ url_for('serve_file', filename=viz.image_current_path) }}" alt="Текущая форма" class="object-cover w-full h-full bg-gray-100">
                   </div>
                 </div>
                 <div class="text-center">
                   <h3 class="text-lg font-semibold text-gray-800 mb-3">Целевая форма</h3>
                    <div class="aspect-w-3 aspect-h-4 rounded-xl overflow-hidden transform hover:scale-105 transition-transform duration-300">
-                    <img id="viz-target-img" src="{{ url_for('serve_uploaded_file', filename=viz.image_target_path) }}" alt="Целевая форма" class="object-cover w-full h-full bg-gray-100">
+                    <img id="viz-target-img" src="{{ url_for('serve_file', filename=viz.image_target_path) }}" alt="Целевая форма" class="object-cover w-full h-full bg-gray-100">
                   </div>
                 </div>
               </div>
