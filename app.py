@@ -55,6 +55,10 @@ from models import (
 # --- Image Resizing Configuration ---
 CHAT_IMAGE_MAX_SIZE = (200, 200)  # Max width and height for chat images
 
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 def resize_image(filepath, max_size):
     """Resizes an image and saves it back to the same path."""
