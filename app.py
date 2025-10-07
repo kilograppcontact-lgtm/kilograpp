@@ -1,9 +1,8 @@
 from datetime import datetime, date, timedelta, time as dt_time, UTC
 from urllib.parse import urlparse
 import base64
-from io import BytesIO
-from flask import Flask, render_template, redirect, session, url_for, flash, send_file, abort, \
-    send_from_directory
+from zoneinfo import ZoneInfo
+from flask import Flask, render_template, redirect, session, url_for, flash, abort
 from flask_bcrypt import Bcrypt
 from werkzeug.utils import secure_filename
 from openai import OpenAI
@@ -11,7 +10,7 @@ from dotenv import load_dotenv
 import random
 import string
 import re
-from sqlalchemy import func, text
+from sqlalchemy import func
 from functools import wraps
 from PIL import Image
 from meal_reminders import start_meal_scheduler, get_scheduler, run_tick_now, pause_job, resume_job
@@ -26,7 +25,6 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from flask import make_response
 from sqlalchemy import inspect
 import uuid
-from pathlib import Path
 from models import BodyVisualization
 from flask import send_file
 from io import BytesIO
@@ -467,8 +465,6 @@ def _month_bounds(yyyy_mm: str):
         next_month = date(y, m+1, 1)
     end = next_month - timedelta(days=1)
     return start, end
-
-
 
 
 @app.route('/trainings')

@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import os
 import json
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, render_template
 from sqlalchemy import text, inspect as sa_inspect
 from sqlalchemy.exc import ProgrammingError, OperationalError, SQLAlchemyError
 from openai import OpenAI
+from urllib.parse import quote
 
 from extensions import db
 from models import User, Diet
 
 shopping_bp = Blueprint("shopping_bp", __name__)
+
 
 # ---------------- OpenAI ----------------
 def _get_openai_client():
@@ -21,13 +23,16 @@ def _get_openai_client():
         return None
     return OpenAI(api_key=key)
 
+
 # ---------------- helpers ----------------
 def _current_user():
     uid = session.get("user_id")
     return db.session.get(User, uid) if uid else None
 
+
 def _json_dumps(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+
 
 def _is_pg() -> bool:
     try:
@@ -35,8 +40,10 @@ def _is_pg() -> bool:
     except Exception:
         return False
 
+
 # ---------------- schema bootstrap (robust) ----------------
 _SCHEMA_READY = False
+
 
 def _create_schema():
     """Безусловная попытка создать таблицы (идемпотентно)."""
@@ -76,6 +83,7 @@ def _create_schema():
         con.execute(text(ddl_lists_idx))
         con.execute(text(ddl_items))
 
+
 def _ensure_schema_once(force: bool = False):
     """Пытаемся создать схему один раз за жизнь процесса.
     Если users/diets ещё нет — FK упадёт -> отложим до следующего запроса.
@@ -90,14 +98,13 @@ def _ensure_schema_once(force: bool = False):
         if insp.has_table("shopping_lists") and insp.has_table("shopping_items"):
             _SCHEMA_READY = True
     except (ProgrammingError, OperationalError) as e:
-        # например, если 'users'/'diets' ещё не созданы — подождём до следующего запроса
         _SCHEMA_READY = False
     except SQLAlchemyError:
         _SCHEMA_READY = False
 
+
 @shopping_bp.record_once
 def _on_register(state):
-    # Первая проба — может повезёт (если models уже на месте).
     app = state.app
     try:
         with app.app_context():
@@ -108,15 +115,15 @@ def _on_register(state):
         except Exception:
             print(f"[shopping_bp] init failed: {e}")
 
+
 @shopping_bp.before_app_request
 def _lazy_bootstrap_bp():
-    # На каждом запросе до первого успеха пытаемся создать таблицы
     if not _SCHEMA_READY:
         _ensure_schema_once()
 
+
 # ---------------- DAO ----------------
 def _get_or_create_list_id(user_id: int, diet_id: int) -> int:
-    # Гарантируем схему перед доступом
     _ensure_schema_once()
     with db.engine.begin() as con:
         row = con.execute(
@@ -135,6 +142,7 @@ def _get_or_create_list_id(user_id: int, diet_id: int) -> int:
         ).mappings().first()
         return int(row["id"])
 
+
 def _replace_items(list_id: int, items: list[dict]) -> None:
     _ensure_schema_once()
     pg = _is_pg()
@@ -151,7 +159,6 @@ def _replace_items(list_id: int, items: list[dict]) -> None:
              {'NOW()' if pg else 'CURRENT_TIMESTAMP'})
         """)
         for it in items:
-            # нормализуем
             meal_type = (it.get("meal_type") or "").lower() or None
             product_name = it.get("product_name") or it.get("item_name") or it.get("name")
             total_grams = it.get("total_grams") or it.get("qty")
@@ -177,6 +184,7 @@ def _replace_items(list_id: int, items: list[dict]) -> None:
                 "meta": _json_dumps(meta),
             })
 
+
 def _fetch_items(list_id: int) -> list[dict]:
     _ensure_schema_once()
     with db.engine.begin() as con:
@@ -185,7 +193,7 @@ def _fetch_items(list_id: int) -> list[dict]:
                 SELECT id, meal_type, item_name, qty, unit, kaspi_query, kaspi_url, price, meta
                 FROM shopping_items
                 WHERE list_id=:lid
-                ORDER BY id ASC
+                ORDER BY meal_type, id ASC
             """),
             {"lid": list_id}
         ).mappings().all()
@@ -212,8 +220,8 @@ def _fetch_items(list_id: int) -> list[dict]:
         })
     return out
 
+
 def _diet_meals_payload(d: Diet) -> dict:
-    # модель хранит JSON-строки
     payload = {}
     for k in ("breakfast", "lunch", "dinner", "snack"):
         val = getattr(d, k, "[]") or "[]"
@@ -223,22 +231,40 @@ def _diet_meals_payload(d: Diet) -> dict:
             payload[k] = []
     return payload
 
+
 def _group_for_front(items: list[dict]) -> dict:
-    """В формат, который ждёт твой шаблон/JS: {breakfast:[], lunch:[], dinner:[], snack:[]}"""
-    out = {k: [] for k in ("breakfast", "lunch", "dinner", "snack")}
+    out = {k: [] for k in ("breakfast", "lunch", "dinner", "snack", "other")}
     for it in items:
-        mt = (it.get("meal_type") or "").lower()
-        if mt in out:
-            out[mt].append({
-                "product_name": it.get("product_name"),
-                "total_grams": it.get("total_grams"),
-                "pack_grams": it.get("pack_grams"),
-                "quantity_packs": it.get("quantity_packs") or 1,
-                "kaspi_url": it.get("kaspi_url"),
-            })
+        mt = (it.get("meal_type") or "").lower() or "other"
+        if mt not in out:
+            mt = "other"
+        out[mt].append({
+            "product_name": it.get("product_name"),
+            "total_grams": it.get("total_grams"),
+            "pack_grams": it.get("pack_grams"),
+            "quantity_packs": it.get("quantity_packs") or 1,
+            "kaspi_query": it.get("kaspi_query"),
+            "kaspi_url": it.get("kaspi_url"),
+            "price": it.get("price"),
+            "unit": it.get("unit") or 'шт',
+        })
     return out
 
+
 # ---------------- Routes ----------------
+@shopping_bp.route("/cart/<int:diet_id>")
+def shopping_cart_page(diet_id):
+    u = _current_user()
+    if not u:
+        return "unauthorized", 401
+
+    diet = Diet.query.filter_by(id=diet_id, user_id=u.id).first()
+    if not diet:
+        return "Диета не найдена", 404
+
+    return render_template("shopping_cart.html", diet=diet)
+
+
 @shopping_bp.get("/list")
 def shopping_list_get():
     _ensure_schema_once()
@@ -265,22 +291,26 @@ def shopping_list_get():
     except SQLAlchemyError as e:
         return jsonify({"ok": False, "message": f"db error: {e}"}), 500
 
-@shopping_bp.delete("/list")
-def shopping_list_delete():
+
+@shopping_bp.post("/reset")
+def shopping_list_reset():
     u = _current_user()
     if not u:
         return jsonify({"ok": False, "message": "unauthorized"}), 401
-    diet_id = request.args.get("diet_id", type=int)
+
+    data = request.get_json(silent=True) or {}
+    diet_id = int(data.get("diet_id") or 0)
     if not diet_id:
         return jsonify({"ok": False, "message": "diet_id is required"}), 400
-    # находим список и удаляем все позиции
+
     with db.engine.begin() as con:
         row = con.execute(text("SELECT id FROM shopping_lists WHERE user_id=:u AND diet_id=:d"),
                           {"u": u.id, "d": diet_id}).mappings().first()
         if row:
             con.execute(text("DELETE FROM shopping_items WHERE list_id=:lid"), {"lid": row["id"]})
-            con.execute(text("DELETE FROM shopping_lists WHERE id=:lid"), {"lid": row["id"]})
+            # Оставляем сам список, чтобы не создавать его заново
     return jsonify({"ok": True})
+
 
 @shopping_bp.post("/build")
 def shopping_build():
@@ -339,7 +369,6 @@ def shopping_build():
     except Exception as e:
         return jsonify({"ok": False, "message": f"OpenAI error: {e}"}), 500
 
-    # Фоллбэк для ссылок: пусть фронт строит поисковую ссылку сам
     for it in items:
         if (it.get("kaspi_query") or it.get("product_name")) and not it.get("kaspi_url"):
             it["kaspi_url"] = None
@@ -351,3 +380,51 @@ def shopping_build():
         return jsonify({"ok": True, "list_id": list_id, "items_by_meal": grouped})
     except SQLAlchemyError as e:
         return jsonify({"ok": False, "message": f"db error: {e}"}), 500
+
+
+@shopping_bp.post("/cart/<int:diet_id>/send-telegram")
+def send_cart_to_telegram(diet_id):
+    u = _current_user()
+    if not u:
+        return jsonify({"ok": False, "message": "unauthorized"}), 401
+
+    diet = Diet.query.filter_by(id=diet_id, user_id=u.id).first()
+    if not diet:
+        return jsonify({"ok": False, "message": "Диета не найдена"}), 404
+
+    try:
+        list_id = _get_or_create_list_id(u.id, diet.id)
+        items = _fetch_items(list_id)
+    except SQLAlchemyError as e:
+        return jsonify({"ok": False, "message": f"db error: {e}"}), 500
+
+    if not items:
+        return jsonify({"ok": False, "message": "Корзина пуста. Сначала сгенерируйте ее."}), 400
+
+    items_by_meal = {}
+    meal_order = ["breakfast", "lunch", "dinner", "snack"]
+    for it in items:
+        mt = it.get("meal_type") or "other"
+        if mt not in items_by_meal:
+            items_by_meal[mt] = []
+        items_by_meal[mt].append(it)
+
+    msg_lines = [f"🛒 *Список покупок для диеты от {diet.date.strftime('%d.%m.%Y')}*\n"]
+    meal_titles = {"breakfast": "🍳 Завтрак", "lunch": "🍲 Обед", "dinner": "🍝 Ужин", "snack": "🍎 Перекус",
+                   "other": "Прочее"}
+
+    for meal_key in meal_order:
+        if meal_key in items_by_meal:
+            msg_lines.append(f"*{meal_titles.get(meal_key, meal_key.capitalize())}*")
+            for it in items_by_meal[meal_key]:
+                name = it.get("product_name") or "Товар"
+                kaspi_url = it.get("kaspi_url")
+                kaspi_query = it.get("kaspi_query", name)
+                link = kaspi_url if kaspi_url else f"https://kaspi.kz/shop/search/?text={quote(kaspi_query)}"
+                msg_lines.append(f"• [{name}]({link})")
+            msg_lines.append("")
+
+    print("--- TELEGRAM MESSAGE ---")
+    print('\n'.join(msg_lines))
+    print("------------------------")
+    return jsonify({"ok": True, "message": "Список покупок отправлен в Telegram!"})
