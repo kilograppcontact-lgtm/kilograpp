@@ -6,11 +6,12 @@
   <component name="ChangeListManager">
     <list default="true" id="3fd51ef2-c522-4b09-b8bb-159666be30fe" name="Changes" comment="">
       <change afterPath="$PROJECT_DIR$/.env" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/templates/shopping_cart.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/shopping_bp.py" beforeDir="false" afterPath="$PROJECT_DIR$/shopping_bp.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/templates/confirm_diet.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/confirm_diet.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/ai_instructions.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/ai_instructions.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/profile.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/profile.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/trainings-calendar.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/trainings-calendar.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/templates/trainings.html" beforeDir="false" afterPath="$PROJECT_DIR$/templates/trainings.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

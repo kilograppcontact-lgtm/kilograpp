@@ -109,20 +109,20 @@
   </div>
 
   <!-- Календарь: скролл-контейнер на узких экранах -->
-  <div class="calendar-xl rounded-3xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900/60">
+  <div class="calendar-xl rounded-3xl border border-gray-200 bg-white shadow-sm">
     <div class="calendar-scroll">
       <div class="calendar-inner">
         <!-- Шапка дней недели -->
-        <div class="grid grid-cols-7 gap-px bg-gray-100 dark:bg-white/10 weekdays-sticky">
+        <div class="grid grid-cols-7 gap-px bg-gray-100 weekdays-sticky">
           {% set weekdays = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] %}
           {% for w in weekdays %}
-            <div class="bg-gray-50 dark:bg-slate-800/60 text-center text-[12px] font-semibold py-2 uppercase tracking-wide text-gray-600 dark:text-gray-300">
+            <div class="bg-gray-50 text-center text-[12px] font-semibold py-2 uppercase tracking-wide text-gray-600">
               {{ w }}
             </div>
           {% endfor %}
         </div>
         <!-- Сетка календаря -->
-        <div id="calendarGrid" class="grid grid-cols-7 gap-px bg-gray-100 dark:bg-white/10"></div>
+        <div id="calendarGrid" class="grid grid-cols-7 gap-px bg-gray-100"></div>
       </div>
     </div>
   </div>
@@ -130,13 +130,13 @@
 
 <!-- Модалка ДЕНЬ -->
 <div id="dayModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="dayModalDate">
-  <div class="modal-card bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xl">
-    <div class="flex items-center justify-between p-4 border-b dark:border-white/10">
+  <div class="modal-card bg-white text-slate-900 shadow-xl">
+    <div class="flex items-center justify-between p-4 border-b">
       <div>
         <div id="dayModalDate" class="text-lg font-semibold"></div>
         <div id="dayModalCount" class="text-xs text-gray-500"></div>
       </div>
-      <button id="dayModalClose" class="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10" aria-label="Закрыть"><i class="bi bi-x-lg"></i></button>
+      <button id="dayModalClose" class="p-2 rounded-lg hover:bg-black/5" aria-label="Закрыть"><i class="bi bi-x-lg"></i></button>
     </div>
     <div id="dayModalBody" class="modal-body p-4 space-y-3">
       <!-- наполняется JS -->
@@ -146,10 +146,10 @@
 
 <!-- Модалка МОИ ЗАПИСИ -->
 <div id="myModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="myModalTitle">
-  <div class="modal-card bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xl">
-    <div class="flex items-center justify-between p-4 border-b dark:border-white/10">
+  <div class="modal-card bg-white text-slate-900 shadow-xl">
+    <div class="flex items-center justify-between p-4 border-b">
       <div id="myModalTitle" class="text-lg font-semibold">Мои записи</div>
-      <button id="myModalClose" class="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10" aria-label="Закрыть"><i class="bi bi-x-lg"></i></button>
+      <button id="myModalClose" class="p-2 rounded-lg hover:bg-black/5" aria-label="Закрыть"><i class="bi bi-x-lg"></i></button>
     </div>
     <div id="myModalBody" class="modal-body p-4">
       <div class="text-gray-500">Загрузка…</div>
@@ -271,11 +271,11 @@
 
     for(let i=0; i<cells; i++){
       const cell = document.createElement('div');
-      cell.className = 'calendar-cell relative bg-white dark:bg-slate-900/40 p-2';
+      cell.className = 'calendar-cell relative bg-white p-2';
 
       const dayNum = i - startWeekDay + 1;
       if(dayNum < 1 || dayNum > last.getDate()){
-        cell.classList.add('bg-gray-50','dark:bg-slate-800/50');
+        cell.classList.add('bg-gray-50');
         grid.appendChild(cell);
         continue;
       }
@@ -288,7 +288,7 @@
       const header = document.createElement('div');
       header.className = 'flex items-center justify-between mb-2';
       const dn = document.createElement('button');
-      dn.className = 'day-badge inline-flex items-center justify-center w-9 h-9 text-sm font-semibold rounded-full transition ' + (isToday ? 'bg-emerald-600 text-white' : 'bg-black/5 dark:bg-white/10 text-gray-700 dark:text-gray-200');
+      dn.className = 'day-badge inline-flex items-center justify-center w-9 h-9 text-sm font-semibold rounded-full transition ' + (isToday ? 'bg-emerald-600 text-white' : 'bg-black/5 text-gray-700');
       dn.textContent = dayNum;
       dn.title = 'Открыть все тренировки дня';
       dn.addEventListener('click', ()=> openDayModal(dateStr));
@@ -324,20 +324,19 @@
 
         const wrap = document.createElement('div');
         wrap.className = 'pill group rounded-xl border flex flex-col gap-1 px-2 py-1 text-xs ' +
-          (t.joined ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/15 dark:border-emerald-700'
-                    : 'bg-gray-50 border-gray-200 dark:bg-slate-800/60 dark:border-white/10');
+          (t.joined ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200');
         if(past) wrap.classList.add('disabled');
 
         // строка 1: время + тренер
         const row1 = document.createElement('div');
         row1.className = 'flex items-center justify-between gap-2';
         row1.innerHTML = `<span class="font-medium">${t.start_time}–${t.end_time}</span>
-                          <span class="truncate text-gray-700 dark:text-gray-200">${t.trainer_name}</span>`;
+                          <span class="truncate text-gray-700">${t.trainer_name}</span>`;
         wrap.appendChild(row1);
 
         // строка 2: название
         const rowTitle = document.createElement('div');
-        rowTitle.className = 'truncate text-gray-600 dark:text-gray-300';
+        rowTitle.className = 'truncate text-gray-600';
         rowTitle.textContent = t.title || 'Онлайн-тренировка';
         wrap.appendChild(rowTitle);
 
@@ -347,8 +346,7 @@
 
         const btn = document.createElement('button');
         btn.className = 'px-2 py-1 rounded-lg border transition ' +
-          (t.joined ? 'border-rose-300 text-rose-600 hover:bg-rose-50 dark:border-rose-600/40 dark:hover:bg-rose-900/20'
-                    : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-600/40 dark:hover:bg-emerald-900/20');
+          (t.joined ? 'border-rose-300 text-rose-600 hover:bg-rose-50' : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50');
 
         if(past){
           btn.disabled = true;
@@ -413,25 +411,24 @@
 
         const item = document.createElement('div');
         item.className = 'rounded-2xl border p-3 flex flex-col gap-2 ' +
-          (t.joined ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/15 dark:border-emerald-700'
-                    : 'bg-white border-gray-200 dark:bg-slate-800/60 dark:border-white/10');
+          (t.joined ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-200');
 
         item.innerHTML = `
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="text-sm font-semibold">${t.start_time}–${t.end_time}</div>
             <div class="text-xs text-gray-500">ID: <button class="copy-id underline underline-offset-2" data-id="${t.id}">${t.id}</button></div>
           </div>
-          <div class="text-sm text-gray-700 dark:text-gray-200">${t.title || 'Онлайн-тренировка'} — ${t.trainer_name}</div>
+          <div class="text-sm text-gray-700">${t.title || 'Онлайн-тренировка'} — ${t.trainer_name}</div>
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-center gap-2 flex-wrap">
-              <span class="badge bg-white border border-gray-200 text-gray-700 dark:bg-slate-800/60 dark:border-white/10 dark:text-gray-200">
+              <span class="badge bg-white border border-gray-200 text-gray-700">
                 ${(t.spots_left||0)>0 ? 'мест: '+t.spots_left : 'нет мест'}
               </span>
               ${t.can_open_link && t.meeting_link
                 ? `<a href="${t.meeting_link}" target="_blank" rel="noopener" class="badge bg-emerald-600 text-white hover:opacity-90">
                      <i class="bi bi-box-arrow-up-right"></i> ${host||'перейти'}
                    </a>`
-                : `<span class="badge bg-gray-200 text-gray-700 dark:bg-slate-700 dark:text-gray-200">
+                : `<span class="badge bg-gray-200 text-gray-700">
                      <i class="bi bi-lock"></i> откроется в ${(t.link_visible_at||'').slice(11,16) || 'скоро'}
                    </span>`
               }
@@ -498,12 +495,12 @@
           ? `<button disabled class="px-2 py-1 rounded-lg border text-gray-400">прошло</button>`
           : `<button data-cancel="${t.id}" class="px-2 py-1 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50">Отменить</button>`;
         return `
-          <div class="p-4 border-b dark:border-white/10 flex items-start gap-3">
+          <div class="p-4 border-b flex items-start gap-3">
             <div class="shrink-0 mt-0.5 text-emerald-600"><i class="bi bi-broadcast-pin"></i></div>
             <div class="flex-1 min-w-0">
               <div class="text-sm font-semibold">${t.date} · ${t.start_time}–${t.end_time}</div>
               <div class="text-xs text-gray-500">ID: <button class="copy-id underline underline-offset-2" data-id="${t.id}">${t.id}</button></div>
-              <div class="text-sm text-gray-700 dark:text-gray-200 truncate">${t.title || 'Онлайн-тренировка'} — ${t.trainer_name}</div>
+              <div class="text-sm text-gray-700 truncate">${t.title || 'Онлайн-тренировка'} — ${t.trainer_name}</div>
               <div class="flex items-center justify-between mt-1">
                 ${linkHtml}
                 ${btnHtml}

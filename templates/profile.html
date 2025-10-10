@@ -712,6 +712,31 @@ lockScroll(false);
         pointer-events: auto;
     }
 </style>
+
+<style>
+    /* НОВЫЙ, УЛУЧШЕННЫЙ СТИЛЬ ДЛЯ ПОДСВЕТКИ */
+    @keyframes highlight-flash {
+        0% {
+            /* Начальное состояние: без тени, стандартный размер */
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+            transform: scale(1);
+        }
+        50% {
+            /* Середина анимации: тень расширяется, блок чуть увеличивается */
+            box-shadow: 0 0 0 12px rgba(59, 130, 246, 0);
+            transform: scale(1.02);
+        }
+        100% {
+            /* Конечное состояние: тень и увеличение исчезают */
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+            transform: scale(1);
+        }
+    }
+    .flash-highlight {
+        /* Применение анимации к классу */
+        animation: highlight-flash 1.2s ease-out;
+    }
+</style>
 <div class="max-w-7xl mx-auto px-4 py-6">
 <div id="profile-notifications" class="space-y-3 mb-4"></div>
 <div id="infoSlider" class="relative rounded-xl shadow-lg mb-6 overflow-hidden">
@@ -1030,8 +1055,8 @@ function showSlide(index) {
         </div>
     </div>
 
-    <div class="card p-6">
-        <h3 class="text-lg font-bold text-slate-800 mb-3">Новый замер тела</h3>
+<div id="upload-analysis-card" class="card p-6">
+    <h3 class="text-lg font-bold text-slate-800 mb-3">Новый замер тела</h3>
         <form id="uploadForm" action="/upload_analysis" method="POST" enctype="multipart/form-data">
               <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg" required class="form-input file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
               <button type="submit" class="btn btn-primary w-full mt-3">Загрузить и обновить</button>
@@ -1082,8 +1107,7 @@ function showSlide(index) {
 
 
      {# --- НАЧАЛО НОВОГО БЛОКА ПРОГРЕССА --- #}
-<div id="fat-loss-progress-card" class="card p-6 relative cursor-pointer hover:shadow-lg transition-shadow" onclick="showDeficitHistory()">
-    {# Передаем данные в JS через data-атрибуты #}
+<div id="fat-loss-progress-card" class="card p-6 relative transition-shadow {% if fat_loss_progress %}cursor-pointer hover:shadow-lg{% else %}cursor-help{% endif %}">    {# Передаем данные в JS через data-атрибуты #}
     {% if fat_loss_progress %}
         <div id="progress-data-container"
      data-initial-kg="{{ fat_loss_progress.initial_kg }}"
@@ -1140,7 +1164,7 @@ function showSlide(index) {
             <a href="{{ url_for('purchase_page') }}" class="btn btn-primary btn-sm">Активировать</a>
         </div>
     {% else %}
-        <div class="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl mt-4">
+        <div id="start-progress-placeholder" class="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl mt-4">
             <p class="font-semibold text-slate-600">Начните свой путь к цели!</p>
             <p class="text-sm text-slate-500 mt-1">Загрузите свой первый анализ тела, чтобы мы рассчитали цели и начали отслеживать прогресс.</p>
         </div>
@@ -1785,7 +1809,6 @@ function showSlide(index) {
     <h2 class="text-xl font-bold mb-6">Редактирование профиля</h2>
 
     <form action="/edit_profile" method="POST" enctype="multipart/form-data" class="space-y-5">
-
         <div class="flex items-center gap-4">
             {% if user.avatar %}
               <img src="{{ url_for('serve_file', filename=user.avatar.filename) }}" alt="Avatar" class="w-16 h-16 rounded-full object-cover">
@@ -1803,7 +1826,8 @@ function showSlide(index) {
         <div class="grid sm:grid-cols-2 gap-4">
             <div>
                 <label for="name" class="block text-sm font-medium mb-1 text-slate-700">Имя</label>
-                <input type="text" name="name" id="name" value="{{ user.name }}" class="form-input" required>
+                <input type="text" name="name" id="name" value="{{ user.name }}" class="form-input" required
+                       pattern="[^\d]*" title="Имя не должно содержать цифры.">
             </div>
             <div>
                 <label for="email" class="block text-sm font-medium mb-1 text-slate-700">Email</label>
@@ -1813,27 +1837,35 @@ function showSlide(index) {
 
         <div>
           <label for="date_of_birth" class="block text-sm font-medium mb-1 text-slate-700">Дата рождения</label>
-          <input type="date" name="date_of_birth" id="date_of_birth" value="{{ user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else '' }}" class="form-input" required>
-        </div>
-
-        <hr>
-
-        <p class="text-sm text-slate-600">Оставьте поля ниже пустыми, если не хотите менять пароль.</p>
-
-        <div class="grid sm:grid-cols-2 gap-4">
-             <div>
-                <label for="new_password" class="block text-sm font-medium mb-1 text-slate-700">Новый пароль</label>
-                <input type="password" name="new_password" id="new_password" class="form-input" placeholder="••••••••">
-            </div>
-            <div>
-                <label for="confirm_password" class="block text-sm font-medium mb-1 text-slate-700">Подтвердите пароль</label>
-                <input type="password" name="confirm_password" id="confirm_password" class="form-input" placeholder="••••••••">
-            </div>
+          <input type="date" name="date_of_birth" id="date_of_birth" value="{{ user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else '' }}" class="form-input" required
+                 title="Дата рождения не может быть в будущем.">
         </div>
 
         <div class="flex justify-end gap-3 pt-4">
             <button type="button" onclick="closeEditProfileModal()" class="btn btn-secondary">Отмена</button>
             <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+        </div>
+    </form>
+
+    <hr class="my-6 border-slate-200">
+
+    <h3 class="text-lg font-bold mb-4">Смена пароля</h3>
+    <form action="/change_password" method="POST" class="space-y-4">
+        <div class="grid sm:grid-cols-2 gap-4">
+             <div>
+                <label for="new_password" class="block text-sm font-medium mb-1 text-slate-700">Новый пароль</label>
+                <input type="password" name="new_password" id="new_password" class="form-input" placeholder="••••••••"
+                       minlength="8" title="Пароль должен содержать минимум 8 символов.">
+            </div>
+            <div>
+                <label for="confirm_password" class="block text-sm font-medium mb-1 text-slate-700">Подтвердите пароль</label>
+                <input type="password" name="confirm_password" id="confirm_password" class="form-input" placeholder="••••••••"
+                       minlength="8">
+            </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+            <button type="submit" class="btn btn-primary">Сменить пароль</button>
         </div>
     </form>
   </div>
@@ -3069,6 +3101,86 @@ document.addEventListener('DOMContentLoaded', function() {
 
     } catch (e) {
         console.error("Failed to parse or render progress checkpoints:", e);
+    }
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Находим нужные элементы по их ID
+    const progressCard = document.getElementById('fat-loss-progress-card');
+    const uploadCard = document.getElementById('upload-analysis-card');
+    const placeholder = document.getElementById('start-progress-placeholder');
+
+    // Проверяем, что все элементы существуют на странице
+    if (progressCard && uploadCard && placeholder) {
+
+        // Добавляем обработчик клика на карточку прогресса
+        progressCard.addEventListener('click', function() {
+
+            // Эта логика сработает, ТОЛЬКО если отображается блок-заглушка
+            // (т.е. у пользователя еще нет замеров)
+            if (getComputedStyle(placeholder).display !== 'none') {
+
+                // 1. Плавно прокручиваем страницу, чтобы карточка загрузки оказалась по центру экрана
+                uploadCard.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+
+                // 2. Добавляем класс, который запускает нашу CSS-анимацию подсветки
+                uploadCard.classList.add('flash-highlight');
+
+                // 3. Через 1.2 секунды (длительность анимации) убираем класс.
+                // Это нужно, чтобы анимацию можно было запустить повторно.
+                setTimeout(() => {
+                    uploadCard.classList.remove('flash-highlight');
+                }, 1200);
+            }
+        });
+    }
+
+   // --- Логика для валидации формы редактирования профиля ---
+    const dobInput = document.getElementById('date_of_birth');
+    if (dobInput) {
+        const today = new Date();
+        // Форматируем дату в YYYY-MM-DD для атрибута max
+        const maxDate = today.toISOString().split('T')[0];
+        dobInput.setAttribute('max', maxDate);
+    }
+
+    const newPasswordInput = document.getElementById('new_password');
+    const confirmPasswordInput = document.getElementById('confirm_password');
+
+    if (newPasswordInput && confirmPasswordInput) {
+        const validatePasswords = () => {
+            const newPassValue = newPasswordInput.value;
+            const confirmPassValue = confirmPasswordInput.value;
+
+            // 1. Если пользователь начал вводить пароль в любое из полей,
+            //    делаем оба поля обязательными для заполнения.
+            if (newPassValue || confirmPassValue) {
+                newPasswordInput.required = true;
+                confirmPasswordInput.required = true;
+            } else {
+                //    Если оба поля пусты, они не обязательны.
+                newPasswordInput.required = false;
+                confirmPasswordInput.required = false;
+            }
+
+            // 2. Проверяем совпадение, только если оба поля заполнены.
+            if (newPassValue && confirmPassValue && newPassValue !== confirmPassValue) {
+                // Устанавливаем кастомное сообщение об ошибке
+                confirmPasswordInput.setCustomValidity("Пароли не совпадают.");
+            } else {
+                // Если все в порядке, убираем сообщение
+                confirmPasswordInput.setCustomValidity('');
+            }
+        };
+
+        // Запускаем проверку при вводе в любом из полей
+        newPasswordInput.addEventListener('input', validatePasswords);
+        confirmPasswordInput.addEventListener('input', validatePasswords);
     }
 });
 </script>

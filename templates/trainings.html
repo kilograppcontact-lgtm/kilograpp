@@ -96,39 +96,39 @@
   <!-- ОСНОВА -->
   <div class="layout grid lg:grid-cols-[1fr,360px] gap-8 items-start">
     <!-- КАЛЕНДАРЬ -->
-    <div class="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden dark:border-white/10 dark:bg-slate-900/60">
+    <div class="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
       <div class="calendar-scroll">
         <div class="calendar-inner">
           <!-- заголовки дней -->
-          <div class="grid grid-cols-7 gap-px bg-gray-100 dark:bg-white/10 weekdays-sticky">
+          <div class="grid grid-cols-7 gap-px bg-gray-100 weekdays-sticky">
             {% set weekdays = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] %}
             {% for w in weekdays %}
-              <div class="bg-gray-50 dark:bg-slate-800/60 text-center text-[12px] font-semibold py-2 uppercase tracking-wide text-gray-600 dark:text-gray-300">
+              <div class="bg-gray-50 text-center text-[12px] font-semibold py-2 uppercase tracking-wide text-gray-600">
                 {{ w }}
               </div>
             {% endfor %}
           </div>
           <!-- сетка -->
-          <div id="calendarGrid" class="grid grid-cols-7 gap-px bg-gray-100 dark:bg-white/10 min-h-[560px]"></div>
+          <div id="calendarGrid" class="grid grid-cols-7 gap-px bg-gray-100 min-h-[560px]"></div>
         </div>
       </div>
     </div>
 
     <!-- МОИ ТРЕНИРОВКИ (для тренера) -->
-    <aside class="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden dark:border-white/10 dark:bg-slate-900/60">
-      <div class="p-4 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
+    <aside class="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-gray-200 flex items-center justify-between">
         <h2 class="font-semibold">Мои тренировки</h2>
         {% if is_trainer %}
-        <span class="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">тренер</span>
+        <span class="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700">тренер</span>
         {% endif %}
       </div>
-      <div id="myList" class="divide-y divide-gray-100 dark:divide-white/10 max-h-[70vh] overflow-auto">
+      <div id="myList" class="divide-y divide-gray-100 max-h-[70vh] overflow-auto">
         <div class="p-4 animate-pulse">
-          <div class="h-3 w-2/3 bg-gray-200 dark:bg-white/10 rounded mb-2"></div>
-          <div class="h-3 w-1/2 bg-gray-200 dark:bg-white/10 rounded"></div>
+          <div class="h-3 w-2/3 bg-gray-200 rounded mb-2"></div>
+          <div class="h-3 w-1/2 bg-gray-200 rounded"></div>
         </div>
       </div>
-      <div class="p-3 text-xs text-gray-500 dark:text-gray-400">
+      <div class="p-3 text-xs text-gray-500">
         Лайфхаки: ←/→ переключают месяцы, T — сегодня, N — новая (для тренера), двойной клик по дню — создать.
       </div>
     </aside>
@@ -146,46 +146,46 @@
 
 <!-- МОДАЛКА СОЗДАНИЯ/РЕДАКТИРОВАНИЯ -->
 <div id="modal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50">
-  <div class="modal-pop bg-white dark:bg-slate-900/90 w-full max-w-lg rounded-2xl shadow-xl border border-gray-200 dark:border-white/10">
-    <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-white/10">
+  <div class="modal-pop bg-white w-full max-w-lg rounded-2xl shadow-xl border border-gray-200">
+    <div class="flex items-center justify-between p-4 border-b border-gray-200">
       <h3 id="modalTitle" class="font-semibold">Новая тренировка</h3>
-      <button id="modalClose" class="p-2 rounded hover:bg-black/5 dark:hover:bg-white/10"><i class="bi bi-x-lg"></i></button>
+      <button id="modalClose" class="p-2 rounded hover:bg-black/5"><i class="bi bi-x-lg"></i></button>
     </div>
     <div class="p-4 space-y-4">
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label class="block text-sm mb-1">Дата</label>
-          <input id="fDate" type="date" class="w-full border rounded-xl px-3 py-2 bg-white dark:bg-slate-900/60" />
+          <input id="fDate" type="date" class="w-full border rounded-xl px-3 py-2 bg-white" />
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-sm mb-1">Начало</label>
-            <input id="fStart" type="time" class="w-full border rounded-xl px-3 py-2 bg-white dark:bg-slate-900/60" />
+            <input id="fStart" type="time" class="w-full border rounded-xl px-3 py-2 bg-white" />
           </div>
           <div>
             <label class="block text-sm mb-1">Окончание</label>
-            <input id="fEnd" type="time" class="w-full border rounded-xl px-3 py-2 bg-white dark:bg-slate-900/60" />
+            <input id="fEnd" type="time" class="w-full border rounded-xl px-3 py-2 bg-white" />
           </div>
         </div>
       </div>
 
       <div>
-  <label class="block text-sm mb-1">Название тренировки</label>
-  <input id="fTitle" type="text" placeholder="Например: Калистеника"
-         class="w-full border rounded-xl px-3 py-2 bg-white dark:bg-slate-900/60" />
-</div>
+        <label class="block text-sm mb-1">Название тренировки</label>
+        <input id="fTitle" type="text" placeholder="Например: Калистеника"
+               class="w-full border rounded-xl px-3 py-2 bg-white" />
+      </div>
 
-<div>
-  <label class="block text-sm mb-1">Ссылка на занятие</label>
-  <input id="fLink" type="url" placeholder="https://zoom.u..." class="w-full border rounded-xl px-3 py-2 bg-white dark:bg-slate-900/60" />
-  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">В превью видны: имя тренера, время и название, остальное — в деталях.</p>
-</div>
+      <div>
+        <label class="block text-sm mb-1">Ссылка на занятие</label>
+        <input id="fLink" type="url" placeholder="https://zoom.u..." class="w-full border rounded-xl px-3 py-2 bg-white" />
+        <p class="mt-1 text-xs text-gray-500">В превью видны: имя тренера, время и название, остальное — в деталях.</p>
+      </div>
 
 
       <div id="formError" class="text-sm text-red-600 hidden"></div>
     </div>
-    <div class="p-4 border-t border-gray-200 dark:border-white/10 flex items-center justify-end gap-2">
-      <button id="btnCancel" class="px-3 py-2 rounded-xl border hover:bg-black/5 dark:hover:bg-white/10">Отмена</button>
+    <div class="p-4 border-t border-gray-200 flex items-center justify-end gap-2">
+      <button id="btnCancel" class="px-3 py-2 rounded-xl border hover:bg-black/5">Отмена</button>
       <button id="btnSave" class="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60">Сохранить</button>
     </div>
   </div>
@@ -193,10 +193,10 @@
 
 <!-- МОДАЛКА ДЕТАЛЕЙ ТРЕНИРОВКИ -->
 <div id="trainingModal" class="modal-overlay">
-  <div class="modal-card bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xl">
-    <div class="flex items-center justify-between p-4 border-b dark:border-white/10">
+  <div class="modal-card bg-white text-slate-900 shadow-xl">
+    <div class="flex items-center justify-between p-4 border-b">
       <div class="text-lg font-semibold">Детали тренировки</div>
-      <button id="trainingModalClose" class="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10"><i class="bi bi-x-lg"></i></button>
+      <button id="trainingModalClose" class="p-2 rounded-lg hover:bg-black/5"><i class="bi bi-x-lg"></i></button>
     </div>
     <div id="trainingModalBody" class="modal-body p-4 space-y-3"></div>
   </div>
@@ -236,6 +236,7 @@
   const fStart = el('fStart');
   const fEnd = el('fEnd');
   const fLink = el('fLink');
+  const fTitle = el('fTitle');
   const formError = el('formError');
 
   const onlyMine = el('onlyMine');
@@ -294,12 +295,11 @@
 
     formError.classList.add('hidden'); formError.textContent = '';
     fDate.value = dateStr || '';
-fStart.value = initial ? initial.start_time : '';
-fEnd.value   = initial ? initial.end_time   : '';
-fLink.value  = initial ? (initial.meeting_link || '') : '';
-fTitle.value = initial ? (initial.title || '') : '';
-btnSave.disabled = false;
-
+    fStart.value = initial ? initial.start_time : '';
+    fEnd.value   = initial ? initial.end_time   : '';
+    fLink.value  = initial ? (initial.meeting_link || '') : '';
+    fTitle.value = initial ? (initial.title || '') : '';
+    btnSave.disabled = false;
   }
   function closeModal(){ modal.classList.add('hidden'); modal.classList.remove('flex'); editingId = null; }
 
@@ -310,12 +310,12 @@ btnSave.disabled = false;
 
   btnSave.addEventListener('click', async () => {
     const payload = {
-  date: fDate.value,
-  start_time: fStart.value,
-  end_time: fEnd.value,
-  meeting_link: fLink.value.trim(),
-  title: (fTitle.value || '').trim()
-};
+      date: fDate.value,
+      start_time: fStart.value,
+      end_time: fEnd.value,
+      meeting_link: fLink.value.trim(),
+      title: (fTitle.value || '').trim()
+    };
 
     const err = [];
     if(!payload.date) err.push('Укажите дату');
@@ -417,12 +417,12 @@ END:VCALENDAR`;
         <div class="shrink-0 mt-0.5 text-indigo-600"><i class="bi bi-broadcast-pin"></i></div>
         <div class="flex-1 min-w-0">
           <div class="text-sm font-semibold">${t.date} · ${t.start_time}–${t.end_time}</div>
-          <div class="text-sm text-gray-700 dark:text-gray-200 truncate">${t.title || 'Онлайн-тренировка'} — ${t.trainer_name}</div>
+          <div class="text-sm text-gray-700 truncate">${t.title || 'Онлайн-тренировка'} — ${t.trainer_name}</div>
           <a href="${t.meeting_link}" target="_blank" rel="noopener" class="text-xs text-indigo-600 hover:underline truncate">${host}</a>
           <div class="mt-2 flex items-center gap-2 opacity-100">
-            <button data-edit="${t.id}" class="px-2 py-1 text-xs rounded-lg border hover:bg-black/5 dark:hover:bg-white/10"><i class="bi bi-pencil"></i> Изменить</button>
-            <button data-ics="${t.id}" class="px-2 py-1 text-xs rounded-lg border hover:bg-black/5 dark:hover:bg-white/10"><i class="bi bi-calendar-plus"></i> .ics</button>
-            <button data-del="${t.id}" class="px-2 py-1 text-xs rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50 dark:border-rose-600/40 dark:hover:bg-rose-900/20"><i class="bi bi-trash"></i> Удалить</button>
+            <button data-edit="${t.id}" class="px-2 py-1 text-xs rounded-lg border hover:bg-black/5"><i class="bi bi-pencil"></i> Изменить</button>
+            <button data-ics="${t.id}" class="px-2 py-1 text-xs rounded-lg border hover:bg-black/5"><i class="bi bi-calendar-plus"></i> .ics</button>
+            <button data-del="${t.id}" class="px-2 py-1 text-xs rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50"><i class="bi bi-trash"></i> Удалить</button>
           </div>
         </div>
       </div>`;
@@ -490,11 +490,11 @@ END:VCALENDAR`;
 
     for(let i=0; i<cells; i++){
       const cell = document.createElement('div');
-      cell.className = 'calendar-cell relative bg-white dark:bg-slate-900/40 min-h-[140px] p-2 transition rounded-none';
+      cell.className = 'calendar-cell relative bg-white min-h-[140px] p-2 transition rounded-none';
 
       const dayNum = i - startWeekDay + 1;
       if(dayNum < 1 || dayNum > last.getDate()){
-        cell.classList.add('bg-gray-50','dark:bg-slate-800/50');
+        cell.classList.add('bg-gray-50');
         grid.appendChild(cell);
         continue;
       }
@@ -505,20 +505,20 @@ END:VCALENDAR`;
       const w = (dateObj.getDay()+6)%7;
       const isWeekend = [5,6].includes(w);
       const isToday = isSameDate(dateObj, new Date());
-      if(isWeekend) cell.classList.add('bg-rose-50/40','dark:bg-rose-900/10');
+      if(isWeekend) cell.classList.add('bg-rose-50/40');
       if(isToday) cell.classList.add('ring-2','ring-indigo-300');
 
       // Хедер дня
       const header = document.createElement('div');
       header.className = 'flex items-center justify-between mb-2';
       const dn = document.createElement('div');
-      dn.className = 'day-badge inline-flex items-center justify-center w-7 h-7 text-sm font-semibold rounded-full transition ' + (isToday ? 'bg-indigo-600 text-white' : 'bg-black/5 dark:bg-white/10 text-gray-700 dark:text-gray-200');
+      dn.className = 'day-badge inline-flex items-center justify-center w-7 h-7 text-sm font-semibold rounded-full transition ' + (isToday ? 'bg-indigo-600 text-white' : 'bg-black/5 text-gray-700');
       dn.textContent = dayNum;
       header.appendChild(dn);
 
       if(isTrainer){
         const plus = document.createElement('button');
-        plus.className = 'p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 transition';
+        plus.className = 'p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition';
         plus.title = 'Создать тренировку';
         plus.innerHTML = '<i class="bi bi-plus-circle"></i>';
         plus.addEventListener('click', () => openModal(dateStr));
@@ -541,18 +541,18 @@ END:VCALENDAR`;
       for(const t of items){
         const wrap = document.createElement('div');
         wrap.className = 'pill group rounded-xl border flex flex-col gap-1 px-2 py-1 text-xs ' +
-          (t.mine ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-700' : 'bg-gray-50 border-gray-200 dark:bg-slate-800/60 dark:border-white/10');
+          (t.mine ? 'bg-indigo-50 border-indigo-200' : 'bg-gray-50 border-gray-200');
 
         // строка 1: время + тренер
         const row1 = document.createElement('div');
         row1.className = 'flex items-center justify-between gap-2';
         row1.innerHTML = `<span class="font-medium">${t.start_time}–${t.end_time}</span>
-                          <span class="truncate text-gray-700 dark:text-gray-200">${t.trainer_name}</span>`;
+                          <span class="truncate text-gray-700">${t.trainer_name}</span>`;
         wrap.appendChild(row1);
 
         // строка 2: название
         const row2 = document.createElement('div');
-        row2.className = 'truncate text-gray-600 dark:text-gray-300';
+        row2.className = 'truncate text-gray-600';
         row2.textContent = t.title || 'Онлайн-тренировка';
         wrap.appendChild(row2);
 
@@ -560,7 +560,7 @@ END:VCALENDAR`;
         const row3 = document.createElement('div');
         row3.className = 'flex items-center justify-end';
         const btn = document.createElement('button');
-        btn.className = 'px-2 py-1 rounded-lg border text-indigo-700 border-indigo-300 hover:bg-indigo-50 dark:border-indigo-600/40 dark:hover:bg-indigo-900/20';
+        btn.className = 'px-2 py-1 rounded-lg border text-indigo-700 border-indigo-300 hover:bg-indigo-50';
         btn.textContent = 'Подробнее';
         btn.addEventListener('click', ()=> openTrainingModal(t));
         row3.appendChild(btn);
@@ -601,11 +601,11 @@ END:VCALENDAR`;
             : `<span class="text-sm text-gray-500">Ссылка появится позже</span>`
           }
           <div class="flex items-center gap-2">
-            <button id="btnCopyLink" class="px-2 py-1 rounded-lg border hover:bg-black/5 dark:hover:bg-white/10" ${t.meeting_link ? '' : 'disabled'}><i class="bi bi-clipboard"></i> Копировать</button>
-            <button id="btnICS" class="px-2 py-1 rounded-lg border hover:bg-black/5 dark:hover:bg-white/10"><i class="bi bi-calendar-plus"></i> .ics</button>
+            <button id="btnCopyLink" class="px-2 py-1 rounded-lg border hover:bg-black/5" ${t.meeting_link ? '' : 'disabled'}><i class="bi bi-clipboard"></i> Копировать</button>
+            <button id="btnICS" class="px-2 py-1 rounded-lg border hover:bg-black/5"><i class="bi bi-calendar-plus"></i> .ics</button>
             ${isTrainer && t.mine
-              ? `<button id="btnEdit" class="px-2 py-1 rounded-lg border hover:bg-black/5 dark:hover:bg-white/10"><i class="bi bi-pencil"></i> Редактировать</button>
-                 <button id="btnDel" class="px-2 py-1 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50 dark:border-rose-600/40 dark:hover:bg-rose-900/20"><i class="bi bi-trash"></i> Удалить</button>`
+              ? `<button id="btnEdit" class="px-2 py-1 rounded-lg border hover:bg-black/5"><i class="bi bi-pencil"></i> Редактировать</button>
+                 <button id="btnDel" class="px-2 py-1 rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50"><i class="bi bi-trash"></i> Удалить</button>`
               : ''
             }
           </div>
@@ -665,3 +665,4 @@ END:VCALENDAR`;
 })();
 </script>
 {% endblock %}
+

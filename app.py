@@ -1592,38 +1592,21 @@ def edit_profile():
         if date_of_birth_str:
             user.date_of_birth = datetime.strptime(date_of_birth_str, '%Y-%m-%d').date()
 
-        # --- Обновление пароля ---
-        new_password = request.form.get('new_password')
-        if new_password:
-            confirm_password = request.form.get('confirm_password')
-            if new_password != confirm_password:
-                flash("Пароли не совпадают.", "error")
-                return redirect(url_for('profile'))
-            if len(new_password) < 6:
-                flash("Пароль должен содержать не менее 6 символов.", "error")
-                return redirect(url_for('profile'))
-            user.password = bcrypt.generate_password_hash(new_password).decode('utf-8')
-
         # --- Обработка аватара (ИСПРАВЛЕННАЯ ПОСЛЕДОВАТЕЛЬНОСТЬ) ---
         file = request.files.get('avatar')
         if file and file.filename:
-            # 1. Проверяем формат файла
             filename = secure_filename(file.filename)
             ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
             if ext not in {'jpg', 'jpeg', 'png', 'webp'}:
                 flash("Неверный формат аватара (разрешены: jpg, jpeg, png, webp).", "error")
                 return redirect(url_for('profile'))
 
-            # 2. Если есть старый аватар, запоминаем его объект
             old_avatar_to_delete = user.avatar if user.avatar_file_id else None
 
-            # 3. "Отвязываем" старый аватар от пользователя в сессии
             if old_avatar_to_delete:
                 user.avatar_file_id = None
-                # Важно! Не коммитим, а используем flush, чтобы эта операция была первой в транзакции
                 db.session.flush()
 
-            # 4. Создаем и сохраняем новый файл
             unique_filename = f"avatar_{user.id}_{uuid.uuid4().hex}.{ext}"
             file_data = file.read()
             new_file = UploadedFile(
@@ -1634,16 +1617,13 @@ def edit_profile():
                 user_id=user.id
             )
             db.session.add(new_file)
-            db.session.flush() # Получаем ID нового файла
+            db.session.flush()
 
-            # 5. Привязываем новый аватар к пользователю
             user.avatar_file_id = new_file.id
 
-            # 6. Теперь, когда пользователь отвязан, безопасно удаляем старый объект
             if old_avatar_to_delete:
                 db.session.delete(old_avatar_to_delete)
 
-        # Единственный коммит для всех изменений
         db.session.commit()
         flash("Профиль успешно обновлен!", "success")
 
@@ -1652,8 +1632,42 @@ def edit_profile():
         flash("Неверный формат даты рождения.", "error")
     except Exception as e:
         db.session.rollback()
-        print(f"!!! ОШИБКА ПРИ ОБНОВЛЕНИИ ПРОФИЛЯ: {e}") # Для отладки
+        print(f"!!! ОШИБКА ПРИ ОБНОВЛЕНИИ ПРОФИЛЯ: {e}")
         flash("Произошла ошибка при обновлении профиля.", "error")
+
+    return redirect(url_for('profile'))
+
+
+@app.route('/change_password', methods=['POST'])
+@login_required
+def change_password():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('login'))
+
+    new_password = request.form.get('new_password')
+    confirm_password = request.form.get('confirm_password')
+
+    if not new_password:
+        flash("Новый пароль не может быть пустым.", "error")
+        return redirect(url_for('profile'))
+
+    if new_password != confirm_password:
+        flash("Пароли не совпадают.", "error")
+        return redirect(url_for('profile'))
+
+    if len(new_password) < 6:
+        flash("Пароль должен содержать не менее 6 символов.", "error")
+        return redirect(url_for('profile'))
+
+    try:
+        user.password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+        db.session.commit()
+        flash("Пароль успешно изменен!", "success")
+    except Exception as e:
+        db.session.rollback()
+        print(f"!!! ОШИБКА ПРИ СМЕНЕ ПАРОЛЯ: {e}")
+        flash("Произошла ошибка при смене пароля.", "error")
 
     return redirect(url_for('profile'))
 
