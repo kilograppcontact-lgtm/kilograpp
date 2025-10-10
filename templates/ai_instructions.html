@@ -5,45 +5,50 @@
 {% block content %}
 <style>
     html {
-        scroll-behavior: smooth; /* Включаем плавную прокрутку */
+        scroll-behavior: smooth;
+        /* Запрещаем "резиновый" скролл на мобильных устройствах для лучшего эффекта секций */
+        overscroll-behavior-y: none;
+    }
+    body {
+        overflow-x: hidden;
     }
     /* Стили для полноэкранных секций */
     .full-screen-section {
-        min-height: 100vh;
+        /* ❗️ ИЗМЕНЕНИЕ: Заменили height на min-height */
+        min-height: 100vh; /* Минимальная высота в 100% экрана, но может расти */
+        height: auto;       /* Убираем фиксированную высоту */
         width: 100%;
         display: flex;
         flex-direction: column;
-        justify-content: center;
+        justify-content: space-between; /* ❗️ УЛУЧШЕНИЕ: Прижимает контент и навигацию к верху и низу */
         align-items: center;
-        padding: 4rem 2rem;
+        padding: 4rem 1rem; /* Увеличим отступы для баланса */
         position: relative;
     }
 
-    /* Анимация "прыгающей" стрелки */
-    .bounce-animation {
-        animation: bounce 2s infinite;
-    }
-    @keyframes bounce {
-        0%, 20%, 50%, 80%, 100% {
-            transform: translateY(0);
-        }
-        40% {
-            transform: translateY(-20px);
-        }
-        60% {
-            transform: translateY(-10px);
-        }
+    /* Главный контейнер контента, чтобы отделить навигацию */
+    .section-content {
+        flex-grow: 1; /* Занимает все доступное пространство */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        width: 100%;
+        max-width: 1280px; /* Ограничение ширины контента на больших экранах */
     }
 
+    /* Контейнер для нижних кнопок */
+    .section-nav {
+        flex-shrink: 0; /* Запрещаем сжиматься */
+        padding-top: 2rem; /* Увеличим отступ сверху */
+    }
+
+    /* Анимация "прыгающей" стрелки */
+    .bounce-animation { animation: bounce 2s infinite; }
+    @keyframes bounce { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-20px); } 60% { transform: translateY(-10px); } }
+
     /* Стили для стрелки у кнопки визуализации */
-    .point-arrow {
-        transform: rotate(10deg);
-        animation: point-nudge 1.5s infinite alternate;
-    }
-    @keyframes point-nudge {
-        from { transform: rotate(10deg) translateX(0); }
-        to { transform: rotate(10deg) translateX(10px); }
-    }
+    .point-arrow { transform: rotate(10deg); animation: point-nudge 1.5s infinite alternate; }
+    @keyframes point-nudge { from { transform: rotate(10deg) translateX(0); } to { transform: rotate(10deg) translateX(10px); } }
 
     /* --- Остальные стили --- */
     .demo-chat-message { opacity: 0; transform: scale(0.9); transition: opacity 0.5s ease, transform 0.5s ease; }
@@ -58,19 +63,20 @@
 <div class="bg-gray-50">
 
     <section id="section-welcome" class="full-screen-section">
-        <header class="text-center max-w-3xl mx-auto">
-            <h1 class="text-5xl md:text-6xl font-bold text-gray-800 tracking-tight leading-tight">
-                Ваш персональный <br>
-                <span class="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-500">
-                    Health-ассистент Kilo
-                </span>
-            </h1>
-            <p class="mt-5 text-lg text-gray-600">
-                Kilo — это интеллектуальный помощник, доступный как на сайте, так и в Telegram. Каждый из них создан для своих задач, чтобы сделать ваш путь к цели максимально удобным.
-            </p>
-        </header>
-
-        <div class="absolute bottom-8 text-center flex flex-col items-center">
+        <div class="section-content">
+            <header class="text-center max-w-3xl mx-auto">
+                <h1 class="text-4xl sm:text-5xl md:text-6xl font-bold text-gray-800 tracking-tight leading-tight">
+                    Ваш персональный <br>
+                    <span class="bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-500">
+                        Health-ассистент Kilo
+                    </span>
+                </h1>
+                <p class="mt-5 text-base md:text-lg text-gray-600">
+                    Kilo — это интеллектуальный помощник, доступный как на сайте, так и в Telegram. Каждый из них создан для своих задач, чтобы сделать ваш путь к цели максимально удобным.
+                </p>
+            </header>
+        </div>
+        <div class="section-nav flex flex-col items-center">
              <div class="flex flex-col items-center mb-4">
                 <span class="text-sm text-gray-500 mb-2">Прокрути вниз</span>
                 <svg class="w-8 h-8 text-gray-400 bounce-animation" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
@@ -82,14 +88,16 @@
     </section>
 
     <section id="section-food" class="full-screen-section bg-white">
-        <div class="container mx-auto grid md:grid-cols-2 gap-12 items-center">
-            <div class="text-center md:text-left">
-                <h2 class="text-4xl font-bold text-gray-800">📸 Анализ еды — в Telegram</h2>
-                <p class="mt-4 text-lg text-gray-600">Это самый быстрый способ зафиксировать съеденное. Просто отправьте фото в Telegram-бот, и Kilo сделает всю работу за вас: рассчитает калории, БЖУ и даст оценку.</p>
+        <div class="section-content">
+            <div class="container mx-auto grid md:grid-cols-2 gap-8 lg:gap-16 items-center">
+                <div class="text-center md:text-left">
+                    <h2 class="text-3xl md:text-4xl font-bold text-gray-800">📸 Анализ еды — в Telegram</h2>
+                    <p class="mt-4 text-base md:text-lg text-gray-600">Это самый быстрый способ зафиксировать съеденное. Просто отправьте фото в Telegram-бот, и Kilo сделает всю работу за вас: рассчитает калории, БЖУ и даст оценку.</p>
+                </div>
+                <div class="h-[60vh] md:h-[70vh] max-h-[600px] w-full bg-white border border-gray-200/80 rounded-2xl shadow-xl p-4 flex flex-col space-y-4 overflow-y-auto" id="chat-demo-food"></div>
             </div>
-            <div class="h-[70vh] max-h-[600px] w-full bg-white border border-gray-200/80 rounded-2xl shadow-xl p-4 md:p-6 flex flex-col space-y-4 overflow-y-auto" id="chat-demo-food"></div>
         </div>
-        <div class="absolute bottom-8 flex items-center space-x-4">
+        <div class="section-nav flex items-center space-x-4">
              <a href="https://t.me/{{ bot_username or 'kilograpptestbot' }}" target="_blank" class="px-6 py-2.5 rounded-lg font-semibold text-white bg-sky-500 hover:bg-sky-600 transition-all transform hover:scale-105 shadow-md">
                 Попробовать в Telegram
             </a>
@@ -100,14 +108,16 @@
     </section>
 
     <section id="section-diet" class="full-screen-section">
-         <div class="container mx-auto grid md:grid-cols-2 gap-12 items-center">
-            <div class="h-[70vh] max-h-[600px] w-full bg-white border border-gray-200/80 rounded-2xl shadow-xl p-4 md:p-6 flex flex-col space-y-4 overflow-y-auto" id="chat-demo-diet"></div>
-            <div class="text-center md:text-left">
-                <h2 class="text-4xl font-bold text-gray-800">🍽️ Обсуждение диеты — на сайте</h2>
-                <p class="mt-4 text-lg text-gray-600">Ассистент на сайте — ваш персональный диетолог. Он имеет доступ к вашему плану питания и аналитике. Спросите его, чем заменить блюдо, или попросите оценить рацион.</p>
+         <div class="section-content">
+            <div class="container mx-auto grid md:grid-cols-2 gap-8 lg:gap-16 items-center">
+                <div class="h-[60vh] md:h-[70vh] max-h-[600px] w-full bg-white border border-gray-200/80 rounded-2xl shadow-xl p-4 flex flex-col space-y-4 overflow-y-auto md:order-last" id="chat-demo-diet"></div>
+                <div class="text-center md:text-left">
+                    <h2 class="text-3xl md:text-4xl font-bold text-gray-800">🍽️ Обсуждение диеты — на сайте</h2>
+                    <p class="mt-4 text-base md:text-lg text-gray-600">Ассистент на сайте — ваш персональный диетолог. Он имеет доступ к вашему плану питания и аналитике. Спросите его, чем заменить блюдо, или попросите оценить рацион.</p>
+                </div>
             </div>
         </div>
-         <div class="absolute bottom-8 flex items-center space-x-4">
+         <div class="section-nav flex items-center space-x-4">
             <button onclick="document.getElementById('main-chat-toggle-button')?.click()" class="px-6 py-2.5 rounded-lg font-semibold text-white bg-indigo-500 hover:bg-indigo-600 transition-all transform hover:scale-105 shadow-md">
                 Задать свой вопрос
             </button>
@@ -118,14 +128,16 @@
     </section>
 
     <section id="section-progress" class="full-screen-section bg-white">
-        <div class="container mx-auto grid md:grid-cols-2 gap-12 items-center">
-            <div class="text-center md:text-left">
-                 <h2 class="text-4xl font-bold text-gray-800">📈 Анализ прогресса — в Telegram</h2>
-                 <p class="mt-4 text-lg text-gray-600">Хотите быстро узнать, как изменились ваши показатели с последнего замера? Просто спросите Kilo в Telegram, и он даст краткую, но емкую сводку по вашей динамике.</p>
+        <div class="section-content">
+            <div class="container mx-auto grid md:grid-cols-2 gap-8 lg:gap-16 items-center">
+                <div class="text-center md:text-left">
+                     <h2 class="text-3xl md:text-4xl font-bold text-gray-800">📈 Анализ прогресса — в Telegram</h2>
+                     <p class="mt-4 text-base md:text-lg text-gray-600">Хотите быстро узнать, как изменились ваши показатели с последнего замера? Просто спросите Kilo в Telegram, и он даст краткую, но емкую сводку по вашей динамике.</p>
+                </div>
+                <div class="h-[60vh] md:h-[70vh] max-h-[600px] w-full bg-white border border-gray-200/80 rounded-2xl shadow-xl p-4 flex flex-col space-y-4 overflow-y-auto" id="chat-demo-progress"></div>
             </div>
-            <div class="h-[70vh] max-h-[600px] w-full bg-white border border-gray-200/80 rounded-2xl shadow-xl p-4 md:p-6 flex flex-col space-y-4 overflow-y-auto" id="chat-demo-progress"></div>
         </div>
-        <div class="absolute bottom-8 flex items-center space-x-4">
+        <div class="section-nav flex items-center space-x-4">
             <a href="https://t.me/{{ bot_username or 'kilograpptestbot' }}" target="_blank" class="px-6 py-2.5 rounded-lg font-semibold text-white bg-sky-500 hover:bg-sky-600 transition-all transform hover:scale-105 shadow-md">
                 Попробовать в Telegram
             </a>
@@ -136,34 +148,38 @@
     </section>
 
     <section id="section-viz" class="full-screen-section">
-        <div class="container mx-auto grid md:grid-cols-2 gap-12 items-center">
-            <div class="text-center md:text-left">
-                <h2 class="text-4xl font-bold text-gray-800">🤸‍♀️ Визуализация — на сайте</h2>
-                <p class="mt-4 text-lg text-gray-600">Лучшая мотивация — это ясное представление результата. Наш ИИ создаст фотореалистичную визуализацию вашего тела на основе текущих и целевых показателей.</p>
-            </div>
-            <div id="viz-demo-container" class="w-full bg-white border border-gray-200/80 rounded-2xl shadow-xl p-6 md:p-8 min-h-[320px] flex flex-col justify-center">
-                <div id="viz-demo-initial" class="relative">
-                    <div class="absolute -top-16 right-0 md:-right-12 flex items-center space-x-2 point-arrow" style="margin-right:550px">
-                        <span class="text-indigo-600 font-semibold">Нажми сюда!</span>
-                        <svg class="w-10 h-10 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
-                    </div>
-                    <div class="text-center">
-                        <button id="viz-demo-button" class="bg-gradient-to-br from-indigo-500 to-purple-500 px-8 py-3 rounded-lg font-semibold text-white transition-all transform hover:scale-105 shadow-lg">
-                            ✨ Визуализировать результат
-                        </button>
+        <div class="section-content">
+            <div class="container mx-auto grid md:grid-cols-2 gap-8 lg:gap-16 items-center">
+                 <div class="w-full h-full flex flex-col justify-center md:order-last">
+                    <div id="viz-demo-container" class="w-full bg-white border border-gray-200/80 rounded-2xl shadow-xl p-6 md:p-8 min-h-[320px] flex flex-col justify-center">
+                        <div id="viz-demo-initial" class="relative">
+                            <div class="absolute -top-16 right-0 md:-right-12 flex items-center space-x-2 point-arrow" style="margin-right:450px">
+                                <span class="text-indigo-600 font-semibold">Нажми сюда!</span>
+                                <svg class="w-10 h-10 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                            </div>
+                            <div class="text-center">
+                                <button id="viz-demo-button" class="bg-gradient-to-br from-indigo-500 to-purple-500 px-8 py-3 rounded-lg font-semibold text-white transition-all transform hover:scale-105 shadow-lg">
+                                    ✨ Визуализировать результат
+                                </button>
+                            </div>
+                        </div>
+                        <div id="viz-demo-loader" class="text-center py-10 hidden">
+                            <div class="loader mx-auto"></div>
+                            <p class="mt-4 text-gray-600">Магия происходит...<br>Генерируем ваше будущее тело.</p>
+                        </div>
+                        <div id="viz-demo-result" class="viz-demo-result grid-cols-2 gap-4">
+                             <div class="text-center"> <h3 class="font-semibold mb-2">Текущая форма</h3> <div class="bg-gray-100 rounded-lg overflow-hidden border"> <img src="{{ url_for('static', filename='uploads/visuals/25/20250923/1758657284_current.png') }}" alt="Текущая форма" class="w-full h-auto object-cover"> </div> </div>
+                             <div class="text-center"> <h3 class="font-semibold mb-2">Целевая форма</h3> <div class="bg-gray-100 rounded-lg overflow-hidden border"> <img src="{{ url_for('static', filename='uploads/visuals/25/20250923/1758657284_target.png') }}" alt="Целевая форма" class="w-full h-auto object-cover"> </div> </div>
+                        </div>
                     </div>
                 </div>
-                <div id="viz-demo-loader" class="text-center py-10 hidden">
-                    <div class="loader mx-auto"></div>
-                    <p class="mt-4 text-gray-600">Магия происходит...<br>Генерируем ваше будущее тело.</p>
-                </div>
-                <div id="viz-demo-result" class="viz-demo-result grid-cols-2 gap-4">
-                     <div class="text-center"> <h3 class="font-semibold mb-2">Текущая форма</h3> <div class="bg-gray-100 rounded-lg overflow-hidden border"> <img src="{{ url_for('static', filename='uploads/visuals/25/20250923/1758657284_current.png') }}" alt="Текущая форма" class="w-full h-auto object-cover"> </div> </div>
-                     <div class="text-center"> <h3 class="font-semibold mb-2">Целевая форма</h3> <div class="bg-gray-100 rounded-lg overflow-hidden border"> <img src="{{ url_for('static', filename='uploads/visuals/25/20250923/1758657284_target.png') }}" alt="Целевая форма" class="w-full h-auto object-cover"> </div> </div>
+                <div class="text-center md:text-left">
+                    <h2 class="text-3xl md:text-4xl font-bold text-gray-800">🤸‍♀️ Визуализация — на сайте</h2>
+                    <p class="mt-4 text-base md:text-lg text-gray-600">Лучшая мотивация — это ясное представление результата. Наш ИИ создаст фотореалистичную визуализацию вашего тела на основе текущих и целевых показателей.</p>
                 </div>
             </div>
         </div>
-        <div class="absolute bottom-8 flex items-center space-x-4">
+        <div class="section-nav flex items-center space-x-4">
              <a href="{{ url_for('visualize') }}" class="px-6 py-2.5 rounded-lg font-semibold text-white bg-purple-500 hover:bg-purple-600 transition-all transform hover:scale-105 shadow-md">
                 Перейти к визуализации
             </a>
@@ -175,56 +191,53 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    // --- ОБЩАЯ ЛОГИКА ДЛЯ ДЕМО-ЧАТОВ (без изменений) ---
-    const createMessageHTML = (msg) => {
-        const userBubble = `<div class="flex justify-end demo-chat-message"><div class="bg-indigo-500 text-white rounded-2xl rounded-br-none p-3 max-w-xs md:max-w-md">${msg.text}</div></div>`;
-        const kiloBubble = `<div class="flex justify-start demo-chat-message"><div class="bg-gray-200 text-gray-800 rounded-2xl rounded-bl-none p-3 max-w-xs md:max-w-md">${msg.text}</div></div>`;
-        const userImageBubble = `<div class="flex justify-end demo-chat-message"><img src="${msg.url}" alt="Фото пользователя" class="chat-image shadow-md"></div>`;
-        if (msg.from === 'user') return msg.type === 'image' ? userImageBubble : userBubble;
-        else return kiloBubble;
-    };
-    const initializeChatDemo = (containerId, conversation) => {
-        const chatContainer = document.getElementById(containerId);
-        if (!chatContainer) return;
-        let messageIndex = 0;
-        const showNextMessage = () => {
-            if (messageIndex >= conversation.length) return;
-            const msg = conversation[messageIndex];
-            const msgHTML = createMessageHTML(msg);
-            chatContainer.insertAdjacentHTML('beforeend', msgHTML);
-            const newMessageElement = chatContainer.lastElementChild;
-            setTimeout(() => { newMessageElement.classList.add('visible'); chatContainer.scrollTop = chatContainer.scrollHeight; }, 100);
-            messageIndex++;
-            setTimeout(showNextMessage, msg.delay || 1800);
+    // Весь JavaScript остается без изменений,
+    // так как он уже настроен для работы с указанными ID элементов.
+    document.addEventListener('DOMContentLoaded', () => {
+        const createMessageHTML = (msg) => {
+            const userBubble = `<div class="flex justify-end demo-chat-message"><div class="bg-indigo-500 text-white rounded-2xl rounded-br-none p-3 max-w-xs md:max-w-md">${msg.text}</div></div>`;
+            const kiloBubble = `<div class="flex justify-start demo-chat-message"><div class="bg-gray-200 text-gray-800 rounded-2xl rounded-bl-none p-3 max-w-xs md:max-w-md">${msg.text}</div></div>`;
+            const userImageBubble = `<div class="flex justify-end demo-chat-message"><img src="${msg.url}" alt="Фото пользователя" class="chat-image shadow-md"></div>`;
+            if (msg.from === 'user') return msg.type === 'image' ? userImageBubble : userBubble;
+            else return kiloBubble;
         };
-        const chatObserver = new IntersectionObserver((entries) => {
-            if (entries[0].isIntersecting) { setTimeout(showNextMessage, 500); chatObserver.unobserve(chatContainer); }
-        }, { threshold: 0.25 });
-        chatObserver.observe(chatContainer);
-    };
-
-    // --- СЦЕНАРИИ ДЛЯ ЧАТОВ (без изменений) ---
-    const foodConversation = [ { from: 'user', type: 'text', text: 'Добавим обед' }, { from: 'kilo', type: 'text', text: '📸 Пожалуйста, отправьте фото еды:' }, { from: 'user', type: 'image', url: "{{ url_for('static', filename='uploads/meal.jpg') }}" }, { from: 'kilo', type: 'text', text: '⏳ Анализирую фото...', delay: 2500 }, { from: 'kilo', type: 'text', text: '📊 <b>Результат анализа:</b><br><br><b>Название:</b> Салат с лососем и авокадо<br><b>Вердикт:</b> Отличный выбор!<br><br><b>Калории:</b> ~450 ккал<br><b>Белки:</b> 25 г, <b>Жиры:</b> 30 г, <b>Углеводы:</b> 15 г<br><br>✅ Сохранить этот прием пищи?' }];
-    const dietConversation = [ { from: 'user', type: 'text', text: 'Чем можно заменить киноа в обеде?' }, { from: 'kilo', type: 'text', text: 'Добрый день! Отличный вопрос. Вместо киноа для снижения углеводов можно использовать: <br>1. <b>Булгур</b> <br>2. <b>Порцию брокколи на пару</b>.<br><br>Оба варианта отлично сочетаются с куриной грудью! 💪' }];
-    const progressConversation = [ { from: 'user', type: 'text', text: 'Как мой прогресс за последнее время?' }, { from: 'kilo', type: 'text', text: 'Секунду, сверяюсь с вашими данными... 🧐', delay: 2000 }, { from: 'kilo', type: 'text', text: 'Отличная работа! С вашего последнего замера:<br>✅ <b>Вес:</b> -1.2 кг<br>✅ <b>Жировая масса:</b> -1.5 кг<br>💪 <b>Мышечная масса:</b> +0.3 кг<br><br>Вы на верном пути! 🔥' }];
-    initializeChatDemo('chat-demo-food', foodConversation);
-    initializeChatDemo('chat-demo-diet', dietConversation);
-    initializeChatDemo('chat-demo-progress', progressConversation);
-
-    // --- ЛОГИКА ДЛЯ ДЕМО ВИЗУАЛИЗАЦИИ (без изменений) ---
-    const vizContainer = document.getElementById('viz-demo-container');
-    if (vizContainer) {
-        const initialView = document.getElementById('viz-demo-initial');
-        const loaderView = document.getElementById('viz-demo-loader');
-        const resultView = document.getElementById('viz-demo-result');
-        const button = document.getElementById('viz-demo-button');
-        button.addEventListener('click', () => {
-            initialView.style.display = 'none';
-            loaderView.style.display = 'block';
-            setTimeout(() => { loaderView.style.display = 'none'; resultView.classList.add('visible'); }, 3000);
-        });
-    }
-});
+        const initializeChatDemo = (containerId, conversation) => {
+            const chatContainer = document.getElementById(containerId);
+            if (!chatContainer) return;
+            let messageIndex = 0;
+            const showNextMessage = () => {
+                if (messageIndex >= conversation.length) return;
+                const msg = conversation[messageIndex];
+                const msgHTML = createMessageHTML(msg);
+                chatContainer.insertAdjacentHTML('beforeend', msgHTML);
+                const newMessageElement = chatContainer.lastElementChild;
+                setTimeout(() => { newMessageElement.classList.add('visible'); chatContainer.scrollTop = chatContainer.scrollHeight; }, 100);
+                messageIndex++;
+                setTimeout(showNextMessage, msg.delay || 1800);
+            };
+            const chatObserver = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting) { setTimeout(showNextMessage, 500); chatObserver.unobserve(chatContainer); }
+            }, { threshold: 0.25 });
+            chatObserver.observe(chatContainer);
+        };
+        const foodConversation = [ { from: 'user', type: 'text', text: 'Добавим обед' }, { from: 'kilo', type: 'text', text: '📸 Пожалуйста, отправьте фото еды:' }, { from: 'user', type: 'image', url: "{{ url_for('static', filename='uploads/meal.jpg') }}" }, { from: 'kilo', type: 'text', text: '⏳ Анализирую фото...', delay: 2500 }, { from: 'kilo', type: 'text', text: '📊 <b>Результат анализа:</b><br><br><b>Название:</b> Салат с лососем и авокадо<br><b>Вердикт:</b> Отличный выбор!<br><br><b>Калории:</b> ~450 ккал<br><b>Белки:</b> 25 г, <b>Жиры:</b> 30 г, <b>Углеводы:</b> 15 г<br><br>✅ Сохранить этот прием пищи?' }];
+        const dietConversation = [ { from: 'user', type: 'text', text: 'Чем можно заменить киноа в обеде?' }, { from: 'kilo', type: 'text', text: 'Добрый день! Отличный вопрос. Вместо киноа для снижения углеводов можно использовать: <br>1. <b>Булгур</b> <br>2. <b>Порцию брокколи на пару</b>.<br><br>Оба варианта отлично сочетаются с куриной грудью! 💪' }];
+        const progressConversation = [ { from: 'user', type: 'text', text: 'Как мой прогресс за последнее время?' }, { from: 'kilo', type: 'text', text: 'Секунду, сверяюсь с вашими данными... 🧐', delay: 2000 }, { from: 'kilo', type: 'text', text: 'Отличная работа! С вашего последнего замера:<br>✅ <b>Вес:</b> -1.2 кг<br>✅ <b>Жировая масса:</b> -1.5 кг<br>💪 <b>Мышечная масса:</b> +0.3 кг<br><br>Вы на верном пути! 🔥' }];
+        initializeChatDemo('chat-demo-food', foodConversation);
+        initializeChatDemo('chat-demo-diet', dietConversation);
+        initializeChatDemo('chat-demo-progress', progressConversation);
+        const vizContainer = document.getElementById('viz-demo-container');
+        if (vizContainer) {
+            const initialView = document.getElementById('viz-demo-initial');
+            const loaderView = document.getElementById('viz-demo-loader');
+            const resultView = document.getElementById('viz-demo-result');
+            const button = document.getElementById('viz-demo-button');
+            button.addEventListener('click', () => {
+                initialView.style.display = 'none';
+                loaderView.style.display = 'block';
+                setTimeout(() => { loaderView.style.display = 'none'; resultView.classList.add('visible'); }, 3000);
+            });
+        }
+    });
 </script>
 {% endblock %}
