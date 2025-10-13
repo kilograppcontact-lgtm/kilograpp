@@ -4075,6 +4075,43 @@ def admin_user_send_test_tg(user_id):
 
     return redirect(url_for("admin_user_detail", user_id=user.id))
 
+@app.post("/api/me/telegram/unlink")
+@login_required
+def user_unlink_telegram():
+    """
+    Позволяет текущему аутентифицированному пользователю
+    отвязать свой собственный Telegram-аккаунт.
+    """
+    # current_user предоставляется Flask-Login
+    user = current_user
+
+    if not user.telegram_chat_id:
+        # Если аккаунт и так не привязан, возвращаем ошибку
+        return jsonify({"success": False, "error": "Аккаунт Telegram не был привязан."}), 400
+
+    # Сохраняем старое значение для логирования
+    old_chat_id = user.telegram_chat_id
+
+    # Отвязываем аккаунт
+    user.telegram_chat_id = None
+    db.session.commit()
+
+    # Логируем действие для аудита (аналогично админской функции)
+    try:
+        log_audit(
+            action="telegram_unlink_self", # Другое имя действия, чтобы отличать от админа
+            target_type="User",
+            target_id=user.id,
+            old={"telegram_chat_id": old_chat_id},
+            new={"telegram_chat_id": None}
+        )
+    except Exception as e:
+        # Не прерываем процесс, если логирование не удалось, но сообщаем в консоль
+        app.logger.error(f"Failed to log audit for self-telegram-unlink: {e}")
+        pass
+
+    # Отправляем успешный JSON-ответ на фронтенд
+    return jsonify({"success": True})
 
 @app.post("/admin/users/<int:user_id>/telegram/unlink")
 @admin_required
