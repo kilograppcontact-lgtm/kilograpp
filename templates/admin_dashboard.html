@@ -19,6 +19,7 @@
   window.__details = {{ details|tojson }};
   window.__urls = {
     detail: "{{ url_for('admin_user_detail', user_id=0) }}".replace(/0$/, ""),
+    admin_applications_list: "{{ url_for('admin_applications_list') }}",
     delete: "{{ url_for('admin_delete_user', user_id=0) }}".replace(/0$/, ""),
     impersonate: "{{ url_for('admin_impersonate_user', user_id=0) }}".replace(/0$/, ""),
     magic: "{{ url_for('admin_send_magic_link', user_id=0) }}".replace(/0$/, ""),
@@ -45,6 +46,7 @@
 
     <div class="flex flex-wrap gap-2">
       <a :href="urls.create" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">➕ Создать</a>
+      <a :href="urls.admin_applications_list" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"> Заявки</a>
       <a :href="urls.groups" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-white hover:bg-slate-900">👥 Группы</a>
       <a :href="urls.aiq" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700">🤖 AI-очередь</a>
       <a :href="urls.jobs" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700">⏱ Планировщик</a>

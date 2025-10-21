@@ -543,18 +543,87 @@
 </script>
 
 
-<footer class="bg-gray-50 border-t mt-12">
-  <div class="max-w-7xl mx-auto px-4 py-6 text-center text-sm">
-    <div class="mb-2">
-      <a href="{{ url_for('instructions_page') }}"
-         class="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-medium">
-        <i class="bi bi-question-circle"></i>
-        <span>Инструкция: как пользоваться платформой</span>
-      </a>
+<footer class="bg-slate-900 text-slate-300 mt-12 border-t border-slate-700">
+  <div class="max-w-7xl mx-auto px-4 py-12 sm:py-16">
+
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-10">
+
+      <div class="col-span-2 lg:col-span-2">
+        <a href="/profile" class="flex items-center gap-2 mb-3 hover:opacity-90 transition">
+          <img
+            src="{{ url_for('static', filename='logo.png') }}"
+            alt="Kilogr.app"
+            class="h-10 md:h-11 w-auto object-contain"
+          />
+        </a>
+        <p class="text-sm text-slate-400 max-w-xs mt-2">
+          Ваш персональный AI-ассистент в мире фитнеса, питания и здорового образа жизни.
+        </p>
+      </div>
+
+      <div>
+        <h4 class="text-sm font-bold text-white uppercase tracking-wider">Продукт</h4>
+        <ul class="mt-4 space-y-3 text-sm">
+          <li>
+            <a href="/trainings-calendar" class="hover:text-white transition">Расписание</a>
+          </li>
+          <li>
+            <a href="/trainings" class="hover:text-white transition">Тренировки</a>
+          </li>
+          <li>
+            <a href="{{ url_for('purchase_page') }}" class="hover:text-white transition">Тарифы</a>
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 class="text-sm font-bold text-white uppercase tracking-wider">Ресурсы</h4>
+        <ul class="mt-4 space-y-3 text-sm">
+          <li>
+            <a href="{{ url_for('instructions_page') }}" class="hover:text-white transition">Инструкция</a>
+          </li>
+          </ul>
+      </div>
+
+      <div>
+        <h4 class="text-sm font-bold text-white uppercase tracking-wider">Компания</h4>
+        <ul class="mt-4 space-y-3 text-sm">
+          <li>
+            <a href="/privacy" class="hover:text-white transition">Конфиденциальность</a>
+          </li>
+          <li>
+            <a href="/terms" class="hover:text-white transition">Условия сервиса</a>
+          </li>
+        </ul>
+      </div>
+
     </div>
-    <div class="text-gray-400">
-      © 2025 <span class="font-semibold text-gray-500">Kilogr.app</span>. Все права защищены.
+
+    <div class="mt-10 pt-8 border-t border-slate-700/50">
+      <div class="flex flex-col sm:flex-row justify-between items-center">
+
+        <div class="text-sm text-slate-400 text-center sm:text-left">
+          © 2025 <span class="font-semibold text-slate-200">Kilogr.app</span>. Все права защищены.
+        </div>
+
+        <div class="flex space-x-6 mt-4 sm:mt-0">
+          <a href="https://instagram.com/kilogr.app" target="_blank" rel="noopener noreferrer" aria-label="Instagram"
+             class="text-slate-400 hover:text-indigo-400 transition transform hover:scale-110">
+            <i class="bi bi-instagram text-xl"></i>
+          </a>
+          <a href="https://t.me/kilogr.app" target="_blank" rel="noopener noreferrer" aria-label="Telegram"
+             class="text-slate-400 hover:text-sky-400 transition transform hover:scale-110">
+            <i class="bi bi-telegram text-xl"></i>
+          </a>
+          <a href="https://youtube.com/kilogr.app" target="_blank" rel="noopener noreferrer" aria-label="YouTube"
+             class="text-slate-400 hover:text-red-500 transition transform hover:scale-110">
+            <i class="bi bi-youtube text-xl"></i>
+          </a>
+        </div>
+
+      </div>
     </div>
+
   </div>
 </footer>
 

@@ -25,10 +25,11 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from flask import make_response
 from sqlalchemy import inspect
 import uuid
-from models import BodyVisualization
+from models import BodyVisualization, SubscriptionApplication
 from flask import send_file
 from io import BytesIO
 from progress_analyzer import generate_progress_commentary
+from flask import jsonify # Убедись, что jsonify импортирован вверху файла
 
 load_dotenv()
 
@@ -183,6 +184,20 @@ def set_tz():
         with db.engine.connect() as con:
             con.exec_driver_sql("SET TIME ZONE 'Asia/Almaty'")
 
+@app.before_request
+def expire_subscriptions_if_needed():
+    """Перед каждым запросом помечаем подписку текущего пользователя как inactive, если истекла."""
+    try:
+        u = get_current_user()
+        if not u:
+            return
+        sub = getattr(u, "subscription", None)
+        if sub and sub.status == 'active' and sub.end_date and sub.end_date < date.today():
+            sub.status = 'inactive'
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
 @app.route('/api/activity/today/<int:chat_id>')
 def activity_today(chat_id):
     user = User.query.filter_by(telegram_chat_id=str(chat_id)).first()
@@ -203,12 +218,24 @@ def _notification_worker():
                 now_d = now.date()
                 target = now + timedelta(hours=1)
 
+                # ⛔️ Деактивируем просроченные подписки (end_date < today)
+                try:
+                    db.session.query(Subscription).filter(
+                        Subscription.status == 'active',
+                        Subscription.end_date.isnot(None),
+                        Subscription.end_date < now_d
+                    ).update({"status": "inactive"}, synchronize_session=False)
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+
                 # 1) Напоминания за 1 час (как было)
                 trainings = Training.query.filter(
                     Training.date == target.date(),
                     func.extract('hour', Training.start_time) == target.hour,
                     func.extract('minute', Training.start_time) == target.minute
                 ).all()
+
 
                 for t in trainings:
                     rows = TrainingSignup.query.filter_by(training_id=t.id, notified_1h=False).all()
@@ -398,14 +425,33 @@ def _auto_migrate_diet_schema():
             con.execute(text("UPDATE meal_logs SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)"))
     except Exception as e:
         print(f"[auto-migrate] backfill created_at failed: {e}")
+# ------------------ ONBOARDING API ------------------
+
+def _auto_migrate_onboarding_schema():
+    insp = inspect(db.engine)
+    # Создадим недостающие таблицы по моделям
+    db.create_all()
+
+    # === Новые поля пользователя для визуализаций ===
+    _ensure_column("user", "sex", "TEXT DEFAULT 'male'")
+    _ensure_column("user", "face_consent", "BOOLEAN DEFAULT FALSE")
+
+    # === НОВОЕ ПОЛЕ ДЛЯ ТУРА ===
+    _ensure_column("user", "onboarding_complete", "BOOLEAN DEFAULT FALSE")
+
+    # === ВАЖНО: meal_logs нужные поля ===
+    _ensure_column("meal_logs", "image_path", "TEXT")
+
 
 with app.app_context():
     # Мини-миграции для новых полей в user
     _auto_migrate_diet_schema()
+    _auto_migrate_onboarding_schema()
 
     # Запускаем фоновые задачи ТОЛЬКО после инициализации БД
     try:
         start_meal_scheduler(app)
+
     except Exception:
         pass
 
@@ -426,22 +472,6 @@ def calculate_age(born):
     today = date.today()
     return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
-# ------------------ ONBOARDING API ------------------
-
-def _auto_migrate_diet_schema():
-    insp = inspect(db.engine)
-    # Создадим недостающие таблицы по моделям
-    db.create_all()
-
-    # === Новые поля пользователя для визуализаций ===
-    _ensure_column("user", "sex", "TEXT DEFAULT 'male'")
-    _ensure_column("user", "face_consent", "BOOLEAN DEFAULT FALSE")
-
-    # === НОВОЕ ПОЛЕ ДЛЯ ТУРА ===
-    _ensure_column("user", "onboarding_complete", "BOOLEAN DEFAULT FALSE")
-
-    # === ВАЖНО: meal_logs нужные поля ===
-    _ensure_column("meal_logs", "image_path", "TEXT")
 
 # ------------------ TRAININGS API ------------------
 
@@ -2078,13 +2108,24 @@ def activity():
         tab='activity'  # Указываем активный таб
     )
 
-
-@app.route('/api/log_meal', methods=['POST'])
+@app.route('/api/log_meal', methods=['POST', 'DELETE'])
 def log_meal():
+    if request.method == 'DELETE':
+        data = request.get_json()
+        user = User.query.filter_by(telegram_chat_id=str(data['chat_id'])).first_or_404()
+        meal = MealLog.query.filter_by(
+            user_id=user.id,
+            date=date.today(),
+            meal_type=data['meal_type']
+        ).first_or_404()
+        db.session.delete(meal)
+        db.session.commit()
+        return '', 200
+
+    # POST
     data = request.get_json()
     user = User.query.filter_by(telegram_chat_id=str(data['chat_id'])).first_or_404()
 
-    # Сначала попробуем взять готовые числа из payload
     calories = data.get("calories")
     protein = data.get("protein")
     fat = data.get("fat")
@@ -2092,9 +2133,7 @@ def log_meal():
 
     raw = data.get("analysis", "")
 
-    # Если хоть одно из полей не пришло — падём на разбор текста
     if None in (calories, protein, fat, carbs):
-        # парсим из raw
         def ptn(p):
             m = re.search(p, raw, flags=re.IGNORECASE)
             return float(m.group(1)) if m else None
@@ -2104,7 +2143,6 @@ def log_meal():
         fat = ptn(r'Жиры[:\s]+([\d.]+)')
         carbs = ptn(r'Углеводы[:\s]+([\d.]+)')
 
-    # если всё ещё что‑то не распарсилось — 400
     if None in (calories, protein, fat, carbs):
         return jsonify({"error": "cannot parse BJU"}), 400
 
@@ -2123,28 +2161,12 @@ def log_meal():
         db.session.add(meal)
         db.session.commit()
         return jsonify({"status": "ok"}), 200
-
     except IntegrityError:
         db.session.rollback()
         return jsonify({"error": "exists"}), 409
 
 
-@app.route('/api/log_meal', methods=['DELETE'])
-def delete_meal():
-    data = request.get_json()
-    user = User.query.filter_by(telegram_chat_id=str(data['chat_id'])).first_or_404()
-    meal = MealLog.query.filter_by(
-        user_id=user.id,
-        date=date.today(),
-        meal_type=data['meal_type']
-    ).first_or_404()
-    db.session.delete(meal)
-    db.session.commit()
-    return '', 200
-
-
 # ЭТО ПРАВИЛЬНЫЙ КОД
-from flask import jsonify # Убедись, что jsonify импортирован вверху файла
 
 @app.route('/analyze_meal_photo', methods=['POST'])
 def analyze_meal_photo():
@@ -2520,6 +2542,52 @@ def admin_dashboard():
     )
 
 
+# ===== ADMIN: Заявки на подписку =====
+
+@app.route("/admin/applications")
+@admin_required
+def admin_applications_list():
+    """Показывает страницу со всеми заявками на подписку."""
+    try:
+        applications = SubscriptionApplication.query.order_by(
+            SubscriptionApplication.status.asc(),
+            SubscriptionApplication.created_at.desc()
+        ).all()
+    except Exception as e:
+        flash(f"Ошибка загрузки заявок: {e}", "error")
+        applications = []
+
+    return render_template("admin_applications.html", applications=applications)
+
+
+@app.route("/admin/applications/<int:app_id>/status", methods=["POST"])
+@admin_required
+def admin_update_application_status(app_id):
+    """Обновляет статус заявки (pending/processed)."""
+    app_obj = db.session.get(SubscriptionApplication, app_id)
+    if not app_obj:
+        flash("Заявка не найдена", "error")
+        return redirect(url_for("admin_applications_list"))
+
+    new_status = request.form.get("status")
+    if new_status in ('pending', 'processed'):
+        try:
+            old_status = app_obj.status
+            app_obj.status = new_status
+            db.session.commit()
+            log_audit("app_status_change", "SubscriptionApplication", app_obj.id,
+                      old={"status": old_status}, new={"status": new_status})
+            flash("Статус заявки обновлен.", "success")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Ошибка обновления: {e}", "error")
+    else:
+        flash("Некорректный статус.", "error")
+
+    return redirect(url_for("admin_applications_list"))
+
+
+# =======================================
 @app.route("/admin/user/create", methods=["GET", "POST"])
 @admin_required
 def admin_create_user():
@@ -3441,7 +3509,44 @@ def dismiss_welcome_popup():
     return jsonify({'status': 'error', 'message': 'User not found'}), 404
 
 
-# ... импорты datetime, date, timedelta должны быть вверху файла ...
+@app.route('/api/create_application', methods=['POST'])
+@login_required
+def create_application():
+    u = get_current_user()
+    if not u:
+        return jsonify(success=False, message="Не авторизованы."), 401
+
+    # 1. Проверяем, может у пользователя УЖЕ ЕСТЬ подписка
+    if getattr(u, "subscription_status", None) == 'active':
+        return jsonify(success=False, message="У вас уже есть действующая подписка."), 400
+
+    # 2. Проверяем, нет ли у него УЖЕ ОТКРЫТОЙ ЗАЯВКИ
+    existing_app = SubscriptionApplication.query.filter_by(user_id=u.id, status='pending').first()
+    if existing_app:
+        return jsonify(success=True, message="У вас уже есть активная заявка. Мы скоро с вами свяжемся.")
+
+    data = request.json
+    phone = data.get('phone')
+
+    # 3. Валидация номера
+    if not phone or len(phone) < 7:
+        return jsonify(success=False, message="Пожалуйста, введите корректный номер телефона."), 400
+
+    # 4. Все в порядке, создаем заявку
+    try:
+        new_app = SubscriptionApplication(
+            user_id=u.id,
+            phone_number=phone
+        )
+        db.session.add(new_app)
+        db.session.commit()
+
+        return jsonify(success=True, message="Ваша заявка принята, мы скоро с вами свяжемся.")
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"!!! Ошибка при создании заявки: {e}")
+        return jsonify(success=False, message="Произошла ошибка на сервере. Попробуйте позже."), 500
 
 @app.route('/subscription/manage', methods=['POST'])
 @login_required
@@ -3762,8 +3867,12 @@ bp = Blueprint("settings_api", __name__, url_prefix="/bp")
 
 @bp.route("/api/me/telegram/settings", methods=["GET"])
 def get_tg_settings():
-    s = current_user.settings or UserSettings(user_id=current_user.id)
-    if not current_user.settings:
+    u = get_current_user()
+    if not u:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    s = u.settings or UserSettings(user_id=u.id)
+    if not u.settings:
         db.session.add(s); db.session.commit()
     return jsonify({
         "ok": True,

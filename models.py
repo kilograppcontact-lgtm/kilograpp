@@ -142,6 +142,23 @@ class User(db.Model):
         a = self._get_latest_analysis()
         return a.fat_free_body_weight if a else None
 
+class SubscriptionApplication(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    # ID пользователя, который оставил заявку
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    # Номер телефона, который он ввел
+    phone_number = db.Column(db.String(20), nullable=False)
+    # Дата создания
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Статус: 'pending' (в ожидании), 'processed' (обработана)
+    status = db.Column(db.String(50), default='pending')
+
+    # Связь, чтобы можно было легко получить пользователя
+    user = db.relationship('User', backref=db.backref('applications', lazy=True))
+
+    def __repr__(self):
+        return f'<SubscriptionApplication {self.id} от User {self.user_id}>'
+
 class Subscription(db.Model):
     __tablename__ = "subscription"
 

@@ -1,7 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<!-- Фоновые "бло бы" и градиенты -->
 <style>
   /* Фоновые анимированные пятна */
   .blob {
@@ -22,7 +21,7 @@
   .reveal { opacity: 0; transform: translateY(16px); transition: all .6s cubic-bezier(.22,1,.36,1); }
   .reveal.in { opacity: 1; transform: translateY(0); }
 
-  /* Карточки тарифов: подсветка рамки + лёгкий «tilt» */
+  /* Карточки тарифов */
   .plan {
     transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
     transform: translateZ(0);
@@ -33,7 +32,7 @@
     border-color: rgba(99,102,241,.4);
   }
 
-  /* Пульсирующая обводка выбранного плана */
+  /* Рекомендуемый план */
   .plan.recommended {
     position: relative; border: 2px solid rgba(99,102,241,.35);
   }
@@ -45,7 +44,7 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Ленты */
+  /* Лента */
   .ribbon {
     position: absolute; top: 14px; right: -8px;
     background: linear-gradient(90deg, #6366f1, #8b5cf6);
@@ -61,149 +60,237 @@
   <div class="blob blob-2"></div>
   <div class="blob blob-3"></div>
 
-  <!-- HERO -->
   <section class="max-w-7xl mx-auto px-4 pt-12 pb-8 relative">
-<div class="card p-8 sm:p-12 text-center bg-white reveal">
+    <div class="card p-8 sm:p-12 text-center bg-white reveal">
       <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-900">
         Доступ ко всему: тренировки, ИИ-диеты и аналитика
       </h1>
 
-      <!-- ЕДИНСТВЕННАЯ кнопка -->
       <div class="mt-6">
-        <button onclick="openContactModal()"
-        class="btn text-base px-6 py-3 text-white
-               bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500
-               hover:from-indigo-600 hover:via-blue-600 hover:to-sky-600
-               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500
-               shadow-lg hover:shadow-xl active:opacity-90 transition">
-  Связаться для оформления
-</button>
+
+        {% if current_user.is_authenticated and current_user.subscription_status == 'active' %}
+          <button onclick="showAlreadySubscribedAlert()"
+                  class="btn text-base px-6 py-3 text-white
+                         bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500
+                         hover:from-indigo-600 hover:via-blue-600 hover:to-sky-600
+                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500
+                         shadow-lg hover:shadow-xl active:opacity-90 transition">
+            Связаться для оформления
+          </button>
+        {% else %}
+          <button onclick="openContactModal()"
+                  class="btn text-base px-6 py-3 text-white
+                         bg-gradient-to-r from-indigo-500 via-blue-500 to-sky-500
+                         hover:from-indigo-600 hover:via-blue-600 hover:to-sky-600
+                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500
+                         shadow-lg hover:shadow-xl active:opacity-90 transition">
+            Связаться для оформления
+          </button>
+        {% endif %}
 
       </div>
     </div>
   </section>
 
-  <!-- ТАРИФЫ -->
   <section class="max-w-7xl mx-auto px-4 pb-14 relative">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <!-- Lite -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:max-w-4xl lg:mx-auto">
+
       <div class="card plan p-6 reveal">
         <div class="flex items-start justify-between">
           <div>
-            <h3 class="text-xl font-bold text-slate-900">Lite</h3>
-            <p class="text-slate-600 text-sm mt-1">Старт для осознанного прогресса</p>
+            <h3 class="text-xl font-bold text-slate-900">Free</h3>
+            <p class="text-slate-600 text-sm mt-1">Базовые функции</p>
           </div>
-          <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 text-white flex items-center justify-center shadow">💡</div>
+          <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-slate-400 to-slate-500 text-white flex items-center justify-center shadow">💡</div>
         </div>
-
         <div class="mt-5 space-y-2 text-slate-700">
-          <div class="flex items-center gap-2"><span class="text-emerald-600">✔</span><span class="text-sm">Персональные AI-диеты</span></div>
-          <div class="flex items-center gap-2"><span class="text-emerald-600">✔</span><span class="text-sm">Базовая аналитика показателей</span></div>
-          <div class="flex items-center gap-2"><span class="text-emerald-600">✔</span><span class="text-sm">Напоминания в Telegram</span></div>
+          <div class="flex items-center gap-2"><span class="text-slate-600">✔</span><span class="text-sm">Персональные AI-диеты</span></div>
+          <div class="flex items-center gap-2"><span class="text-slate-600">✔</span><span class="text-sm">Базовая аналитика показателей</span></div>
+          <div class="flex items-center gap-2"><span class="text-slate-600">✔</span><span class="text-sm">Напоминания в Telegram</span></div>
         </div>
-
         <div class="mt-6">
-  <div class="text-sm text-slate-500">Стоимость</div>
-  <div class="text-3xl font-extrabold text-slate-900">0 тг</div>
-  <div class="text-xs text-slate-500 mt-1">Срок: 1 месяц</div>
-</div>
-
+          <div class="text-sm text-slate-500">Стоимость</div>
+          <div class="text-3xl font-extrabold text-slate-900">0 тг</div>
+          <div class="text-xs text-slate-500 mt-1">Бесплатный доступ</div>
+        </div>
       </div>
 
-      <!-- Pro (реком.) -->
       <div class="card plan recommended p-6 relative reveal" style="background: linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);">
         <div class="ribbon">Рекомендуем</div>
         <div class="flex items-start justify-between">
           <div>
-            <h3 class="text-xl font-bold text-slate-900">Pro</h3>
-            <p class="text-slate-600 text-sm mt-1">Оптимум функций и гибкости</p>
+            <h3 class="text-xl font-bold text-slate-900">PLUS</h3>
+            <p class="text-slate-600 text-sm mt-1">Все возможности платформы</p>
           </div>
           <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white flex items-center justify-center shadow">⭐</div>
         </div>
-
         <div class="mt-5 space-y-2 text-slate-700">
-          <div class="flex items-center gap-2"><span class="text-indigo-600">✔</span><span class="text-sm">Всё из Lite</span></div>
+          <div class="flex items-center gap-2"><span class="text-indigo-600">✔</span><span class="text-sm">Всё из Free</span></div>
           <div class="flex items-center gap-2"><span class="text-indigo-600">✔</span><span class="text-sm">Глубокая аналитика прогресса</span></div>
           <div class="flex items-center gap-2"><span class="text-indigo-600">✔</span><span class="text-sm">Анализ блюд по фото (AI)</span></div>
           <div class="flex items-center gap-2"><span class="text-indigo-600">✔</span><span class="text-sm">Группы и челленджи</span></div>
+          <div class="flex items-center gap-2"><span class="text-indigo-600">✔</span><span class="text-sm">Гибкие слоты тренировок</span></div>
         </div>
-
         <div class="mt-6">
-  <div class="text-sm text-slate-500">Стоимость</div>
-  <div class="text-3xl font-extrabold text-slate-900">0 тг</div>
-  <div class="text-xs text-slate-500 mt-1">Срок: 3 месяца</div>
-</div>
-
-      </div>
-
-      <!-- Ultimate -->
-      <div class="card plan p-6 reveal">
-        <div class="flex items-start justify-between">
-          <div>
-            <h3 class="text-xl font-bold text-slate-900">Ultimate</h3>
-            <p class="text-slate-600 text-sm mt-1">Максимум контроля и поддержки</p>
-          </div>
-          <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-rose-500 to-pink-500 text-white flex items-center justify-center shadow">🚀</div>
+          <div class="text-sm text-slate-500">Стоимость</div>
+          <div class="text-3xl font-extrabold text-slate-900">9 990 тг</div>
+          <div class="text-xs text-slate-500 mt-1">Срок: 3 месяца</div>
         </div>
-
-        <div class="mt-5 space-y-2 text-slate-700">
-          <div class="flex items-center gap-2"><span class="text-rose-600">✔</span><span class="text-sm">Всё из Pro</span></div>
-          <div class="flex items-center gap-2"><span class="text-rose-600">✔</span><span class="text-sm">Персональные рекомендации 1:1</span></div>
-          <div class="flex items-center gap-2"><span class="text-rose-600">✔</span><span class="text-sm">Приоритетная поддержка</span></div>
-          <div class="flex items-center gap-2"><span class="text-rose-600">✔</span><span class="text-sm">Гибкие слоты тренировок</span></div>
-        </div>
-
-        <div class="mt-6">
-  <div class="text-sm text-slate-500">Стоимость</div>
-  <div class="text-3xl font-extrabold text-slate-900">0 тг</div>
-  <div class="text-xs text-slate-500 mt-1">Срок: 12 месяцев</div>
-</div>
-
       </div>
     </div>
-
-    <!-- ЕДИНСТВЕННАЯ кнопка повторно НЕ добавляется -->
   </section>
 </div>
 
-<!-- Модалка «Связаться для оформления» (одна на страницу) -->
 <div id="contactModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4" onclick="closeContactModal()">
-<div class="card w-full max-w-lg p-0 relative animate-fade-in bg-white" onclick="event.stopPropagation()">
+  <div class="card w-full max-w-lg p-0 relative animate-fade-in bg-white" onclick="event.stopPropagation()">
     <button onclick="closeContactModal()" class="absolute top-4 right-4 text-slate-400 text-2xl hover:text-slate-600">&times;</button>
 
-    <div class="p-6 sm:p-8 text-center">
-      <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg">
-        📬
-      </div>
-      <h2 class="text-xl font-bold mt-4">Связаться для оформления</h2>
-      <p class="text-slate-600 text-sm mt-1">Поможем выбрать план и подключим аккаунт.</p>
+    <div id="modal-content-wrapper">
 
-      <div class="mt-6">
-        <a href="https://t.me/{{ bot_username|default('DietaAIBot') }}" target="_blank" rel="noopener"
-           class="btn btn-primary w-full">Написать в Telegram</a>
+      <div id="form-view">
+        <div class="p-6 sm:p-8 text-center">
+          <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg">
+            <i class="bi bi-telephone-fill text-2xl"></i>
+          </div>
+          <h2 class="text-xl font-bold mt-4">Оставить заявку</h2>
+          <p class="text-slate-600 text-sm mt-1">Введите ваш номер телефона, и мы свяжемся с вами для оформления подписки PLUS.</p>
+
+          <form id="application-form" class="mt-6" onsubmit="submitApplication(event)">
+            <input type="tel" id="phone-input"
+                   placeholder="Ваш номер телефона (напр. +7 700 123 4567)"
+                   required
+                   class="w-full h-12 px-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition">
+
+            <p id="form-error" class="text-red-600 text-sm mt-2 hidden"></p>
+
+            <button type="submit" id="submit-app-btn"
+               class="btn btn-primary w-full mt-4">
+              Отправить заявку
+            </button>
+          </form>
+        </div>
       </div>
 
-      <p class="text-xs text-slate-400 mt-4">Если кнопка не открывается, напишите: @{{ bot_username|default('DietaAIBot') }}</p>
+      <div id="success-view" class="hidden">
+        <div class="p-6 sm:p-8 text-center">
+          <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gradient-to-br from-emerald-400 to-green-500 text-white shadow-lg">
+            <i class="bi bi-check-lg text-3xl"></i>
+          </div>
+          <h2 class="text-xl font-bold mt-4">Заявка принята!</h2>
+          <p class="text-slate-600 text-sm mt-1" id="success-message">
+            Мы скоро с вами свяжемся.
+          </p>
+          <button onclick="closeContactModal()" class="btn w-full mt-6 bg-slate-100 text-slate-700 hover:bg-slate-200">
+            Закрыть
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
 
+
 <script>
-  // Открытие/закрытие модалки
+  // Элементы модального окна
   const contactModal = document.getElementById('contactModal');
+  const formView = document.getElementById('form-view');
+  const successView = document.getElementById('success-view');
+  const formError = document.getElementById('form-error');
+  const submitBtn = document.getElementById('submit-app-btn');
+  const phoneInput = document.getElementById('phone-input');
+  const successMessage = document.getElementById('success-message');
+
+  // Блокировка/разблокировка скролла
   function lockScroll(lock = true) { document.documentElement.style.overflow = lock ? 'hidden' : ''; }
+
+  // --- НОВАЯ ФУНКЦИЯ ---
+  // Показывает alert, если подписка уже есть
+  function showAlreadySubscribedAlert() {
+    alert("У вас уже есть действующая подписка.");
+  }
+
+  // Открытие модалки (теперь со сбросом)
   function openContactModal() {
     if (!contactModal) return;
-    contactModal.classList.remove('hidden'); contactModal.classList.add('flex'); lockScroll(true);
-    setTimeout(() => { const btn = contactModal.querySelector('a.btn'); if (btn) btn.focus(); }, 50);
+
+    // Сброс в исходное состояние (показываем форму, прячем успех)
+    formView.classList.remove('hidden');
+    successView.classList.add('hidden');
+    formError.classList.add('hidden');
+    formError.innerText = '';
+    phoneInput.value = '';
+    submitBtn.disabled = false;
+    submitBtn.innerText = 'Отправить заявку';
+
+    contactModal.classList.remove('hidden');
+    contactModal.classList.add('flex');
+    lockScroll(true);
+    setTimeout(() => { phoneInput.focus(); }, 50);
   }
+
+  // Закрытие модалки
   function closeContactModal() {
     if (!contactModal) return;
-    contactModal.classList.add('hidden'); contactModal.classList.remove('flex'); lockScroll(false);
+    contactModal.classList.add('hidden');
+    contactModal.classList.remove('flex');
+    lockScroll(false);
   }
+
+  // --- НОВАЯ ФУНКЦИЯ ---
+  // Отправка заявки на сервер
+  async function submitApplication(event) {
+    event.preventDefault(); // Не даем форме перезагрузить страницу
+
+    const phone = phoneInput.value;
+
+    // Блокируем кнопку на время запроса
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Отправка...';
+    formError.classList.add('hidden');
+
+    try {
+      const response = await fetch('/api/create_application', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Если у вас есть CSRF-токены (а во Flask-WTF они есть),
+          // их нужно будет добавить в заголовки.
+          // Но для простого API-эндпоинта это может быть не нужно.
+        },
+        body: JSON.stringify({ phone: phone })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Успех! Показываем сообщение и меняем вид модалки
+        successMessage.innerText = data.message;
+        formView.classList.add('hidden');
+        successView.classList.remove('hidden');
+      } else {
+        // Ошибка от сервера (напр. "введите корректный номер" или "уже есть подписка")
+        formError.innerText = data.message || 'Произошла ошибка.';
+        formError.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Отправить заявку';
+      }
+
+    } catch (error) {
+      // Сетевая ошибка (сервер недоступен и т.д.)
+      console.error('Fetch Error:', error);
+      formError.innerText = 'Ошибка сети. Попробуйте снова.';
+      formError.classList.remove('hidden');
+      submitBtn.disabled = false;
+      submitBtn.innerText = 'Отправить заявку';
+    }
+    // 'finally' не нужен, т.к. кнопка разблокируется только в случае ошибки
+  }
+
+  // Закрытие по Escape
   document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') closeContactModal(); });
 
-  // Входные анимации карточек/hero
+  // Входные анимации карточек/hero (старый код)
   const io = new IntersectionObserver((entries)=>{
     entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
   }, { threshold: .12 });
