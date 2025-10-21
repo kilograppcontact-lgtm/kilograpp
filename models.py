@@ -40,6 +40,7 @@ class User(db.Model):
     telegram_code = db.Column(db.String(10), nullable=True)
     show_welcome_popup = db.Column(db.Boolean, default=False, nullable=False, server_default=expression.false())
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    onboarding_complete = db.Column(db.Boolean, default=False, nullable=False)
 
     # отношения
     subscription = db.relationship(

@@ -2236,30 +2236,6 @@ async function checkTgStatus() {
   } catch (_) { /* no-op */ }
 }
 
-// НОВАЯ ФУНКЦИЯ для отвязки аккаунта
-function unlinkTelegram() {
-    if (!confirm("Вы уверены, что хотите отвязать свой Telegram-аккаунт? Вы перестанете получать уведомления.")) return;
-
-    fetch('/api/me/telegram/unlink', { method: 'POST' })
-    .then(res => {
-        if (!res.ok) throw new Error('Ошибка сервера');
-        return res.json();
-    })
-    .then(data => {
-        if (data.success) {
-            alert('Аккаунт успешно отвязан.');
-            // Просто закрываем окно, при следующем открытии оно покажет инструкции
-            closeTelegramModal();
-            // Можно также обновить иконку на основной странице
-            const tgBtn = document.querySelector('.tg-attn-btn');
-            if (tgBtn) tgBtn.classList.remove('linked');
-        } else {
-            alert(data.error || 'Не удалось отвязать аккаунт.');
-        }
-    })
-    .catch(err => alert(err.message));
-}
-
 // Не забудьте также обновить функции статуса для большей ясности
 function setTgStatusWaiting() {
   const dot = document.getElementById('tgStatusDot');
@@ -2355,6 +2331,92 @@ function setTgStatusLinked() {
             });
         }
     }
+</script>
+<script>
+  // --- ОТВЯЗКА TELEGRAM ---
+  async function unlinkTelegram() {
+    if (!confirm('Вы уверены, что хотите отвязать Telegram-аккаунт?')) return;
+
+    const btn = event?.currentTarget;
+    if (btn) {
+      btn.disabled = true;
+      const orig = btn.textContent;
+      btn.dataset._orig = orig;
+      btn.textContent = 'Отвязываем...';
+    }
+
+    // Пробуем основной REST-эндпоинт; при 404 — запасной
+    const endpoints = [
+      { url: '/api/me/telegram/unlink',  method: 'POST' }, // под семейство /api/me/telegram/*
+      { url: '/unlink_telegram',         method: 'POST' }  // запасной маршрут, если у тебя он такой
+    ];
+
+    let ok = false, lastErr = null, respJson = null;
+
+    for (const ep of endpoints) {
+      try {
+        const r = await fetch(ep.url, {
+          method: ep.method,
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          credentials: 'same-origin',
+          cache: 'no-store',
+          body: ep.method === 'POST' ? JSON.stringify({}) : undefined
+        });
+        // Если сервер вернул JSON — попробуем прочитать (но не упадём, если пусто)
+        try { respJson = await r.clone().json(); } catch (_) { respJson = null; }
+
+        if (r.ok && (!respJson || respJson.ok !== false)) { ok = true; break; }
+        lastErr = new Error(`HTTP ${r.status}${respJson?.error ? `: ${respJson.error}` : ''}`);
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+
+    if (!ok) {
+      alert('Не удалось отвязать Telegram.' + (lastErr ? `\nПричина: ${lastErr.message}` : ''));
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset._orig || 'Отвязать аккаунт'; }
+      return;
+    }
+
+    // Успешно отвязали: переключаем модалку на «не привязан»
+    try { stopTgPolling(); } catch (_) {}
+    // Сбрасываем флажок «привязан» в UI
+    const unlinked = document.getElementById('tg-unlinked-view');
+    const linked   = document.getElementById('tg-linked-view');
+    if (linked)   linked.classList.add('hidden');
+    if (unlinked) unlinked.classList.remove('hidden');
+
+    // Обновляем статусную строку
+    const dot  = document.getElementById('tgStatusDot');
+    const ping = document.getElementById('tgStatusPing');
+    const txt  = document.getElementById('tgStatusText');
+    if (dot)  dot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500';
+    if (ping) ping.style.display = 'inline-flex';
+    if (txt)  txt.textContent = 'Статус: Не привязан';
+
+    // Сбросим флаг биндинга, чтобы при следующем открытии модала свитчи привязались заново
+    if (typeof _tgSwitchesBound !== 'undefined') _tgSwitchesBound = false;
+
+    // Обновим кнопку Telegram на карточке профиля (если она есть)
+    try {
+      const btnTg = document.querySelector('.tg-attn-btn');
+      if (btnTg) btnTg.classList.remove('linked');
+      const check = document.querySelector('.tg-check');
+      if (check) check.remove();
+    } catch(_) {}
+
+    // Можно мягко обновить статус с сервера — не обязательно
+    try { await loadTgSettings(); } catch (_) {}
+
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = btn.dataset._orig || 'Отвязать аккаунт';
+    }
+
+    // По желанию: закрыть модалку и показать тост
+    // closeTelegramModal();
+    // alert('Telegram-аккаунт успешно отвязан.');
+  }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
@@ -2596,21 +2658,22 @@ function closeModal(id) {
 (function(){
   try{
     const uid = "{{ user.id if user else 'anon' }}";
-    const DONE = `dietaai_onboarding_done_${uid}`;
+    // const DONE = ...; // Больше не нужно
     const ACTIVE = `dietaai_onboarding_active_${uid}`;
     const STEP = `dietaai_onboarding_step_${uid}`;
 
     // НЕ завися от Jinja: реальный путь из браузера
     const path = window.location.pathname;
 
-    // Серверный флаг можно оставить, но если его нет — будет 'false'
-    const serverFirst = {{ 'true' if (first_login|default(false)) else 'false' }};
+    // ИСПОЛЬЗУЕМ НОВУЮ ПЕРЕМЕННУЮ ИЗ БЭКЕНДА
+    const serverStart = {{ 'true' if (start_onboarding_tour|default(false)) else 'false' }};
 
     const urlParams = new URLSearchParams(location.search);
     const force = urlParams.get('tour') === '1';
     const debug = urlParams.get('debug') === '1';
 
-    const shouldStart = force || serverFirst || (!localStorage.getItem(DONE));
+    // ПРОВЕРКА СТАРТА ТЕПЕРЬ ЗАВИСИТ ТОЛЬКО ОТ СЕРВЕРА
+    const shouldStart = force || serverStart;
 
     const steps = [
       {id:'welcome',  title:'Добро пожаловать! 👋', body:'За <b>30 секунд</b> покажу основные разделы. Нажмите «Покажи мне».', route:'/profile',  target:null,                    placement:'center'},
@@ -2643,13 +2706,23 @@ function closeModal(id) {
         setTimeout(()=>b.remove(),3000);
       }
     }
+
+    // НОВАЯ ФУНКЦИЯ END
     function end(){
       hideAll();
-      localStorage.setItem(DONE,'1');
+
+      // Отправляем отметку на сервер, что тур пройден
+      fetch('/api/onboarding/complete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+      }).catch(err => console.error('Failed to save tour status:', err));
+
+      // localStorage.setItem(DONE,'1'); // Больше не нужно
       localStorage.removeItem(ACTIVE);
       localStorage.removeItem(STEP);
       log('end');
     }
+
     function next(){
       if(i < steps.length - 1){ i++; go(); }
       else { end(); }
@@ -2877,6 +2950,8 @@ if (window.visualViewport){
     document.addEventListener('DOMContentLoaded', ()=>{
       const active = localStorage.getItem(ACTIVE)==='1';
       const storedIdx = parseInt(localStorage.getItem(STEP)||'0',10);
+
+      // shouldStart теперь управляется сервером
       if(shouldStart || active){
         // чуть позже, чтобы контент вкладок успел дорендериться
         setTimeout(()=> start(active ? storedIdx : 0), 500);

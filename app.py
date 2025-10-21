@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import random
 import string
 import re
-from sqlalchemy import func
+from sqlalchemy import func, text
 from functools import wraps
 from PIL import Image
 from meal_reminders import start_meal_scheduler, get_scheduler, run_tick_now, pause_job, resume_job
@@ -426,6 +426,22 @@ def calculate_age(born):
     today = date.today()
     return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
+# ------------------ ONBOARDING API ------------------
+
+def _auto_migrate_diet_schema():
+    insp = inspect(db.engine)
+    # Создадим недостающие таблицы по моделям
+    db.create_all()
+
+    # === Новые поля пользователя для визуализаций ===
+    _ensure_column("user", "sex", "TEXT DEFAULT 'male'")
+    _ensure_column("user", "face_consent", "BOOLEAN DEFAULT FALSE")
+
+    # === НОВОЕ ПОЛЕ ДЛЯ ТУРА ===
+    _ensure_column("user", "onboarding_complete", "BOOLEAN DEFAULT FALSE")
+
+    # === ВАЖНО: meal_logs нужные поля ===
+    _ensure_column("meal_logs", "image_path", "TEXT")
 
 # ------------------ TRAININGS API ------------------
 
@@ -675,7 +691,7 @@ def inject_help_flags():
                 if isinstance(joined, date) and not isinstance(joined, datetime):
                     is_newbie = (date.today() - joined).days < 7
                 else:
-                    is_newbie = (datetime.utcnow().date() - joined.date()).days < 7
+                    is_newbie = (datetime.now(UTC).date() - joined.date()).days < 7
         except Exception:
             # в крайнем случае ориентируемся только на отсутствие анализов
             is_newbie = False
@@ -931,6 +947,14 @@ def profile():
     missing_activity = (active_kcal is None)
     just_activated = user.show_welcome_popup
 
+    start_onboarding_tour = False
+    try:
+        start_onboarding_tour = not user.onboarding_complete
+    except Exception:
+        # На случай, если миграция еще не применилась
+        pass
+
+
     deficit = None
     if not missing_meals and not missing_activity and metabolism is not None:
         deficit = (metabolism + (active_kcal or 0)) - total_meals
@@ -1140,7 +1164,8 @@ def profile():
         user_joined_group=user_joined_group,
         all_analyses_for_progress=all_analyses_for_progress_data,
         fat_loss_progress=fat_loss_progress,
-        just_activated=just_activated
+        just_activated=just_activated,
+        start_onboarding_tour=start_onboarding_tour
     )
 
 @app.route('/logout')
@@ -1148,6 +1173,26 @@ def logout():
     session.clear()
     return redirect('/login')
 
+
+@app.route('/api/onboarding/complete', methods=['POST'])
+@login_required
+def complete_onboarding_tour():
+    """Отмечает, что пользователь завершил онбординг-тур."""
+    user = get_current_user()
+    if not user:
+        return jsonify({"success": False, "error": "User not found"}), 404
+
+    try:
+        if not user.onboarding_complete:
+            user.onboarding_complete = True
+            db.session.commit()
+            # Опционально: логируем действие
+            log_audit("onboarding_complete", "User", user.id)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+    return jsonify({"success": True})
 
 # Убедитесь, что jsonify импортирован в начале файла: from flask import jsonify
 
@@ -3459,8 +3504,6 @@ def welcome_guide():
     return render_template('welcome_guide.html')
 
 
-from sqlalchemy import text  # Убедитесь, что text импортирован из sqlalchemy
-
 
 @app.route('/api/user/weekly_summary')
 @login_required
@@ -4074,44 +4117,38 @@ def admin_user_send_test_tg(user_id):
         flash(f"Ошибка отправки: {e}", "error")
 
     return redirect(url_for("admin_user_detail", user_id=user.id))
-
 @app.post("/api/me/telegram/unlink")
 @login_required
 def user_unlink_telegram():
-    """
-    Позволяет текущему аутентифицированному пользователю
-    отвязать свой собственный Telegram-аккаунт.
-    """
-    # current_user предоставляется Flask-Login
-    user = current_user
+    """Снимает привязку Telegram и выключает уведомления (совместимо со старым UI)."""
+    u = get_current_user()
+    if not u:
+        abort(401)
 
-    if not user.telegram_chat_id:
-        # Если аккаунт и так не привязан, возвращаем ошибку
-        return jsonify({"success": False, "error": "Аккаунт Telegram не был привязан."}), 400
+    already = not bool(getattr(u, "telegram_chat_id", None))
+    # Снимаем chat_id
+    u.telegram_chat_id = None
 
-    # Сохраняем старое значение для логирования
-    old_chat_id = user.telegram_chat_id
-
-    # Отвязываем аккаунт
-    user.telegram_chat_id = None
-    db.session.commit()
-
-    # Логируем действие для аудита (аналогично админской функции)
+    # Выключаем уведомления и синхронизируем с UserSettings
     try:
-        log_audit(
-            action="telegram_unlink_self", # Другое имя действия, чтобы отличать от админа
-            target_type="User",
-            target_id=user.id,
-            old={"telegram_chat_id": old_chat_id},
-            new={"telegram_chat_id": None}
-        )
-    except Exception as e:
-        # Не прерываем процесс, если логирование не удалось, но сообщаем в консоль
-        app.logger.error(f"Failed to log audit for self-telegram-unlink: {e}")
+        u.telegram_notify_enabled = False
+    except Exception:
         pass
 
-    # Отправляем успешный JSON-ответ на фронтенд
-    return jsonify({"success": True})
+    try:
+        if getattr(u, "settings", None):
+            u.settings.telegram_notify_enabled = False
+    except Exception:
+        pass
+
+    db.session.commit()
+    return jsonify({"ok": True, "already": already})
+
+# Запасной маршрут для старого фронта/кнопок (вы вызывали /unlink_telegram)
+@app.post("/unlink_telegram")
+@login_required
+def unlink_telegram_alias():
+    return user_unlink_telegram()
 
 @app.post("/admin/users/<int:user_id>/telegram/unlink")
 @admin_required
