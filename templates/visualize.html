@@ -115,7 +115,7 @@
 
             <div class="flex items-center gap-4">
               <img class="w-16 h-16 rounded-full object-cover ring-2 ring-offset-2 ring-indigo-500"
-                   src="{{ url_for('serve_file', filename=current_user.avatar) if current_user.avatar else url_for('static', filename='default-avatar.png') }}"
+                   src="{{ url_for('serve_file', filename=user.avatar.filename) if current_user.avatar else url_for('static', filename='default-avatar.png') }}"
                    alt="avatar">
               <div>
                 <div class="font-bold text-gray-900">{{ current_user.name }}</div>

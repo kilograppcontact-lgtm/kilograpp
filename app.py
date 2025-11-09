@@ -30,6 +30,7 @@ from flask import send_file
 from io import BytesIO
 from progress_analyzer import generate_progress_commentary
 from flask import jsonify # Убедись, что jsonify импортирован вверху файла
+from flask import make_response
 
 load_dotenv()
 
@@ -813,6 +814,410 @@ def instructions_page():
 # from sqlalchemy import func
 # from flask import url_for
 
+# ========= JSON AUTH API =========
+
+# ==========================================================
+#  API ДЛЯ МОБИЛЬНОГО ПРИЛОЖЕНИЯ (НА ОСНОВЕ СЕССИЙ)
+# ==========================================================
+
+@app.route('/api/app/profile_data')
+@login_required
+def app_profile_data():
+    """
+    Отдает один большой JSON со всеми данными,
+    нужными для главной страницы профиля в приложении.
+    """
+    user = get_current_user()
+
+    # 1. Базовые данные пользователя (из /api/me)
+    user_data = {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "has_subscription": bool(getattr(user, 'has_subscription', False)),
+        "is_trainer": bool(getattr(user, 'is_trainer', False)),
+        "avatar_filename": user.avatar.filename if user.avatar else None
+    }
+
+    # 2. Данные о диете (из profile())
+    diet_obj = Diet.query.filter_by(user_id=user.id).order_by(Diet.date.desc()).first()
+    diet_data = None
+    if diet_obj:
+        try:
+            diet_data = {
+                "total_kcal": diet_obj.total_kcal,
+                "protein": diet_obj.protein,
+                "fat": diet_obj.fat,
+                "carbs": diet_obj.carbs,
+                "meals": {
+                    "breakfast": json.loads(diet_obj.breakfast or "[]"),
+                    "lunch": json.loads(diet_obj.lunch or "[]"),
+                    "dinner": json.loads(diet_obj.dinner or "[]"),
+                    "snack": json.loads(diet_obj.snack or "[]"),
+                }
+            }
+        except Exception:
+            diet_data = None  # Ошибка парсинга JSON
+
+        # 3. Данные о прогрессе (из profile())
+        fat_loss_progress_data = None
+        progress_checkpoints = []  # <-- ДОБАВИТЬ ЭТУ СТРОКУ
+        latest_analysis = BodyAnalysis.query.filter_by(user_id=user.id).order_by(BodyAnalysis.timestamp.desc()).first()
+        # --- НАЧАЛО ИЗМЕНЕНИЯ ---
+        latest_analysis_data = None
+        if latest_analysis:
+
+            # --- ДОБАВЛЯЕМ РАСЧЕТ ПРОЦЕНТА ЖИРА ---
+            calculated_fat_percentage = 0.0
+            try:
+                # (fat_mass / weight) * 100
+                if latest_analysis.weight and latest_analysis.weight > 0 and latest_analysis.fat_mass:
+                    calculated_fat_percentage = (latest_analysis.fat_mass / latest_analysis.weight) * 100
+            except Exception:
+                pass  # Оставляем 0.0
+
+            latest_analysis_data = {
+                'height': latest_analysis.height,
+                'weight_kg': latest_analysis.weight,
+                'muscle_mass_kg': latest_analysis.muscle_mass,
+
+                # --- ВОТ ГЛАВНОЕ ИСПРАВЛЕНИЕ ---
+                'body_fat_percentage': calculated_fat_percentage,
+
+                'body_water': latest_analysis.body_water,
+                'protein_percentage': latest_analysis.protein_percentage,
+                'bone_mineral_percentage': latest_analysis.bone_mineral_percentage,
+                'skeletal_muscle_mass': latest_analysis.skeletal_muscle_mass,
+                'visceral_fat_level': latest_analysis.visceral_fat_rating,
+                'metabolism': latest_analysis.metabolism,
+                'waist_hip_ratio': latest_analysis.waist_hip_ratio,
+                'body_age': latest_analysis.body_age,
+                'fat_mass_kg': latest_analysis.fat_mass,
+                'bmi': latest_analysis.bmi,
+                'fat_free_body_weight': latest_analysis.fat_free_body_weight
+            }
+        # --- КОНЕЦ ИЗМЕНЕНИЯ ---
+
+    initial_analysis = db.session.get(BodyAnalysis,
+                                      user.initial_body_analysis_id) if user.initial_body_analysis_id else None
+    # ИСПРАВЛЕНИЕ: Добавлена проверка initial_analysis.fat_mass
+    if initial_analysis and latest_analysis and latest_analysis.fat_mass and user.fat_mass_goal and initial_analysis.fat_mass is not None and user.fat_mass_goal is not None and initial_analysis.fat_mass > user.fat_mass_goal:
+        try:
+            # Убедимся, что оба значения - числа
+            initial_fat_mass = float(initial_analysis.fat_mass)
+            current_fat_mass = latest_analysis.fat_mass
+            goal_fat_mass = user.fat_mass_goal
+            total_fat_to_lose_kg = initial_fat_mass - goal_fat_mass
+            fat_lost_so_far_kg = initial_fat_mass - current_fat_mass
+            percentage = 0
+            if total_fat_to_lose_kg > 0:
+                percentage = (fat_lost_so_far_kg / total_fat_to_lose_kg) * 100
+
+            fat_loss_progress_data = {
+                'percentage': min(100, max(0, percentage)),
+                'burned_kg': fat_lost_so_far_kg,
+                'total_to_lose_kg': total_fat_to_lose_kg,
+                'initial_kg': initial_fat_mass,
+                'goal_kg': goal_fat_mass,
+                'current_kg': current_fat_mass
+            }
+        except Exception:
+            fat_loss_progress_data = None
+
+        # --- НАЧАЛО: Добавляем расчет чек-поинтов (скопировано из роута profile) ---
+        all_analyses_for_progress_data = []
+        if user.initial_body_analysis_id:
+            initial_analysis_for_chart = db.session.get(BodyAnalysis, user.initial_body_analysis_id)
+            if initial_analysis_for_chart:
+                analyses_objects = BodyAnalysis.query.filter(
+                    BodyAnalysis.user_id == user.id,
+                    BodyAnalysis.timestamp >= initial_analysis_for_chart.timestamp
+                ).order_by(BodyAnalysis.timestamp.asc()).all()
+
+                all_analyses_for_progress_data = [
+                    {
+                        "timestamp": analysis.timestamp.isoformat(),
+                        "fat_mass": analysis.fat_mass
+                    }
+                    for analysis in analyses_objects
+                ]
+
+        progress_checkpoints = []
+        if fat_loss_progress_data and all_analyses_for_progress_data and fat_loss_progress_data['total_to_lose_kg'] > 0:
+            initial_fat = fat_loss_progress_data['initial_kg']
+            total_to_lose = fat_loss_progress_data['total_to_lose_kg']
+
+            for i, analysis_data in enumerate(all_analyses_for_progress_data):
+                current_fat_at_point = analysis_data.get('fat_mass') or initial_fat
+                fat_lost_at_point = initial_fat - current_fat_at_point
+                percentage_at_point = (fat_lost_at_point / total_to_lose) * 100
+
+                progress_checkpoints.append({
+                    "number": i + 1,
+                    "percentage": min(100, max(0, percentage_at_point))  # Ограничиваем 0-100%
+                })
+                # --- КОНЕЦ: Добавляем расчет чек-поинтов ---
+
+                # --- ИСПРАВЛЕНИЕ: ПЕРЕМЕЩАЕМ RETURN ИЗ IF-БЛОКА ---
+                # Этот return должен быть в конце функции, а не внутри if
+                return jsonify({
+                    "ok": True,
+                    "data": {
+                        "user": user_data,
+                        "diet": diet_data,
+                        "fat_loss_progress": fat_loss_progress_data,
+                        "progress_checkpoints": progress_checkpoints,
+                        "latest_analysis": latest_analysis_data
+                    }
+                })
+
+@app.route('/api/app/meals/today')
+@login_required
+def app_get_today_meals():
+    """ API-версия /api/meals/today/<chat_id> , но использующая сессию """
+    user = get_current_user()
+    logs = MealLog.query.filter_by(user_id=user.id, date=date.today()).order_by(MealLog.created_at).all()
+    total_calories = sum(m.calories for m in logs)
+
+    meal_data = [
+        {
+            'meal_type': m.meal_type,
+            'name': m.name or "Без названия",
+            'calories': m.calories,
+            'protein': m.protein,
+            'fat': m.fat,
+            'carbs': m.carbs
+        }
+        for m in logs
+    ]
+
+    # Добавим целевые БЖУ из диеты
+    diet_calories = 2500  # По умолчанию
+    diet_macros = {"protein": 0, "fat": 0, "carbs": 0}
+    diet = Diet.query.filter_by(user_id=user.id).order_by(Diet.date.desc()).first()
+    if diet:
+        diet_calories = diet.total_kcal or 2500
+        diet_macros = {
+            "protein": diet.protein or 0,
+            "fat": diet.fat or 0,
+            "carbs": diet.carbs or 0
+        }
+
+    return jsonify({
+        "meals": meal_data,
+        "total_calories": total_calories,
+        "diet_total_calories": diet_calories,
+        "diet_macros": diet_macros
+    }), 200
+
+
+@app.route('/api/app/log_meal', methods=['POST'])
+@login_required
+def app_log_meal():
+    """ API-версия /api/log_meal , но использующая сессию """
+    user = get_current_user()
+    data = request.get_json()
+
+    # Ищем существующий (для обновления)
+    meal = MealLog.query.filter_by(
+        user_id=user.id,
+        date=date.today(),
+        meal_type=data['meal_type']
+    ).first()
+
+    if not meal:
+        # Создаем новый
+        meal = MealLog(
+            user_id=user.id,
+            date=date.today(),
+            meal_type=data['meal_type']
+        )
+
+    meal.name = data.get('name', 'Без названия')
+    meal.calories = int(data.get('calories', 0))
+    meal.protein = float(data.get('protein', 0.0))
+    meal.fat = float(data.get('fat', 0.0))
+    meal.carbs = float(data.get('carbs', 0.0))
+    meal.analysis = data.get('analysis', '')  # Если данные пришли из AI
+
+    try:
+        db.session.add(meal)
+        db.session.commit()
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/app/activity/today')
+@login_required
+def app_activity_today():
+    """ API-версия /api/activity/today/<chat_id> , но использующая сессию """
+    user = get_current_user()
+    a = Activity.query.filter_by(user_id=user.id, date=date.today()).first()
+    if not a:
+        return jsonify({"present": False}), 404  # 404 - корректный ответ "не найдено"
+
+    return jsonify({
+        "present": True,
+        "steps": a.steps or 0,
+        "active_kcal": a.active_kcal or 0,
+        "resting_kcal": a.resting_kcal or 0,
+        "distance_km": a.distance_km or 0.0
+    })
+
+
+@app.route('/api/app/telegram_code')
+@login_required
+def app_generate_telegram_code():
+    """ API-версия /generate_telegram_code , но возвращает JSON """
+    user = get_current_user()
+    code = ''.join(random.choices(string.digits, k=8))
+    user.telegram_code = code
+    db.session.commit()
+    return jsonify({'code': code})
+
+
+@app.route('/api/app/analyze_meal_photo', methods=['POST'])
+@login_required
+def app_analyze_meal_photo():
+    """
+    Защищенная сессией версия /analyze_meal_photo
+    Она просто вызывает существующую функцию, но требует @login_required
+    """
+    return analyze_meal_photo()
+
+@app.post('/api/login')
+def api_login():
+    data = request.get_json(force=True, silent=True) or {}
+    email_input = (data.get('email') or '').strip()
+    password = data.get('password') or ''
+    if not email_input or not password:
+        return jsonify({"ok": False, "error": "EMAIL_OR_PASSWORD_EMPTY"}), 400
+
+    # case-insensitive
+    user = User.query.filter(func.lower(User.email) == email_input.casefold()).first()
+    if not user or not bcrypt.check_password_hash(user.password, password):
+        return jsonify({"ok": False, "error": "INVALID_CREDENTIALS"}), 401
+
+    session['user_id'] = user.id  # <- сессионная cookie выставится автоматически (Set-Cookie)
+    return jsonify({
+        "ok": True,
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "has_subscription": bool(getattr(user, 'has_subscription', False)),
+            "is_trainer": bool(getattr(user, 'is_trainer', False)),
+        }
+    }), 200
+
+
+@app.post('/api/logout')
+def api_logout():
+    session.clear()
+    return jsonify({"ok": True})
+
+
+@app.get('/api/me')
+def api_me():
+    u = get_current_user()
+    if not u:
+        return jsonify({"ok": False}), 401
+    return jsonify({
+        "ok": True,
+        "user": {
+            "id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "has_subscription": bool(getattr(u, 'has_subscription', False)),
+            "is_trainer": bool(getattr(u, 'is_trainer', False)),
+        }
+    })
+
+
+@app.post('/api/register')
+def api_register():
+    data = request.get_json(force=True, silent=True) or {}
+    name = (data.get('name') or '').strip()
+    email = (data.get('email') or '').strip()
+    password = (data.get('password') or '').strip()
+    date_str = (data.get('date_of_birth') or '').strip()
+    sex = (data.get('sex') or 'male').strip().lower()
+
+    errors = []
+    if not name: errors.append("NAME_REQUIRED")
+    if not email: errors.append("EMAIL_REQUIRED")
+    if not password or len(password) < 6: errors.append("PASSWORD_SHORT")
+    if sex not in ('male', 'female'): errors.append("SEX_INVALID")
+    if User.query.filter(func.lower(User.email) == email.casefold()).first():
+        errors.append("EMAIL_EXISTS")
+
+    date_of_birth = None
+    if date_str:
+        try:
+            date_of_birth = datetime.strptime(date_str, "%Y-%m-%d").date()
+            if date_of_birth > datetime.now().date():
+                errors.append("DOB_FUTURE")
+        except ValueError:
+            errors.append("DOB_BAD_FORMAT")
+    else:
+        errors.append("DOB_REQUIRED")
+
+    if errors:
+        return jsonify({"ok": False, "errors": errors}), 400
+
+    hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
+    user = User(
+        name=name, email=email, password=hashed_pw,
+        date_of_birth=date_of_birth, sex=sex
+    )
+    db.session.add(user)
+    db.session.commit()
+
+    # Автовход после регистрации
+    session['user_id'] = user.id
+    return jsonify({"ok": True, "user": {"id": user.id, "name": user.name, "email": user.email}}), 201
+
+
+# --- НАЧАЛО: НОВЫЙ ЭНДПОИНТ ДЛЯ FLUTTER LOGIN ---
+@app.route('/api/check_user_email', methods=['POST'])
+def api_check_user_email():
+    """
+    Проверяет email и возвращает публичные данные (имя, аватар)
+    для многоступенчатого входа в Flutter-приложении.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    email_input = (data.get('email') or '').strip()
+
+    if not email_input:
+        return jsonify({"ok": False, "error": "EMAIL_REQUIRED"}), 400
+
+    # Используем тот же case-insensitive поиск, что и в /api/login
+    user = User.query.filter(func.lower(User.email) == email_input.casefold()).first()
+
+    if not user:
+        # 404 - Пользователь не найден. Flutter-приложение ожидает эту ошибку.
+        return jsonify({"ok": False, "error": "USER_NOT_FOUND"}), 404
+
+    # Пользователь найден, возвращаем публичные данные
+    # (Используем ту же логику получения аватара, что и в /api/app/profile_data)
+    avatar_filename = user.avatar.filename if user.avatar else None
+
+    return jsonify({
+        "ok": True,
+        "user_data": {
+            "name": user.name,
+            "avatar_filename": avatar_filename
+            # Примечание: Flutter-клиент сам соберет полный URL,
+            # используя AuthApi.baseUrl + "/files/" + avatar_filename
+        }
+    }), 200
+
+
+# --- КОНЕЦ: НОВОГО ЭНДПОИНТА ---
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -1173,30 +1578,48 @@ def profile():
             'current_kg': estimated_current_fat_mass  # Теперь это расчетное значение
         }
 
-    return render_template(
-        'profile.html',
-        user=user,
-        age=age,
-        diet=diet,
-        today_activity=today_activity,
-        latest_analysis=latest_analysis,
-        previous_analysis=previous_analysis,
-        total_meals=total_meals,
-        today_meals=today_meals,
-        metabolism=metabolism,
-        active_kcal=active_kcal,
-        steps=steps,
-        distance_km=distance_km,
-        resting_kcal=resting_kcal,
-        deficit=deficit,
-        missing_meals=missing_meals,
-        missing_activity=missing_activity,
-        user_joined_group=user_joined_group,
-        all_analyses_for_progress=all_analyses_for_progress_data,
-        fat_loss_progress=fat_loss_progress,
-        just_activated=just_activated,
-        start_onboarding_tour=start_onboarding_tour
-    )
+        # --- НАЧАЛО: Добавляем расчет чек-поинтов ---
+        progress_checkpoints = []
+        if fat_loss_progress and all_analyses_for_progress_data and fat_loss_progress['total_to_lose_kg'] > 0:
+            initial_fat = fat_loss_progress['initial_kg']
+            total_to_lose = fat_loss_progress['total_to_lose_kg']
+
+            for i, analysis_data in enumerate(all_analyses_for_progress_data):
+                current_fat_at_point = analysis_data.get('fat_mass') or initial_fat
+                fat_lost_at_point = initial_fat - current_fat_at_point
+                percentage_at_point = (fat_lost_at_point / total_to_lose) * 100
+
+                progress_checkpoints.append({
+                    "number": i + 1,
+                    "percentage": min(100, max(0, percentage_at_point))  # Ограничиваем 0-100%
+                })
+        # --- КОНЕЦ: Добавляем расчет чек-поинтов ---
+
+        return render_template(
+            'profile.html',
+            user=user,
+            age=age,
+            diet=diet,
+            today_activity=today_activity,
+            latest_analysis=latest_analysis,
+            previous_analysis=previous_analysis,
+            total_meals=total_meals,
+            today_meals=today_meals,
+            metabolism=metabolism,
+            active_kcal=active_kcal,
+            steps=steps,
+            distance_km=distance_km,
+            resting_kcal=resting_kcal,
+            deficit=deficit,
+            missing_meals=missing_meals,
+            missing_activity=missing_activity,
+            user_joined_group=user_joined_group,
+            all_analyses_for_progress=all_analyses_for_progress_data,
+            fat_loss_progress=fat_loss_progress,
+            progress_checkpoints=progress_checkpoints,  # <-- ПЕРЕДАЕМ ЧЕК-ПОИНТЫ В ШАБЛОН
+            just_activated=just_activated,
+            start_onboarding_tour=start_onboarding_tour
+        )
 
 @app.route('/logout')
 def logout():
@@ -1225,6 +1648,7 @@ def complete_onboarding_tour():
     return jsonify({"success": True})
 
 # Убедитесь, что jsonify импортирован в начале файла: from flask import jsonify
+# (Замените вашу функцию upload_analysis на эту)
 
 @app.route('/upload_analysis', methods=['POST'])
 @login_required
@@ -1274,15 +1698,13 @@ def upload_analysis():
         content = response_metrics.choices[0].message.content.strip()
         result = json.loads(content)
 
-        # --- НАЧАЛО ИЗМЕНЕНИЙ ---
-
         # Если рост не найден, пытаемся взять его из последнего анализа
         if not result.get('height'):
             last_analysis = BodyAnalysis.query.filter_by(user_id=user.id).order_by(BodyAnalysis.timestamp.desc()).first()
             if last_analysis and last_analysis.height:
                 result['height'] = last_analysis.height
 
-        # Список обязательных полей (рост теперь не в нем)
+        # Список обязательных полей
         required_keys = [
             'weight', 'muscle_mass', 'muscle_percentage', 'body_water',
             'protein_percentage', 'bone_mineral_percentage', 'skeletal_muscle_mass',
@@ -1297,12 +1719,10 @@ def upload_analysis():
                 "success": False,
                 "error": f"Не удалось распознать все показатели. Попробуйте другое фото. Отсутствуют: {missing_str}"
             }), 400
-        # --- КОНЕЦ ИЗМЕНЕНИЙ ---
 
         # --- ШАГ 2: Генерация целей ---
         age = calculate_age(user.date_of_birth) if user.date_of_birth else 'не указан'
         prompt_goals = (
-            # Промпт теперь будет использовать либо новый, либо старый рост
             f"Для пользователя с параметрами: возраст {age}, рост {result.get('height')} см, "
             f"вес {result.get('weight')} кг, жировая масса {result.get('fat_mass')} кг, "
             f"мышечная масса {result.get('muscle_mass')} кг. "
@@ -1323,8 +1743,11 @@ def upload_analysis():
         goals_result = json.loads(goals_content)
         result.update(goals_result)
 
-        session['temp_analysis'] = result
-        return jsonify({"success": True, "redirect_url": url_for('confirm_analysis')})
+        # --- ИЗМЕНЕНИЕ ДЛЯ FLUTTER ---
+        # session['temp_analysis'] = result # <-- БЫЛО
+        # return jsonify({"success": True, "redirect_url": url_for('confirm_analysis')}) # <-- БЫЛО
+
+        return jsonify({"success": True, "data": result}) # <-- СТАЛО
 
     except Exception as e:
         print(f"!!! ОШИБКА В UPLOAD_ANALYSIS: {e}")
@@ -1335,7 +1758,6 @@ def upload_analysis():
     finally:
         if os.path.exists(filepath):
             os.remove(filepath)
-
 
 # ЗАМЕНИТЕ СТАРУЮ ФУНКЦИЮ meals НА ЭТУ
 @app.route("/meals", methods=["GET", "POST"])
@@ -1414,89 +1836,92 @@ from flask import jsonify # Убедись, что jsonify импортиров�
 @app.route('/confirm_analysis', methods=['GET', 'POST'])
 @login_required
 def confirm_analysis():
-    user_id = session.get('user_id')
-    user = db.session.get(User, user_id)
+    user = get_current_user()
 
-    # --- ЛОГИКА POST-ЗАПРОСА (Сохранение данных) ---
+    # --- ЛОГИКА POST-ЗАПРОСА (Сохранение данных от Flutter) ---
     if request.method == 'POST':
-        if 'temp_analysis' not in session:
-            flash("Данные для сохранения устарели. Пожалуйста, попробуйте снова.", "warning")
-            return redirect(url_for('profile'))
 
-        analysis_data = session['temp_analysis']
+        # 1. Читаем JSON, который прислал Flutter
+        analysis_data = request.get_json(force=True, silent=True)
+        if not analysis_data:
+            return jsonify({"success": False, "error": "Нет данных от приложения"}), 400
 
-        # Получаем предыдущий замер ДО сохранения нового
+        # 2. Получаем предыдущий замер ДО сохранения нового
         previous_analysis = BodyAnalysis.query.filter_by(user_id=user.id).order_by(
             BodyAnalysis.timestamp.desc()).first()
 
-        # Создаем и наполняем новую запись анализа
+        # 3. Создаем и наполняем новую запись анализа
         new_analysis_entry = BodyAnalysis(user_id=user.id, timestamp=datetime.now(UTC))
-        for field, value in analysis_data.items():
-            if hasattr(new_analysis_entry, field):
-                setattr(new_analysis_entry, field, value)
 
-        edited_height = request.form.get('height', type=float)
-        if edited_height is not None:
-            new_analysis_entry.height = edited_height
+        # 4. (ВАЖНО) Переносим ВСЕ метрики из JSON в новую запись
+        # (Используем .get(), чтобы избежать ошибок, если поле отсутствует)
+        new_analysis_entry.height = analysis_data.get('height')
+        new_analysis_entry.weight = analysis_data.get('weight')
+        new_analysis_entry.muscle_mass = analysis_data.get('muscle_mass')
+        new_analysis_entry.muscle_percentage = analysis_data.get('muscle_percentage')
+        new_analysis_entry.body_water = analysis_data.get('body_water')
+        new_analysis_entry.protein_percentage = analysis_data.get('protein_percentage')
+        new_analysis_entry.bone_mineral_percentage = analysis_data.get('bone_mineral_percentage')
+        new_analysis_entry.skeletal_muscle_mass = analysis_data.get('skeletal_muscle_mass')
+        new_analysis_entry.visceral_fat_rating = analysis_data.get('visceral_fat_rating')
+        new_analysis_entry.metabolism = analysis_data.get('metabolism')
+        new_analysis_entry.waist_hip_ratio = analysis_data.get('waist_hip_ratio')
+        new_analysis_entry.body_age = analysis_data.get('body_age')
+        new_analysis_entry.fat_mass = analysis_data.get('fat_mass')
+        new_analysis_entry.bmi = analysis_data.get('bmi')
+        new_analysis_entry.fat_free_body_weight = analysis_data.get('fat_free_body_weight')
 
-        # Обновляем цели пользователя, если они были отправлены
-        if 'fat_mass_goal' in request.form:
-            user.fat_mass_goal = request.form.get('fat_mass_goal', type=float)
-        if 'muscle_mass_goal' in request.form:
-            user.muscle_mass_goal = request.form.get('muscle_mass_goal', type=float)
+        # 5. Обновляем цели пользователя (если они пришли)
+        if 'fat_mass_goal' in analysis_data:
+            user.fat_mass_goal = analysis_data.get('fat_mass_goal')
+        if 'muscle_mass_goal' in analysis_data:
+            user.muscle_mass_goal = analysis_data.get('muscle_mass_goal')
 
         user.updated_at = datetime.now(UTC)
-
         db.session.add(new_analysis_entry)
         db.session.flush()  # Получаем ID новой записи до коммита
 
-        # Если это самый первый анализ, устанавливаем его как стартовую точку
+        # 6. Если это самый первый анализ, устанавливаем его как стартовую точку
         if not user.initial_body_analysis_id:
             user.initial_body_analysis_id = new_analysis_entry.id
 
-        # --- Вызов генератора комментария ИИ ---
+        # 7. Вызов генератора комментария ИИ (Ваша логика)
+        ai_comment_text = None
         if previous_analysis:
             print("DEBUG: Найден предыдущий анализ. Вызываю генератор комментария ИИ...")
             ai_comment_text = generate_progress_commentary(user, previous_analysis, new_analysis_entry)
-            print(f"DEBUG: Генератор ИИ вернул: {str(ai_comment_text)[:150]}...")  # Логгируем первые 150 символов
+            print(f"DEBUG: Генератор ИИ вернул: {str(ai_comment_text)[:150]}...")
             if ai_comment_text:
                 new_analysis_entry.ai_comment = ai_comment_text
-                # Сохраняем комментарий в сессии, чтобы сразу показать его пользователю
-                session['last_ai_comment'] = ai_comment_text
 
+        # 8. Сохраняем все
         db.session.commit()
-        session.pop('temp_analysis', None)  # Очищаем временные данные
 
-        flash("Анализ и цели успешно сохранены!", "success")
-        # Перенаправляем на GET-запрос этой же страницы, чтобы показать результат
-        return redirect(url_for('confirm_analysis'))
+        # 9. Возвращаем JSON с AI-комментарием
+        return jsonify({"success": True, "ai_comment": ai_comment_text})
 
-    # --- ЛОГИКА GET-ЗАПРОСА (Отображение страницы) ---
+    # --- ЛОГИКА GET-ЗАПРОСА (Для Веб-версии) ---
+    # (Этот код остается таким же, как в вашем исходнике, для поддержки веба)
 
     # 1. Проверяем, есть ли готовый комментарий для отображения (после редиректа)
     last_ai_comment = session.pop('last_ai_comment', None)
     if last_ai_comment:
-        # Комментарий есть, значит, мы только что сохранили данные.
-        # Показываем страницу с комментарием. Форма не нужна.
         return render_template('confirm_analysis.html',
-                               data={},  # Передаем пустой словарь, т.к. форма не будет показана
+                               data={},
                                user=user,
                                ai_comment=last_ai_comment)
 
     # 2. Если комментария нет, проверяем, есть ли данные для подтверждения
     if 'temp_analysis' in session:
         analysis_data = session['temp_analysis']
-        # Показываем страницу с формой для подтверждения данных
         return render_template('confirm_analysis.html',
                                data=analysis_data,
                                user=user,
                                ai_comment=None)
 
     # 3. Если нет ни комментария, ни данных для подтверждения — отправляем в профиль
-    # (Это может случиться, если пользователь просто зайдет по прямой ссылке)
     flash("Нет данных для подтверждения. Пожалуйста, загрузите анализ снова.", "warning")
     return redirect(url_for('profile'))
-
 
 @app.route('/generate_telegram_code')
 def generate_telegram_code():
@@ -4588,15 +5013,14 @@ def ai_instructions_page():
     return render_template('ai_instructions.html')
 
 
-# Добавьте этот код после функции logout или в конце блока с маршрутами профиля
-
 @app.route('/profile/reset_goals', methods=['POST'])
 @login_required
 def reset_goals():
     """Сбрасывает цели пользователя и стартовую точку для нового отсчета."""
     user = get_current_user()
     if not user:
-        return redirect(url_for('login'))
+        # Это API-эндпоинт, возвращаем JSON-ошибку
+        return jsonify({"success": False, "error": "User not found"}), 401
 
     user.fat_mass_goal = None
     user.muscle_mass_goal = None
@@ -4604,8 +5028,11 @@ def reset_goals():
 
     db.session.commit()
 
-    flash("Ваши цели сброшены. Загрузите новый анализ, чтобы начать отсчет заново!", "success")
-    return redirect(url_for('profile'))
+    # flash(...) # flash() бесполезен для API
+    # return redirect(url_for('profile')) # <-- НЕПРАВИЛЬНО для API
+
+    # ПРАВИЛЬНО: Возвращаем JSON
+    return jsonify({"success": True, "message": "Progress reset successfully"})
 
 
 

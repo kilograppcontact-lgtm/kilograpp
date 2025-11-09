@@ -27,8 +27,7 @@ BODY_TEMPERATURE = float(os.getenv("KILOGRAI_BODY_TEMPERATURE", "0.35"))
 BODY_MAX_TOKENS = int(os.getenv("KILOGRAI_BODY_MAX_TOKENS", "500"))
 
 client = OpenAI(api_key=OPENAI_API_KEY)
-assistant_bp = Blueprint('assistant', __name__)
-
+assistant_bp = Blueprint('assistant', __name__, url_prefix='/api')
 # ------------------------------------------------------------------
 # Контекст платформы и системный промпт
 # ------------------------------------------------------------------
@@ -183,17 +182,14 @@ def handle_chat():
     data = request.json or {}
     user_message = (data.get('message') or '').strip()
     if not user_message:
-        return jsonify({"error": "Сообщение не может быть пустым"}), 400
+        return jsonify({"role": "error", "content": "Сообщение не может быть пустым"}), 400
 
-    # История в сессии
     chat_history = session.get('chat_history', [])
-    # Временно добавляем user message (будет в messages_for_api)
     chat_history.append({"role": "user", "content": user_message})
     chat_history = chat_history[-20:]
     session['chat_history'] = chat_history
     session.modified = True
 
-    # Шаг 1: короткая классификация (ожидаем слово "Диета" или "Показатели" если промпт определит)
     messages_for_api = [{"role": "system", "content": SYSTEM_PROMPT}] + chat_history
 
     try:
@@ -203,21 +199,30 @@ def handle_chat():
             temperature=CLASSIFICATION_TEMPERATURE,
             max_tokens=CLASSIFICATION_MAX_TOKENS
         )
-        classifier_text = (classification_resp.choices[0].message.content or "").strip()
+
+        # --- ИСПРАВЛЕНИЕ 1: Безопасное получение ответа ---
+        classifier_text = ""
+        if classification_resp.choices and classification_resp.choices[0].message:
+            classifier_text = (classification_resp.choices[0].message.content or "").strip()
+        else:
+            logger.warning("OpenAI classification returned no choices.")
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ 1 ---
+
         logger.debug("Classifier response: %r", classifier_text)
+
     except Exception as e:
         logger.exception("OpenAI classification call failed")
-        return jsonify({"error": "Ошибка при обращении к ассистенту."}), 500
+        return jsonify({"role": "error", "content": "Ошибка при обращении к ассистенту."}), 500
 
     # --- Если модель вернула маркер "Диета" ---
     if classifier_text == "Диета":
         user_id = session.get('user_id')
         if not user_id:
-            return jsonify({"error": "Пользователь не авторизован (нет user_id в сессии)."}), 200
+            return jsonify({"role": "ai", "content": "Пользователь не авторизован (нет user_id в сессии)."}), 200
 
         if Diet is None or User is None:
             logger.error("Diet/User model not available - check imports")
-            return jsonify({"reply": "Ошибка сервера: модель Diet/User недоступна."}), 500
+            return jsonify({"role": "ai", "content": "Ошибка сервера: модель Diet/User недоступна."}), 200
 
         try:
             user = User.query.get(user_id)
@@ -226,7 +231,7 @@ def handle_chat():
             logger.exception("DB error when fetching user")
 
         if not user:
-            return jsonify({"reply": "Пользователь не найден в базе."}), 200
+            return jsonify({"role": "ai", "content": "Пользователь не найден в базе."}), 200
 
         user_name = getattr(user, "name", None) or "Пользователь"
 
@@ -237,7 +242,8 @@ def handle_chat():
             logger.exception("DB error when fetching diet")
 
         if not current_diet:
-            return jsonify({"reply": f"{user_name}, я не нашёл вашу текущую диету в базе. Пожалуйста, сохраните диету в профиле."}), 200
+            return jsonify({"role": "ai",
+                            "content": f"{user_name}, я не нашёл вашу текущую диету в базе. Пожалуйста, сохраните диету в профиле."}), 200
 
         diet_summary = _format_diet_summary(current_diet)
         diet_system = (
@@ -261,24 +267,23 @@ def handle_chat():
 
         diet_reply = _call_openai(messages_for_diet_api, temperature=DIET_TEMPERATURE, max_tokens=DIET_MAX_TOKENS)
         if diet_reply is None:
-            return jsonify({"error": "Ошибка при получении ответа диетического ассистента."}), 500
+            return jsonify({"role": "error", "content": "Ошибка при получении ответа диетического ассистента."}), 500
 
-        # Сохраняем только финальный ответ (маркер не сохраняем)
         chat_history.append({"role": "assistant", "content": diet_reply})
         session['chat_history'] = chat_history
         session.modified = True
 
-        return jsonify({"reply": diet_reply}), 200
+        return jsonify({"role": "ai", "content": diet_reply}), 200
 
     # --- Если модель вернула маркер "Показатели" ---
     if classifier_text == "Показатели":
         user_id = session.get('user_id')
         if not user_id:
-            return jsonify({"error": "Пользователь не авторизован (нет user_id в сессии)."}), 200
+            return jsonify({"role": "ai", "content": "Пользователь не авторизован (нет user_id в сессии)."}), 200
 
         if BodyAnalysis is None or User is None:
             logger.error("BodyAnalysis/User model not available - check imports")
-            return jsonify({"reply": "Ошибка сервера: модель BodyAnalysis/User недоступна."}), 500
+            return jsonify({"role": "ai", "content": "Ошибка сервера: модель BodyAnalysis/User недоступна."}), 200
 
         try:
             user = User.query.get(user_id)
@@ -287,7 +292,7 @@ def handle_chat():
             logger.exception("DB error when fetching user")
 
         if not user:
-            return jsonify({"reply": "Пользователь не найден в базе."}), 200
+            return jsonify({"role": "ai", "content": "Пользователь не найден в базе."}), 200
 
         user_name = getattr(user, "name", None) or "Пользователь"
 
@@ -298,7 +303,7 @@ def handle_chat():
             logger.exception("DB error when fetching body analysis")
 
         if not current_ba:
-            return jsonify({"reply": f"{user_name}, у вас нет сохранённых данных анализа тела."}), 200
+            return jsonify({"role": "ai", "content": f"{user_name}, у вас нет сохранённых данных анализа тела."}), 200
 
         body_summary = _format_body_summary(current_ba)
         body_system = (
@@ -321,14 +326,13 @@ def handle_chat():
 
         body_reply = _call_openai(messages_for_body_api, temperature=BODY_TEMPERATURE, max_tokens=BODY_MAX_TOKENS)
         if body_reply is None:
-            return jsonify({"error": "Ошибка при получении ответа по показателям."}), 500
+            return jsonify({"role": "error", "content": "Ошибка при получении ответа по показателям."}), 500
 
-        # Сохраняем в историю финальный ответ
         chat_history.append({"role": "assistant", "content": body_reply})
         session['chat_history'] = chat_history
         session.modified = True
 
-        return jsonify({"reply": body_reply}), 200
+        return jsonify({"role": "ai", "content": body_reply}), 200
 
     # --- Иначе: обычный полноценный поток ассистента ---
     try:
@@ -338,21 +342,34 @@ def handle_chat():
             temperature=DEFAULT_TEMPERATURE,
             max_tokens=DEFAULT_MAX_TOKENS
         )
-        bot_response = (completion.choices[0].message.content or "").strip()
+
+        # --- ИСПРАВЛЕНИЕ 2: Безопасное получение ответа ---
+        bot_response = ""
+        if completion.choices and completion.choices[0].message:
+            bot_response = (completion.choices[0].message.content or "").strip()
+        else:
+            logger.warning("OpenAI general chat returned no choices.")
+
+        if not bot_response:
+            # Если ответа все равно нет, возвращаем вежливую ошибку
+            bot_response = "Извините, я не смог обработать ваш запрос. Попробуйте переформулировать."
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ 2 ---
+
         chat_history.append({"role": "assistant", "content": bot_response})
         session['chat_history'] = chat_history
         session.modified = True
-        return jsonify({"reply": bot_response}), 200
+
+        return jsonify({"role": "ai", "content": bot_response}), 200
+
     except Exception as e:
         logger.exception("OpenAI general error")
-        return jsonify({"error": "Не удалось связаться с ассистентом. Попробуйте позже."}), 500
-
+        return jsonify({"role": "error", "content": "Не удалось связаться с ассистентом. Попробуйте позже."}), 500
 
 @assistant_bp.route('/assistant/history', methods=['GET'])
 def get_history():
     chat_history = session.get('chat_history', [])
-    return jsonify({"history": chat_history}), 200
-
+    # ИСПРАВЛЕНИЕ: Меняем ключ 'history' на 'messages'
+    return jsonify({"messages": chat_history}), 200
 
 @assistant_bp.route('/assistant/clear', methods=['POST'])
 def clear_history():
