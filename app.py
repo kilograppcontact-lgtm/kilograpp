@@ -1281,9 +1281,39 @@ def app_analyze_meal_photo():
 
 @app.post('/api/login')
 def api_login():
-    # ... (код api_login без изменений) ...
-    # (вставьте сюда тело функции api_login из блока "Было")
-    pass
+    # 1. Получаем данные из запроса
+    data = request.get_json(force=True, silent=True) or {}
+    email_input = (data.get('email') or '').strip()
+    password = (data.get('password') or '').strip()
+
+    if not email_input or not password:
+        return jsonify({"ok": False, "error": "MISSING_CREDENTIALS"}), 400
+
+    # 2. Ищем пользователя (без учета регистра)
+    user = User.query.filter(func.lower(User.email) == email_input.casefold()).first()
+
+    # 3. Проверяем пароль
+    if user and bcrypt.check_password_hash(user.password, password):
+        # 4. Создаем сессию
+        session['user_id'] = user.id
+
+        # 5. Возвращаем успешный ответ с данными пользователя
+        # (Структура совпадает с api_me и api_google_login)
+        return jsonify({
+            "ok": True,
+            "user": {
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "has_subscription": bool(getattr(user, 'has_subscription', False)),
+                "is_trainer": bool(getattr(user, 'is_trainer', False)),
+                "onboarding_complete": bool(getattr(user, 'onboarding_complete', False)),
+                "onboarding_v2_complete": bool(getattr(user, 'onboarding_v2_complete', False))
+            }
+        }), 200
+
+    # 6. Если неверный логин или пароль
+    return jsonify({"ok": False, "error": "INVALID_CREDENTIALS"}), 401
 
 
 @app.post('/api/login/google')
