@@ -1549,7 +1549,7 @@ def api_register_v2():
 def analyze_scales_photo():
     """
     НОВЫЙ ФЛОУ (ЭТАП 2): Анализирует скриншот "умных весов".
-    Не сохраняет BodyAnalysis, просто возвращает извлеченные метрики.
+    Возвращает найденные метрики. Если чего-то нет — возвращает null в поле.
     """
     file = request.files.get('file')
     user = get_current_user()
@@ -1561,8 +1561,7 @@ def analyze_scales_photo():
         file_bytes = file.read()
         base64_image = base64.b64encode(file_bytes).decode("utf-8")
 
-        # 2. Вызываем GPT-4o для извлечения метрик (аналогично /upload_analysis)
-        # (Используем ваш промпт из /upload_analysis)
+        # 2. Вызываем GPT-4o
         response_metrics = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -1591,34 +1590,28 @@ def analyze_scales_photo():
         content = response_metrics.choices[0].message.content.strip()
         result_metrics = json.loads(content)
 
-        # 3. Валидация (проверяем, что хотя бы вес и жир найдены)
-        if not result_metrics.get('weight') or not result_metrics.get('fat_mass'):
-            return jsonify({
-                "success": False,
-                "error": "Не удалось распознать ключевые показатели (Вес, % Жира). Попробуйте другое фото."
-            }), 400
-
-        # 4. Дополняем данными из профиля, если их нет на фото
+        # 3. Попытка дополнить рост из профиля пользователя, если AI не нашел
         if not result_metrics.get('height'):
-            # (Во флоу регистрации "sex" и "date_of_birth" уже должны быть в user)
             if user.height:
                 result_metrics['height'] = user.height
-            else:
-                # Если в профиле нет (не должно быть, но на всякий)
-                return jsonify({
-                    "success": False,
-                    "error": "Не удалось распознать Рост. Введите данные вручную."
-                }), 400
+            # Иначе оставляем null, фронтенд спросит пользователя
 
-        # Добавляем пол, т.к. он нужен для `_compute_pct`
+        # 4. Добавляем пол (нужен для фронтенда)
         result_metrics['sex'] = user.sex
 
-        # Возвращаем JSON с метриками
+        # === ВАЖНОЕ ИЗМЕНЕНИЕ: МЫ НЕ ВОЗВРАЩАЕМ ОШИБКУ, ЕСЛИ НЕТ РОСТА ===
+        # Мы проверяем только совсем пустой результат (если даже веса нет — тогда ошибка)
+        if not result_metrics.get('weight') and not result_metrics.get('fat_mass'):
+             return jsonify({
+                "success": False,
+                "error": "Не удалось распознать данные на фото. Попробуйте сделать более четкий снимок."
+            }), 400
+
+        # Возвращаем JSON с метриками (какие-то поля могут быть null)
         return jsonify({"success": True, "metrics": result_metrics})
 
     except Exception as e:
         return jsonify({"success": False, "error": f"Ошибка AI-анализа: {e}"}), 500
-
 
 def _calculate_target_metrics(user: User, metrics_current: dict) -> dict:
     """
