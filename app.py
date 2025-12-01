@@ -50,15 +50,17 @@ from meal_reminders import (
     start_meal_scheduler,
 )
 from shopping_bp import shopping_bp
-from models import BodyVisualization, SubscriptionApplication
+from models import BodyVisualization, SubscriptionApplication, EmailVerification
 from flask import send_file
 from io import BytesIO
 from progress_analyzer import generate_progress_commentary
 from flask import make_response
 import firebase_admin
 from firebase_admin import credentials, messaging
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
-# --- ИЗМЕНЕНИЕ: Добавляем проверку, чтобы не падать в debug-режиме ---
 if not firebase_admin._apps:
     try:
         cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY_PATH", "serviceAccountKey.json")
@@ -561,6 +563,11 @@ def _auto_migrate_onboarding_schema():
     _ensure_column("user", "fcm_device_token", "TEXT")  # Добавляем колонку для FCM
     # ---
 
+    # === Поля для верификации почты ===
+    _ensure_column("user", "verification_code", "TEXT")
+    _ensure_column("user", "verification_code_expires_at", "TIMESTAMP")
+    _ensure_column("user", "is_verified", "BOOLEAN DEFAULT FALSE")
+
     # === ВАЖНО: meal_logs нужные поля ===
     _ensure_column("meal_logs", "image_path", "TEXT")
 
@@ -595,10 +602,35 @@ with app.app_context():
 
 
 
+def send_email_code(to_email, code):
+    sender_email = os.getenv("MAIL_USERNAME")
+    sender_password = os.getenv("MAIL_PASSWORD")
+    smtp_server = os.getenv("MAIL_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("MAIL_PORT", 587))
+
+    msg = MIMEMultipart()
+    msg['From'] = sender_email
+    msg['To'] = to_email
+    msg['Subject'] = "Код подтверждения Sola"
+
+    body = f"Ваш код: {code}\n\nДействителен 10 минут."
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        text = msg.as_string()
+        server.sendmail(sender_email, to_email, text)
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Email error: {e}")
+        return False
+
 def calculate_age(born):
     today = date.today()
     return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
-
 
 # ------------------ TRAININGS API ------------------
 
@@ -5776,5 +5808,158 @@ def app_log_activity():
         db.session.rollback()
         return jsonify({'ok': False, 'error': str(e)}), 500
 
+@app.route('/api/auth/request_code', methods=['POST'])
+def api_auth_request_code():
+    data = request.get_json(force=True, silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+
+    if not email:
+        return jsonify({"ok": False, "error": "EMAIL_REQUIRED"}), 400
+
+    code = ''.join(random.choices(string.digits, k=6))
+    expires = datetime.now() + timedelta(minutes=10)
+
+    user = User.query.filter(func.lower(User.email) == email).first()
+    if user:
+        # Для существующего пользователя (сброс пароля)
+        user.verification_code = code
+        user.verification_code_expires_at = expires
+    else:
+        # Для нового пользователя (регистрация)
+        ev = db.session.get(EmailVerification, email)
+        if not ev:
+            ev = EmailVerification(email=email)
+            db.session.add(ev)
+        ev.code = code
+        ev.expires_at = expires
+
+    db.session.commit()
+
+    if send_email_code(email, code):
+        return jsonify({"ok": True, "message": "Code sent"})
+    else:
+        return jsonify({"ok": False, "error": "SEND_EMAIL_FAILED"}), 500
+
+@app.route('/api/auth/reset_password', methods=['POST'])
+def api_auth_reset_password():
+    data = request.get_json(force=True, silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    code = (data.get('code') or '').strip()
+    new_password = (data.get('new_password') or '').strip()
+
+    if not email or not code or not new_password:
+        return jsonify({"ok": False, "error": "MISSING_DATA"}), 400
+
+    user = User.query.filter(func.lower(User.email) == email).first()
+    if not user:
+        return jsonify({"ok": False, "error": "USER_NOT_FOUND"}), 404
+
+    if not user.verification_code or user.verification_code != code:
+        return jsonify({"ok": False, "error": "INVALID_CODE"}), 400
+
+    if user.verification_code_expires_at < datetime.now():
+        return jsonify({"ok": False, "error": "CODE_EXPIRED"}), 400
+
+    # Меняем пароль
+    user.password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+
+    # Очищаем код и подтверждаем почту
+    user.verification_code = None
+    user.verification_code_expires_at = None
+    user.is_verified = True
+
+    db.session.commit()
+
+    return jsonify({"ok": True, "message": "Password changed"})
+
+
+@app.route('/api/auth/verify_email', methods=['POST'])
+def api_auth_verify_email():
+    data = request.get_json(force=True, silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    code = (data.get('code') or '').strip()
+
+    if not email or not code:
+        return jsonify({"ok": False, "error": "MISSING_DATA"}), 400
+
+    user = User.query.filter(func.lower(User.email) == email).first()
+    if user:
+        # Проверка для существующего (редкий кейс для этого эндпоинта, но оставим)
+        if user.verification_code == code and user.verification_code_expires_at > datetime.now():
+            user.is_verified = True
+            user.verification_code = None
+            db.session.commit()
+            return jsonify({"ok": True, "message": "Email verified"})
+        return jsonify({"ok": False, "error": "INVALID_CODE"}), 400
+
+    # Проверка для нового пользователя
+    ev = db.session.get(EmailVerification, email)
+    if not ev:
+        return jsonify({"ok": False, "error": "CODE_NOT_REQUESTED"}), 404
+
+    if ev.code == code and ev.expires_at > datetime.now():
+        # Код верный. Удаляем запись, чтобы нельзя было использовать повторно,
+        # или оставляем флаг. Для простоты - удаляем, клиент переходит к регистрации.
+        db.session.delete(ev)
+        db.session.commit()
+        return jsonify({"ok": True, "message": "Email verified"})
+
+    return jsonify({"ok": False, "error": "INVALID_CODE"}), 400
+
+
+@app.route("/api/app/fcm_token", methods=["POST", "DELETE"])
+@login_required
+def api_app_fcm_token():
+    """
+    POST  -> сохраняет/обновляет FCM токен устройства для текущего пользователя
+    DELETE -> удаляет токен (например, при logout на мобилке)
+    """
+    user = get_current_user()
+    if not user:
+        return jsonify({"ok": False, "error": "UNAUTHORIZED"}), 401
+
+    # Удаление токена
+    if request.method == "DELETE":
+        try:
+            user.fcm_device_token = None
+            user.updated_at = datetime.now(UTC)
+            db.session.commit()
+            return jsonify({"ok": True}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"ok": False, "error": f"SERVER_ERROR: {e}"}), 500
+
+    # POST: сохранение токена
+    data = request.get_json(force=True, silent=True) or {}
+    token = (data.get("token") or data.get("fcm_token") or "").strip()
+
+    if not token:
+        return jsonify({"ok": False, "error": "TOKEN_REQUIRED"}), 400
+
+    # минимальная sanity-проверка (FCM токены обычно длинные)
+    if len(token) < 20 or len(token) > 4096:
+        return jsonify({"ok": False, "error": "TOKEN_INVALID"}), 400
+
+    try:
+        # Если токен уже висит на другом пользователе — отвязываем
+        other = User.query.filter(
+            User.fcm_device_token == token,
+            User.id != user.id
+        ).first()
+        if other:
+            other.fcm_device_token = None
+            other.updated_at = datetime.now(UTC)
+
+        # Сохраняем текущему
+        user.fcm_device_token = token
+        user.updated_at = datetime.now(UTC)
+
+        db.session.commit()
+        return jsonify({"ok": True}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": f"SERVER_ERROR: {e}"}), 500
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+            app.run(host='0.0.0.0', port=5000, debug=True)

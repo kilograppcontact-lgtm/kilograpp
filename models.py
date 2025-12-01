@@ -42,9 +42,13 @@ class User(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
     onboarding_complete = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Верификация почты и сброс пароля
+    verification_code = db.Column(db.String(6), nullable=True)
+    verification_code_expires_at = db.Column(db.DateTime, nullable=True)
+    is_verified = db.Column(db.Boolean, default=False, server_default=expression.false())
+
     # Кэш стрика (пересчитывается на основе реальных записей MealLog)
     current_streak = db.Column(db.Integer, default=0, server_default='0', nullable=False)
-
     # отношения
     subscription = db.relationship(
         'Subscription',
@@ -634,8 +638,13 @@ class UserAchievement(db.Model):
 
     __table_args__ = (db.UniqueConstraint('user_id', 'slug', name='uq_user_achievement'),)
 
+class EmailVerification(db.Model):
+    __tablename__ = "email_verification"
+    email = db.Column(db.String(120), primary_key=True)
+    code = db.Column(db.String(10), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
 
-# ------------------ AUTO-DEFAULTS HOOK ------------------
+    # ------------------ AUTO-DEFAULTS HOOK ------------------
 
 @event.listens_for(User, "after_insert")
 def create_default_settings(mapper, connection, target):
