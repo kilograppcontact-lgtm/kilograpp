@@ -1,4 +1,3 @@
-# shopping_bp.py
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
@@ -8,7 +7,6 @@ from flask import Blueprint, request, jsonify, session, render_template
 from sqlalchemy import text, inspect as sa_inspect
 from sqlalchemy.exc import ProgrammingError, OperationalError, SQLAlchemyError
 from openai import OpenAI
-from urllib.parse import quote
 
 from extensions import db
 from models import User, Diet
@@ -380,51 +378,3 @@ def shopping_build():
         return jsonify({"ok": True, "list_id": list_id, "items_by_meal": grouped})
     except SQLAlchemyError as e:
         return jsonify({"ok": False, "message": f"db error: {e}"}), 500
-
-
-@shopping_bp.post("/cart/<int:diet_id>/send-telegram")
-def send_cart_to_telegram(diet_id):
-    u = _current_user()
-    if not u:
-        return jsonify({"ok": False, "message": "unauthorized"}), 401
-
-    diet = Diet.query.filter_by(id=diet_id, user_id=u.id).first()
-    if not diet:
-        return jsonify({"ok": False, "message": "Диета не найдена"}), 404
-
-    try:
-        list_id = _get_or_create_list_id(u.id, diet.id)
-        items = _fetch_items(list_id)
-    except SQLAlchemyError as e:
-        return jsonify({"ok": False, "message": f"db error: {e}"}), 500
-
-    if not items:
-        return jsonify({"ok": False, "message": "Корзина пуста. Сначала сгенерируйте ее."}), 400
-
-    items_by_meal = {}
-    meal_order = ["breakfast", "lunch", "dinner", "snack"]
-    for it in items:
-        mt = it.get("meal_type") or "other"
-        if mt not in items_by_meal:
-            items_by_meal[mt] = []
-        items_by_meal[mt].append(it)
-
-    msg_lines = [f"🛒 *Список покупок для диеты от {diet.date.strftime('%d.%m.%Y')}*\n"]
-    meal_titles = {"breakfast": "🍳 Завтрак", "lunch": "🍲 Обед", "dinner": "🍝 Ужин", "snack": "🍎 Перекус",
-                   "other": "Прочее"}
-
-    for meal_key in meal_order:
-        if meal_key in items_by_meal:
-            msg_lines.append(f"*{meal_titles.get(meal_key, meal_key.capitalize())}*")
-            for it in items_by_meal[meal_key]:
-                name = it.get("product_name") or "Товар"
-                kaspi_url = it.get("kaspi_url")
-                kaspi_query = it.get("kaspi_query", name)
-                link = kaspi_url if kaspi_url else f"https://kaspi.kz/shop/search/?text={quote(kaspi_query)}"
-                msg_lines.append(f"• [{name}]({link})")
-            msg_lines.append("")
-
-    print("--- TELEGRAM MESSAGE ---")
-    print('\n'.join(msg_lines))
-    print("------------------------")
-    return jsonify({"ok": True, "message": "Список покупок отправлен в Telegram!"})

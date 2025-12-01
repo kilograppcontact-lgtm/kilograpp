@@ -1017,6 +1017,7 @@ def app_profile_data():
     if diet_obj:
         try:
             diet_data = {
+                "id": diet_obj.id,
                 "total_kcal": diet_obj.total_kcal,
                 "protein": diet_obj.protein,
                 "fat": diet_obj.fat,
@@ -5990,5 +5991,13 @@ def api_auth_verify_reset_code():
     # для финального сброса пароля в /api/auth/reset_password
     return jsonify({"ok": True, "message": "Code is valid"})
 
+
 if __name__ == '__main__':
-            app.run(host='0.0.0.0', port=5000, debug=True)
+    # ЭТОТ БЛОК ВЫВЕДЕТ ВСЕ РАБОТАЮЩИЕ ССЫЛКИ В КОНСОЛЬ ПРИ ЗАПУСКЕ
+    print("=== Registered Routes ===")
+    for rule in app.url_map.iter_rules():
+        if 'check_user_email' in str(rule):
+            print(f"FOUND: {rule} -> {rule.endpoint}")
+    print("=========================")
+
+    app.run(host='0.0.0.0', port=5000, debug=True)
