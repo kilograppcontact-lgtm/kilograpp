@@ -50,6 +50,7 @@ from meal_reminders import (
     start_meal_scheduler,
 )
 from shopping_bp import shopping_bp
+from user_bp import user_bp
 from models import BodyVisualization, SubscriptionApplication, EmailVerification
 from flask import send_file
 from io import BytesIO
@@ -330,19 +331,17 @@ def _notification_worker():
                             f"{(t.trainer.name if t.trainer and getattr(t.trainer, 'name', None) else 'тренером')} в {when}."
                         )
 
-                        # --- 3. Пытаемся отправить PUSH ---
-                        sent_mobile = False
-                        fcm_token = getattr(u, "fcm_device_token", None)
+                        # --- 3. Отправляем уведомление (БД + PUSH) ---
+                        # Импорт внутри функции для избежания циклических ссылок
+                        from notification_service import send_user_notification
 
-                        if fcm_token:
-                            sent_mobile = _send_mobile_push(
-                                fcm_token=fcm_token,
-                                title=title,
-                                body=body,
-                                data={"training_id": str(t.id), "type": "training_reminder"}
-                                # Доп. данные для открытия нужного экрана
-                            )
-
+                        sent_mobile = send_user_notification(
+                            user_id=u.id,
+                            title=title,
+                            body=body,
+                            type='reminder',
+                            data={"training_id": str(t.id), "route": "/calendar"}
+                        )
                         # Fallback на Telegram ПОЛНОСТЬЮ УБРАН
 
                         # --- 4. Помечаем как "уведомлено" ---
@@ -374,17 +373,16 @@ def _notification_worker():
                         title = "🏁 Тренировка начинается!"
                         body = f"«{t.title or 'Онлайн-тренировка'}» началась. Тренер: {(t.trainer.name if t.trainer and getattr(t.trainer, 'name', None) else 'тренер')}."
 
-                        # --- 3. Пытаемся отправить PUSH ---
-                        sent_mobile = False
-                        fcm_token = getattr(u, "fcm_device_token", None)
+                        # --- 3. Отправляем уведомление (БД + PUSH) ---
+                        from notification_service import send_user_notification
 
-                        if fcm_token:
-                            sent_mobile = _send_mobile_push(
-                                fcm_token=fcm_token,
-                                title=title,
-                                body=body,
-                                data={"training_id": str(t.id), "type": "training_start", "link": t.meeting_link}
-                            )
+                        sent_mobile = send_user_notification(
+                            user_id=u.id,
+                            title=title,
+                            body=body,
+                            type='info',
+                            data={"training_id": str(t.id), "route": "/calendar"}
+                        )
 
                         # Fallback на Telegram ПОЛНОСТЬЮ УБРАН
 
@@ -413,12 +411,15 @@ def _notification_worker():
                             title = "⏳ Подписка истекает"
                             body = "Осталось 5 дней. Не теряйте доступ к тренировкам — продлите сейчас."
 
-                            # --- ИЗМЕНЕНИЕ: Отправляем PUSH ---
-                            if _send_mobile_push(
-                                    fcm_token=fcm_token,
+                            # --- ИЗМЕНЕНИЕ: Отправляем уведомление (БД + PUSH) ---
+                            from notification_service import send_user_notification
+
+                            if send_user_notification(
+                                    user_id=u.id,
                                     title=title,
                                     body=body,
-                                    data={"type": "open_purchase", "url": link}
+                                    type='warning',
+                                    data={"route": "/purchase"}
                             ):
                                 u.renewal_telegram_sent = True
                         except Exception:
@@ -449,15 +450,18 @@ def _notification_worker():
                                 if u.last_measurement_reminder_sent_at is None or \
                                         (now - u.last_measurement_reminder_sent_at).days >= 14:
 
-                                    # --- ИЗМЕНЕНИЕ: Отправляем PUSH ---
+                                    # --- ИЗМЕНЕНИЕ: Отправляем уведомление (БД + PUSH) ---
+                                    from notification_service import send_user_notification
+
                                     title = "⏰ Пора сделать замер!"
                                     body = f"Привет, {u.name}! Прошло 2 недели с последнего замера. Пора обновить данные."
 
-                                    if _send_mobile_push(
-                                            fcm_token=u.fcm_device_token,
+                                    if send_user_notification(
+                                            user_id=u.id,
                                             title=title,
                                             body=body,
-                                            data={"type": "open_analysis_upload"}
+                                            type='info',
+                                            data={"route": "/profile"}  # Открываем профиль для замера
                                     ):
                                         u.last_measurement_reminder_sent_at = now
                                         db.session.commit()
@@ -2651,21 +2655,16 @@ def generate_diet():
 
         flash("Диета успешно сгенерирована!", "success")
 
-        # --- ИЗМЕНЕНИЕ: Отправка PUSH-уведомления ---
-        fcm_token = getattr(user, "fcm_device_token", None)
-        if fcm_token:
-            title = "🍽️ Ваша диета готова!"
-            body = f"Рацион на сегодня сгенерирован. Калории: {diet_data.get('total_kcal', 'N/A')} ккал."
+        # --- ИЗМЕНЕНИЕ: Отправка PUSH-уведомления (через сервис) ---
+        from notification_service import send_user_notification
 
-            try:
-                _send_mobile_push(
-                    fcm_token=fcm_token,
-                    title=title,
-                    body=body,
-                    data={"type": "open_diet"}  # Данные для мобильного приложения
-                )
-            except Exception as e:
-                print(f"[FCM Push Error] {e}")
+        send_user_notification(
+            user_id=user.id,
+            title="🍽️ Ваша диета готова!",
+            body=f"Рацион на сегодня сгенерирован. Калории: {diet_data.get('total_kcal', 'N/A')} ккал.",
+            type='success',
+            data={"route": "/diet"}
+        )
 
         return jsonify({"redirect": "/diet"})
 
@@ -5614,6 +5613,9 @@ app.register_blueprint(bp)
 app.register_blueprint(shopping_bp, url_prefix="/shopping")
 app.register_blueprint(assistant_bp) # <--- И ЭТУ СТРОКУ
 app.register_blueprint(streak_bp)    # <--- Добавлено
+
+from user_bp import user_bp # <--- ИМПОРТ НОВОГО BP
+app.register_blueprint(user_bp) # <--- РЕГИСТРАЦИЯ
 
 @app.route('/files/<path:filename>')
 def serve_file(filename):

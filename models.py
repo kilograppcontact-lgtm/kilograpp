@@ -1,8 +1,9 @@
-# models.py
+import json  # <-- Добавлен импорт для работы с JSON в to_dict()
 from datetime import datetime, date, timedelta, time as dt_time
 from sqlalchemy import UniqueConstraint, event
 from sqlalchemy.sql import expression
 from extensions import db
+
 
 # ------------------ USERS / SUBSCRIPTION ------------------
 
@@ -59,6 +60,7 @@ class User(db.Model):
     avatar_file_id = db.Column(db.Integer, db.ForeignKey('uploaded_files.id'), nullable=True)
     # Убрали lazy='joined', теперь данные файла не будут грузиться автоматически при каждом запросе User
     avatar = db.relationship('UploadedFile', foreign_keys=[avatar_file_id])
+
     @property
     def has_subscription(self):
         return self.is_trainer or (self.subscription and self.subscription.is_active)
@@ -149,6 +151,7 @@ class User(db.Model):
         a = self._get_latest_analysis()
         return a.fat_free_body_weight if a else None
 
+
 class SubscriptionApplication(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # ID пользователя, который оставил заявку
@@ -166,6 +169,7 @@ class SubscriptionApplication(db.Model):
     def __repr__(self):
         return f'<SubscriptionApplication {self.id} от User {self.user_id}>'
 
+
 class Subscription(db.Model):
     __tablename__ = "subscription"
 
@@ -174,7 +178,8 @@ class Subscription(db.Model):
     start_date = db.Column(db.Date, default=date.today)
     end_date = db.Column(db.Date, nullable=True)
     source = db.Column(db.String(50))
-    status = db.Column(db.String(20), nullable=False, default='active', server_default='active')  # active, frozen, cancelled
+    status = db.Column(db.String(20), nullable=False, default='active',
+                       server_default='active')  # active, frozen, cancelled
     remaining_days_on_freeze = db.Column(db.Integer, nullable=True)
 
     @property
@@ -306,6 +311,7 @@ class MealLog(db.Model):
     )
     __table_args__ = (UniqueConstraint('user_id', 'date', 'meal_type', name='uq_user_date_meal'),)
 
+
 class AuditLog(db.Model):
     __tablename__ = "audit_logs"
 
@@ -319,6 +325,7 @@ class AuditLog(db.Model):
     ip = db.Column(db.String(64), nullable=True)
     user_agent = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
 
 class PromptTemplate(db.Model):
     __tablename__ = "prompt_templates"
@@ -480,7 +487,6 @@ class BodyAnalysis(db.Model):
     fat_free_body_weight = db.Column(db.Float)
     ai_comment = db.Column(db.Text, nullable=True)
 
-
     user = db.relationship(
         'User',
         foreign_keys=[user_id],  # <--- ДОБАВЬТЕ ЭТУ СТРОКУ
@@ -525,6 +531,7 @@ class MealReminderLog(db.Model):
         db.UniqueConstraint("user_id", "meal_type", "date_sent", name="u_meal_reminder_once_per_day"),
     )
 
+
 # ------------------ DIET AUTOGEN PREFS / STAGING ------------------
 
 class DietPreference(db.Model):
@@ -532,8 +539,8 @@ class DietPreference(db.Model):
 
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), primary_key=True)
     # При первичной генерации фиксируем долговременные настройки
-    sex = db.Column(db.String(16), nullable=True)          # 'male' | 'female' | None
-    goal = db.Column(db.String(32), nullable=True)         # 'fat_loss' | 'muscle_gain' | 'recomp' | ...
+    sex = db.Column(db.String(16), nullable=True)  # 'male' | 'female' | None
+    goal = db.Column(db.String(32), nullable=True)  # 'fat_loss' | 'muscle_gain' | 'recomp' | ...
     include_favorites = db.Column(db.Text, nullable=True)  # запоминаем вкусы
     exclude_ingredients = db.Column(db.Text, nullable=True)
     kcal_target = db.Column(db.Integer, nullable=True)
@@ -565,6 +572,7 @@ class StagedDiet(db.Model):
 
     user = db.relationship("User", backref=db.backref("staged_diets", lazy=True))
 
+
 # === NEW: файлы в БД ===
 class UploadedFile(db.Model):
     __tablename__ = 'uploaded_files'
@@ -575,6 +583,7 @@ class UploadedFile(db.Model):
     data = db.Column(db.LargeBinary, nullable=False)
     size = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 # === Shopping cart (NEW) ===
 class ShoppingCart(db.Model):
@@ -588,6 +597,7 @@ class ShoppingCart(db.Model):
     user = db.relationship("User", backref=db.backref("shopping_carts", lazy=True))
     diet = db.relationship("Diet", backref=db.backref("shopping_cart", uselist=False))
 
+
 class ShoppingCartItem(db.Model):
     __tablename__ = "shopping_cart_item"
 
@@ -596,11 +606,11 @@ class ShoppingCartItem(db.Model):
     meal_type = db.Column(db.String(20), nullable=False)  # breakfast/lunch/dinner/snack
 
     product_name = db.Column(db.String(255), nullable=False)
-    kaspi_query  = db.Column(db.String(255))
-    kaspi_url    = db.Column(db.String(1024))
+    kaspi_query = db.Column(db.String(255))
+    kaspi_url = db.Column(db.String(1024))
 
-    total_grams    = db.Column(db.Float)   # суммарно по позиции (если имеет смысл)
-    pack_grams     = db.Column(db.Float)   # предложенная фасовка
+    total_grams = db.Column(db.Float)  # суммарно по позиции (если имеет смысл)
+    pack_grams = db.Column(db.Float)  # предложенная фасовка
     quantity_packs = db.Column(db.Integer, default=1)
 
     cart = db.relationship("ShoppingCart", backref=db.backref("items", lazy=True))
@@ -615,28 +625,31 @@ class BodyVisualization(db.Model):
 
     # исходные метрики и целевые (для восстановления промптов)
     metrics_current = db.Column(db.JSON, nullable=False)
-    metrics_target  = db.Column(db.JSON, nullable=False)
+    metrics_target = db.Column(db.JSON, nullable=False)
 
     image_current_path = db.Column(db.String(300), nullable=False)
-    image_target_path  = db.Column(db.String(300), nullable=False)
+    image_target_path = db.Column(db.String(300), nullable=False)
 
     provider = db.Column(db.String(50), nullable=False, default="gemini")  # 'gemini'
     provider_job_id = db.Column(db.String(100), nullable=True)
-    status = db.Column(db.String(20), nullable=False, default="done")      # 'done'|'error'
-    error  = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="done")  # 'done'|'error'
+    error = db.Column(db.Text, nullable=True)
 
-    user = db.relationship("User", backref=db.backref("visualizations", lazy=True, order_by="desc(BodyVisualization.created_at)"))
+    user = db.relationship("User", backref=db.backref("visualizations", lazy=True,
+                                                      order_by="desc(BodyVisualization.created_at)"))
+
 
 class UserAchievement(db.Model):
     __tablename__ = 'user_achievements'
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
-    slug = db.Column(db.String(50), nullable=False) # Уникальный код ачивки: 'streak_5', 'fat_loss_5kg'
+    slug = db.Column(db.String(50), nullable=False)  # Уникальный код ачивки: 'streak_5', 'fat_loss_5kg'
     earned_at = db.Column(db.DateTime, default=datetime.utcnow)
-    seen = db.Column(db.Boolean, default=False, nullable=False) # Флаг: видел ли юзер анимацию
+    seen = db.Column(db.Boolean, default=False, nullable=False)  # Флаг: видел ли юзер анимацию
 
     __table_args__ = (db.UniqueConstraint('user_id', 'slug', name='uq_user_achievement'),)
+
 
 class EmailVerification(db.Model):
     __tablename__ = "email_verification"
@@ -644,7 +657,42 @@ class EmailVerification(db.Model):
     code = db.Column(db.String(10), nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
 
+
+# ------------------ NOTIFICATIONS ------------------
+
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    title = db.Column(db.String(255), nullable=False)
+    body = db.Column(db.Text, nullable=True)
+
+    # Тип уведомления: 'info', 'warning', 'success', 'reminder'
+    type = db.Column(db.String(50), default='info')
+
+    # Статус прочтения
+    is_read = db.Column(db.Boolean, default=False)
+
+    # JSON-данные для навигации (например, {"route": "/diet", "args": "..."})
+    data_json = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "body": self.body,
+            "type": self.type,
+            "is_read": self.is_read,
+            "data": json.loads(self.data_json) if self.data_json else {},
+            "created_at": self.created_at.isoformat()
+        }
+
     # ------------------ AUTO-DEFAULTS HOOK ------------------
+
 
 @event.listens_for(User, "after_insert")
 def create_default_settings(mapper, connection, target):
