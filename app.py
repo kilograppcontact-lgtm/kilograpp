@@ -5961,5 +5961,34 @@ def api_app_fcm_token():
         db.session.rollback()
         return jsonify({"ok": False, "error": f"SERVER_ERROR: {e}"}), 500
 
+@app.route('/api/auth/verify_reset_code', methods=['POST'])
+def api_auth_verify_reset_code():
+    """
+    Проверяет валидность кода сброса пароля БЕЗ его использования (удаления).
+    Нужен для перехода на экран ввода нового пароля.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    code = (data.get('code') or '').strip()
+
+    if not email or not code:
+        return jsonify({"ok": False, "error": "MISSING_DATA"}), 400
+
+    user = User.query.filter(func.lower(User.email) == email).first()
+    if not user:
+        return jsonify({"ok": False, "error": "USER_NOT_FOUND"}), 404
+
+    # Проверяем совпадение кода
+    if not user.verification_code or user.verification_code != code:
+        return jsonify({"ok": False, "error": "INVALID_CODE"}), 400
+
+    # Проверяем срок действия
+    if user.verification_code_expires_at < datetime.now():
+        return jsonify({"ok": False, "error": "CODE_EXPIRED"}), 400
+
+    # ВАЖНО: Мы НЕ удаляем код здесь, так как он понадобится
+    # для финального сброса пароля в /api/auth/reset_password
+    return jsonify({"ok": True, "message": "Code is valid"})
+
 if __name__ == '__main__':
             app.run(host='0.0.0.0', port=5000, debug=True)
