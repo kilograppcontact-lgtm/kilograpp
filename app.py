@@ -695,9 +695,12 @@ def list_trainings():
     me = get_current_user()
     me_id = me.id if me else None
 
-    items = Training.query.filter(Training.date >= start, Training.date <= end)\
-                          .order_by(Training.date, Training.start_time).all()
-    return jsonify({"ok": True, "data": [t.to_dict(me_id) for t in items]})
+    items = Training.query.filter(Training.date >= start, Training.date <= end) \
+        .order_by(Training.date, Training.start_time).all()
+    resp = jsonify({"ok": True, "data": [t.to_dict(me_id) for t in items]})
+    # ДОБАВЛЕНО: Запрет кэширования для этого запроса
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
 
 @app.route('/api/trainings/mine', methods=['GET'])
 def my_trainings():
@@ -4825,6 +4828,7 @@ def signup_training(tid):
         check_all_achievements(u)
         # -----------------------
         db.session.commit()
+        db.session.refresh(t)  # <--- ДОБАВЛЕНО: Обновляем объект t из БД
     except IntegrityError:
         db.session.rollback()
         # На случай гонки — считаем, что уже записан
@@ -4845,6 +4849,7 @@ def cancel_signup(tid):
 
     db.session.delete(s)
     db.session.commit()
+    db.session.refresh(t)  # <--- ДОБАВЛЕНО: Обновляем объект t из БД
 
     return jsonify({"ok": True, "data": t.to_dict(u.id)})
 
