@@ -15,7 +15,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from PIL import Image
 from openai import OpenAI
 from sqlalchemy import func, inspect, text
-from sqlalchemy.orm import joinedload  # <--- Добавлено
+from sqlalchemy.orm import subqueryload
 from sqlalchemy.exc import IntegrityError
 
 from flask import (
@@ -696,11 +696,31 @@ def list_trainings():
     me = get_current_user()
     me_id = me.id if me else None
 
-    # Используем joinedload(Training.signups), чтобы сразу загрузить список записавшихся
-    items = Training.query.options(joinedload(Training.signups)) \
+    # 1. Используем subqueryload вместо joinedload (надежнее для списков)
+    items = Training.query.options(subqueryload(Training.signups)) \
         .filter(Training.date >= start, Training.date <= end) \
         .order_by(Training.date, Training.start_time).all()
-    resp = jsonify({"ok": True, "data": [t.to_dict(me_id) for t in items]})
+
+    # 2. ГАРАНТИЯ: Отдельно получаем ID всех тренировок, на которые записан этот юзер в этом месяце
+    my_signed_training_ids = set()
+    if me_id:
+        rows = db.session.query(TrainingSignup.training_id)\
+            .join(Training)\
+            .filter(TrainingSignup.user_id == me_id,
+                    Training.date >= start,
+                    Training.date <= end).all()
+        my_signed_training_ids = {r[0] for r in rows}
+
+    # 3. Собираем ответ и принудительно ставим флаг, если нашли совпадение
+    data_list = []
+    for t in items:
+        d = t.to_dict(me_id)
+        # Если мы нашли ID этой тренировки в списке моих записей - ставим True
+        if t.id in my_signed_training_ids:
+            d['is_signed_up_by_me'] = True
+        data_list.append(d)
+
+    resp = jsonify({"ok": True, "data": data_list})
     # ДОБАВЛЕНО: Запрет кэширования для этого запроса
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp
