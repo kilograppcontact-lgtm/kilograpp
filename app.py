@@ -15,6 +15,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from PIL import Image
 from openai import OpenAI
 from sqlalchemy import func, inspect, text
+from sqlalchemy.orm import joinedload  # <--- Добавлено
 from sqlalchemy.exc import IntegrityError
 
 from flask import (
@@ -695,7 +696,9 @@ def list_trainings():
     me = get_current_user()
     me_id = me.id if me else None
 
-    items = Training.query.filter(Training.date >= start, Training.date <= end) \
+    # Используем joinedload(Training.signups), чтобы сразу загрузить список записавшихся
+    items = Training.query.options(joinedload(Training.signups)) \
+        .filter(Training.date >= start, Training.date <= end) \
         .order_by(Training.date, Training.start_time).all()
     resp = jsonify({"ok": True, "data": [t.to_dict(me_id) for t in items]})
     # ДОБАВЛЕНО: Запрет кэширования для этого запроса
@@ -4828,10 +4831,14 @@ def signup_training(tid):
         check_all_achievements(u)
         # -----------------------
         db.session.commit()
-        db.session.refresh(t)  # <--- ДОБАВЛЕНО: Обновляем объект t из БД
+
+        # [FIX] Обновляем объект t, чтобы подтянулся новый список signups
+        db.session.refresh(t)
+
     except IntegrityError:
         db.session.rollback()
-        # На случай гонки — считаем, что уже записан
+        # Если ошибка целостности, значит запись уже есть - тоже обновляем состояние
+        db.session.refresh(t)
         return jsonify({"ok": True, "data": t.to_dict(u.id)})
 
     return jsonify({"ok": True, "data": t.to_dict(u.id)})
