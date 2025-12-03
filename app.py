@@ -1462,7 +1462,7 @@ def api_me():
             "has_subscription": bool(getattr(u, 'has_subscription', False)),
             "is_trainer": bool(getattr(u, 'is_trainer', False)),
             'onboarding_complete': bool(getattr(u, 'onboarding_complete', False)),
-            'onboarding_v2_complete': bool(getattr(u, 'onboarding_v2_complete', False))  # <-- НОВОЕ ПОЛЕ
+            'onboarding_v2_complete': bool(getattr(u, 'onboarding_v2_complete', False)),  # <-- НОВОЕ ПОЛЕ
             'squad_status': getattr(u, 'squad_status', 'none')  # <--- НОВОЕ
         }
     })
