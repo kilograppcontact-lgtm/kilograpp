@@ -158,6 +158,12 @@ class SubscriptionApplication(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     # Номер телефона, который он ввел
     phone_number = db.Column(db.String(20), nullable=False)
+
+    # --- НОВЫЕ ПОЛЯ ДЛЯ SQUADS ---
+    preferred_time = db.Column(db.String(20), nullable=True)  # 'morning', 'day', 'evening'
+    fitness_level = db.Column(db.String(20), nullable=True)  # 'newbie', 'pro'
+    # -----------------------------
+
     # Дата создания
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # Статус: 'pending' (в ожидании), 'processed' (обработана)

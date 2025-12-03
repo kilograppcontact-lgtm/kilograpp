@@ -4584,6 +4584,9 @@ def create_application():
 
     data = request.json
     phone = data.get('phone')
+    # --- НОВЫЕ ПАРАМЕТРЫ ---
+    pref_time = data.get('preferred_time')  # morning/day/evening
+    fit_level = data.get('fitness_level')   # newbie/pro
 
     # 3. Валидация номера
     if not phone or len(phone) < 7:
@@ -4593,12 +4596,14 @@ def create_application():
     try:
         new_app = SubscriptionApplication(
             user_id=u.id,
-            phone_number=phone
+            phone_number=phone,
+            preferred_time=pref_time,  # <-- Сохраняем
+            fitness_level=fit_level    # <-- Сохраняем
         )
         db.session.add(new_app)
         db.session.commit()
 
-        return jsonify(success=True, message="Ваша заявка принята, мы скоро с вами свяжемся.")
+        return jsonify(success=True, message="Ваша заявка и анкета приняты! Мы подберем для вас идеальный отряд.")
 
     except Exception as e:
         db.session.rollback()
