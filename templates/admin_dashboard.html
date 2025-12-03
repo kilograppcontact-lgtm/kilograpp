@@ -25,6 +25,7 @@
     magic: "{{ url_for('admin_send_magic_link', user_id=0) }}".replace(/0$/, ""),
     create: "{{ url_for('admin_create_user') }}",
     groups: "{{ url_for('admin_groups_list') }}",
+    squads_dist: "{{ url_for('admin_squads_distribution') }}",
     aiq: "{{ url_for('admin_ai_queue') }}",
     jobs: "{{ url_for('admin_jobs') }}",
     prompts: "{{ url_for('admin_prompts') }}",
@@ -48,6 +49,7 @@
       <a :href="urls.create" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">➕ Создать</a>
       <a :href="urls.admin_applications_list" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"> Заявки</a>
       <a :href="urls.groups" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-white hover:bg-slate-900">👥 Группы</a>
+      <a :href="urls.squads_dist" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 text-white hover:bg-orange-700">🛡️ Распределение</a>
       <a :href="urls.aiq" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700">🤖 AI-очередь</a>
       <a :href="urls.jobs" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700">⏱ Планировщик</a>
       <a :href="urls.prompts" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700">🧩 Промпты</a>

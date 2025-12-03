@@ -4416,6 +4416,85 @@ def admin_delete_group(group_id):
     return redirect(url_for("admin_groups_list"))
 
 
+@app.route("/admin/squads/distribution")
+@admin_required
+def admin_squads_distribution():
+    # Ищем пользователей, подавших заявку (pending)
+    # Можно также добавить тех, кто 'none', но имеет заполненные предпочтения, если нужно
+    pending_users = User.query.filter(
+        User.squad_status == 'pending'
+    ).order_by(User.updated_at.desc()).all()
+
+    groups = Group.query.order_by(Group.name).all()
+
+    # Собираем статистику по группам (сколько мест занято)
+    # Group.members - это relationship, можно использовать len()
+    groups_data = []
+    for g in groups:
+        groups_data.append({
+            "id": g.id,
+            "name": g.name,
+            "count": len(g.members),
+            "trainer_name": g.trainer.name if g.trainer else "Нет тренера"
+        })
+
+    return render_template(
+        "admin_squads_distribution.html",
+        users=pending_users,
+        groups=groups_data
+    )
+
+
+@app.route("/admin/squads/assign", methods=["POST"])
+@admin_required
+def admin_assign_squad():
+    user_id = request.form.get("user_id")
+    group_id = request.form.get("group_id")
+
+    if not user_id or not group_id:
+        flash("Ошибка: не выбран пользователь или группа", "error")
+        return redirect(url_for("admin_squads_distribution"))
+
+    try:
+        u = db.session.get(User, user_id)
+        g = db.session.get(Group, group_id)
+
+        if u and g:
+            # 1. Проверяем, не состоит ли уже
+            existing = GroupMember.query.filter_by(user_id=u.id, group_id=g.id).first()
+            if not existing:
+                member = GroupMember(group=g, user=u)
+                db.session.add(member)
+
+            # 2. Обновляем статус пользователя
+            u.squad_status = 'active'
+
+            # 3. (Опционально) Сбрасываем старые заявки, если они хранятся отдельно,
+            # но мы храним статус прямо в User, так что этого достаточно.
+
+            db.session.commit()
+
+            # 4. Отправляем уведомление
+            from notification_service import send_user_notification
+            send_user_notification(
+                user_id=u.id,
+                title=f"Вы приняты в отряд {g.name}!",
+                body="Тренер подтвердил вашу заявку. Заходите знакомиться с командой.",
+                type="success",
+                data={"route": "/squad"}  # Предполагаемый роут
+            )
+
+            flash(f"Пользователь {u.name} успешно добавлен в группу {g.name}", "success")
+        else:
+            flash("Пользователь или группа не найдены", "error")
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Ошибка распределения: {e}", "error")
+
+    return redirect(url_for("admin_squads_distribution"))
+
+
 # Найдите и замените существующую функцию admin_grant_subscription
 
 @app.route("/admin/user/<int:user_id>/subscribe", methods=["POST"])
