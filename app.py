@@ -4445,6 +4445,61 @@ def admin_squads_distribution():
     )
 
 
+# --- SQUADS API ---
+
+@app.route('/api/groups/my', methods=['GET'])
+@login_required
+def api_my_group():
+    u = get_current_user()
+
+    # Ищем группу, где юзер - участник
+    member_record = GroupMember.query.filter_by(user_id=u.id).first()
+    if not member_record:
+        return jsonify({"ok": True, "group": None})
+
+    g = member_record.group
+
+    # Собираем участников
+    members_data = []
+    for m in g.members:
+        members_data.append({
+            "id": m.user.id,
+            "name": m.user.name,
+            "avatar_filename": m.user.avatar.filename if m.user.avatar else None,
+            "is_me": (m.user.id == u.id),
+            "score": getattr(m.user, 'current_streak', 0) * 10  # Примерный скор
+        })
+
+    # Сортируем по очкам
+    members_data.sort(key=lambda x: x['score'], reverse=True)
+
+    # Превью чата
+    recent_messages = GroupMessage.query.filter_by(group_id=g.id) \
+        .order_by(GroupMessage.timestamp.desc()).limit(3).all()
+
+    chat_preview = []
+    for msg in recent_messages:
+        chat_preview.append({
+            "user": msg.user.name,
+            "text": msg.text,
+            "time": msg.timestamp.strftime('%H:%M'),
+            "avatar": msg.user.avatar.filename if msg.user.avatar else None
+        })
+
+    group_data = {
+        "id": g.id,
+        "name": g.name,
+        "description": g.description,
+        "trainer_name": g.trainer.name if g.trainer else "Тренер",
+        "members": members_data,
+        "chat_preview": chat_preview
+    }
+
+    return jsonify({"ok": True, "group": group_data})
+
+
+# --- ADMIN ASSIGN UPDATE ---
+
 @app.route("/admin/squads/assign", methods=["POST"])
 @admin_required
 def admin_assign_squad():
@@ -4468,32 +4523,26 @@ def admin_assign_squad():
 
             # 2. Обновляем статус пользователя
             u.squad_status = 'active'
-
-            # 3. (Опционально) Сбрасываем старые заявки, если они хранятся отдельно,
-            # но мы храним статус прямо в User, так что этого достаточно.
-
             db.session.commit()
 
-            # 4. Отправляем уведомление
-            from notification_service import send_user_notification
+            # 3. Отправляем PUSH уведомление
             send_user_notification(
                 user_id=u.id,
-                title=f"Вы приняты в отряд {g.name}!",
-                body="Тренер подтвердил вашу заявку. Заходите знакомиться с командой.",
+                title=f"Вы приняты в отряд {g.name}! 🔥",
+                body="Тренер подтвердил заявку. Заходите знакомиться с командой.",
                 type="success",
-                data={"route": "/squad"}  # Предполагаемый роут
+                data={"route": "/squad"}
             )
 
-            flash(f"Пользователь {u.name} успешно добавлен в группу {g.name}", "success")
+            flash(f"Пользователь {u.name} добавлен в {g.name}", "success")
         else:
             flash("Пользователь или группа не найдены", "error")
 
     except Exception as e:
         db.session.rollback()
-        flash(f"Ошибка распределения: {e}", "error")
+        flash(f"Ошибка: {e}", "error")
 
     return redirect(url_for("admin_squads_distribution"))
-
 
 # Найдите и замените существующую функцию admin_grant_subscription
 
