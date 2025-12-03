@@ -29,7 +29,6 @@
       <change afterPath="$PROJECT_DIR$/../foodstream/templates/admin.html" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../foodstream/templates/chat_view.html" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../foodstream/templates/index.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
