@@ -48,6 +48,12 @@ class User(db.Model):
     verification_code_expires_at = db.Column(db.DateTime, nullable=True)
     is_verified = db.Column(db.Boolean, default=False, server_default=expression.false())
 
+    # --- SQUADS (Групповые челленджи) ---
+    squad_status = db.Column(db.String(20), default='none')  # 'none', 'pending', 'active'
+    squad_pref_time = db.Column(db.String(20), nullable=True)  # 'morning', 'day', 'evening'
+    squad_fitness_level = db.Column(db.String(20), nullable=True)  # 'newbie', 'pro'
+    # ------------------------------------
+
     # Кэш стрика (пересчитывается на основе реальных записей MealLog)
     current_streak = db.Column(db.Integer, default=0, server_default='0', nullable=False)
     # отношения
@@ -158,12 +164,6 @@ class SubscriptionApplication(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     # Номер телефона, который он ввел
     phone_number = db.Column(db.String(20), nullable=False)
-
-    # --- НОВЫЕ ПОЛЯ ДЛЯ SQUADS ---
-    preferred_time = db.Column(db.String(20), nullable=True)  # 'morning', 'day', 'evening'
-    fitness_level = db.Column(db.String(20), nullable=True)  # 'newbie', 'pro'
-    # -----------------------------
-
     # Дата создания
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # Статус: 'pending' (в ожидании), 'processed' (обработана)

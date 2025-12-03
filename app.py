@@ -4584,9 +4584,6 @@ def create_application():
 
     data = request.json
     phone = data.get('phone')
-    # --- НОВЫЕ ПАРАМЕТРЫ ---
-    pref_time = data.get('preferred_time')  # morning/day/evening
-    fit_level = data.get('fitness_level')   # newbie/pro
 
     # 3. Валидация номера
     if not phone or len(phone) < 7:
@@ -4596,14 +4593,12 @@ def create_application():
     try:
         new_app = SubscriptionApplication(
             user_id=u.id,
-            phone_number=phone,
-            preferred_time=pref_time,  # <-- Сохраняем
-            fitness_level=fit_level    # <-- Сохраняем
+            phone_number=phone
         )
         db.session.add(new_app)
         db.session.commit()
 
-        return jsonify(success=True, message="Ваша заявка и анкета приняты! Мы подберем для вас идеальный отряд.")
+        return jsonify(success=True, message="Ваша заявка принята, мы скоро с вами свяжемся.")
 
     except Exception as e:
         db.session.rollback()
@@ -6030,6 +6025,32 @@ def api_auth_verify_reset_code():
     # для финального сброса пароля в /api/auth/reset_password
     return jsonify({"ok": True, "message": "Code is valid"})
 
+
+@app.route('/api/squads/join', methods=['POST'])
+@login_required
+def join_squad_request():
+    user = get_current_user()
+    data = request.get_json(force=True, silent=True) or {}
+
+    pref_time = data.get('preferred_time')
+    fit_level = data.get('fitness_level')
+
+    if not pref_time or not fit_level:
+        return jsonify({"ok": False, "error": "Заполните все поля"}), 400
+
+    try:
+        user.squad_pref_time = pref_time
+        user.squad_fitness_level = fit_level
+        user.squad_status = 'pending'  # Статус "Ждет распределения"
+
+        db.session.commit()
+
+        # Тут можно отправить уведомление админу в Telegram
+
+        return jsonify({"ok": True, "message": "Заявка в Squad принята"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
     # ЭТОТ БЛОК ВЫВЕДЕТ ВСЕ РАБОТАЮЩИЕ ССЫЛКИ В КОНСОЛЬ ПРИ ЗАПУСКЕ
