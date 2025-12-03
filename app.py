@@ -6045,8 +6045,6 @@ def join_squad_request():
 
         db.session.commit()
 
-        # Тут можно отправить уведомление админу в Telegram
-
         return jsonify({"ok": True, "message": "Заявка в Squad принята"})
     except Exception as e:
         db.session.rollback()
