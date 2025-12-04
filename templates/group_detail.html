@@ -72,6 +72,53 @@
     <i class="bi bi-shield-check absolute -right-6 -bottom-10 text-[10rem] text-white/5 rotate-12 pointer-events-none"></i>
   </div>
 
+  {# --- 1.5. РАСПИСАНИЕ ТРЕНИРОВОК --- #}
+  <div class="card p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+        <i class="bi bi-calendar-check-fill text-indigo-500"></i> Расписание тренировок
+      </h2>
+      {% if current_user.is_trainer and group.trainer_id == current_user.id %}
+        <button onclick="document.getElementById('training-modal').classList.remove('hidden')"
+                class="text-sm bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg font-bold hover:bg-indigo-100 transition">
+          + Назначить
+        </button>
+      {% endif %}
+    </div>
+
+    {% if upcoming_trainings %}
+      <div class="grid gap-3 sm:grid-cols-2">
+        {% for t in upcoming_trainings %}
+          <div class="border border-gray-100 rounded-xl p-3 bg-gray-50 flex flex-col relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-16 h-16 bg-indigo-500/5 rounded-bl-full -mr-8 -mt-8"></div>
+
+            <div class="flex justify-between items-start z-10">
+              <div>
+                <div class="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-1">
+                  {{ t.date.strftime('%d.%m') }} • {{ t.start_time.strftime('%H:%M') }}
+                </div>
+                <h3 class="font-bold text-gray-900 leading-tight">{{ t.title }}</h3>
+              </div>
+              {% if t.meeting_link and t.meeting_link != '#' %}
+                <a href="{{ t.meeting_link }}" target="_blank" class="w-8 h-8 flex items-center justify-center bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 transition">
+                  <i class="bi bi-camera-video-fill text-xs"></i>
+                </a>
+              {% endif %}
+            </div>
+
+            <div class="mt-2 text-xs text-gray-500 line-clamp-2">
+              {{ t.description or "Описание отсутствует" }}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-center py-6 text-gray-400 text-sm">
+        Нет запланированных тренировок
+      </div>
+    {% endif %}
+  </div>
+
   {# --- 2. ЛИДЕРБОРД --- #}
   <div class="card p-5">
     <div class="flex items-center justify-between mb-4">
@@ -161,9 +208,82 @@
   <img id="lightbox-image" src="" class="max-w-full max-h-full rounded-lg shadow-2xl">
 </div>
 
+{# --- Модальное окно создания тренировки --- #}
+<div id="training-modal" class="fixed inset-0 z-50 hidden bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
+  <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl transform transition-all scale-100">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-xl font-black text-gray-900">Новая тренировка</h3>
+      <button onclick="document.getElementById('training-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">
+        <i class="bi bi-x-lg text-lg"></i>
+      </button>
+    </div>
+
+    <form onsubmit="submitTraining(event)" class="space-y-4">
+      <div>
+        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Название</label>
+        <input type="text" name="title" required value="Групповая тренировка" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Дата</label>
+          <input type="date" name="date" required class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Время (Начало)</label>
+          <input type="time" name="start_time" required class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Время (Конец)</label>
+          <input type="time" name="end_time" required class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
+        </div>
+        <div>
+           <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Ссылка (Zoom/Meet)</label>
+           <input type="url" name="meeting_link" placeholder="https://..." class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Описание</label>
+        <textarea name="description" rows="2" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none resize-none"></textarea>
+      </div>
+
+      <button type="submit" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-200">
+        Создать событие
+      </button>
+    </form>
+  </div>
+</div>
+
 <script>
   const GROUP_ID = {{ group.id }};
   const CURRENT_USER_ID = {{ current_user.id }};
+
+  // --- ЛОГИКА ТРЕНИРОВОК ---
+  async function submitTraining(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+
+    try {
+      const res = await fetch(`/groups/${GROUP_ID}/trainings/new`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        window.location.reload(); // Простая перезагрузка для отображения в списке
+      } else {
+        alert(data.error);
+      }
+    } catch (err) {
+      alert('Ошибка создания');
+    }
+  }
 
   // --- ЛОГИКА ЛИДЕРБОРДА ---
   let lbExpanded = false;

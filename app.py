@@ -4023,13 +4023,19 @@ def group_detail(group_id):
             })
         group_member_stats.sort(key=lambda x: (not x['is_trainer_in_group'], x['user'].name.lower()))
 
-    return render_template('group_detail.html',
-                           group=group,
-                           is_member=is_member,
-                           processed_messages=processed_messages,
-                           group_member_stats=group_member_stats,
-                           all_posts=all_posts)
+        # Получаем будущие тренировки группы
+        upcoming_trainings = Training.query.filter(
+            Training.group_id == group.id,
+            Training.date >= date.today()
+        ).order_by(Training.date, Training.start_time).all()
 
+        return render_template('group_detail.html',
+                               group=group,
+                               is_member=is_member,
+                               processed_messages=processed_messages,
+                               group_member_stats=group_member_stats,
+                               all_posts=all_posts,
+                               upcoming_trainings=upcoming_trainings)  # Передаем тренировки
 @app.route('/group_message/<int:message_id>/react', methods=['POST'])
 @login_required
 def react_to_message(message_id):
@@ -6375,6 +6381,47 @@ def create_squad_comment(group_id):
         "avatar": u.avatar.filename if u.avatar else None,
         "is_me": True
     }})
+
+
+@app.route('/groups/<int:group_id>/trainings/new', methods=['POST'])
+@login_required
+def create_group_training(group_id):
+    group = Group.query.get_or_404(group_id)
+    user = get_current_user()
+
+    # Только тренер группы может создавать тренировки
+    if not (user.is_trainer and group.trainer_id == user.id):
+        return jsonify({"ok": False, "error": "Только тренер может назначать тренировки"}), 403
+
+    data = request.form
+    try:
+        dt = _parse_date_yyyy_mm_dd(data.get('date') or '')
+        st = _parse_hh_mm(data.get('start_time') or '')
+        et = _parse_hh_mm(data.get('end_time') or '')
+
+        if et <= st:
+            return jsonify({"ok": False, "error": "Конец раньше начала"}), 400
+
+        t = Training(
+            trainer_id=user.id,
+            group_id=group.id,  # Привязываем к группе
+            title=data.get('title') or "Групповая тренировка",
+            description=data.get('description') or "",
+            meeting_link=data.get('meeting_link') or "#",
+            date=dt,
+            start_time=st,
+            end_time=et,
+            capacity=100,  # Для своих безлимит или много
+            is_public=False  # Приватная для группы
+        )
+        db.session.add(t)
+        db.session.commit()
+
+        # Можно отправить уведомление (код уведомления опущен для краткости)
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
     # ЭТОТ БЛОК ВЫВЕДЕТ ВСЕ РАБОТАЮЩИЕ ССЫЛКИ В КОНСОЛЬ ПРИ ЗАПУСКЕ

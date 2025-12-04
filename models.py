@@ -405,6 +405,9 @@ class Training(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     trainer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    # Добавлено поле group_id (nullable=True, так как бывают общие тренировки)
+    group_id = db.Column(db.Integer, db.ForeignKey('group.id'), nullable=True, index=True)
+
     meeting_link = db.Column(db.String(255), nullable=False)
 
     title = db.Column(db.String(120), nullable=False, default="Онлайн-тренировка")
