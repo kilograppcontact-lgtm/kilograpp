@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta, time as dt_time, UTC
 from functools import wraps
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
+from sqlalchemy import or_ # <--- Добавьте это в импорты sqlalchemy
 
 from dotenv import load_dotenv
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -686,44 +687,79 @@ def trainings_page():
     u = get_current_user()
     return render_template('trainings.html', is_trainer=bool(u and u.is_trainer), me_id=(u.id if u else None))
 
+
 @app.route('/api/trainings', methods=['GET'])
 def list_trainings():
     if not session.get('user_id'):
         abort(401)
+
     month = request.args.get('month')
+    requested_group_id = request.args.get('group_id')  # Получаем ID группы из запроса
+
     if not month:
         today = date.today()
         month = f"{today.year:04d}-{today.month:02d}"
     start, end = _month_bounds(month)
+
     me = get_current_user()
     me_id = me.id if me else None
 
-    # 1. Используем subqueryload вместо joinedload (надежнее для списков)
-    items = Training.query.options(subqueryload(Training.signups)) \
-        .filter(Training.date >= start, Training.date <= end) \
-        .order_by(Training.date, Training.start_time).all()
+    # --- ЛОГИКА ФИЛЬТРАЦИИ ---
+    query = Training.query.options(subqueryload(Training.signups)) \
+        .filter(Training.date >= start, Training.date <= end)
 
-    # 2. ГАРАНТИЯ: Отдельно получаем ID всех тренировок, на которые записан этот юзер в этом месяце
+    if requested_group_id:
+        # Сценарий А: Запрошена конкретная группа (внутри Squads)
+        # (Тут можно добавить проверку, имеет ли юзер право смотреть эту группу)
+        query = query.filter(Training.group_id == int(requested_group_id))
+    else:
+        # Сценарий Б: Главный календарь
+        # Показываем:
+        # 1. Публичные тренировки (group_id IS NULL)
+        # 2. Тренировки групп, где я участник
+        # 3. Тренировки группы, где я тренер
+
+        # Собираем ID групп пользователя
+        my_group_ids = [m.group_id for m in GroupMember.query.filter_by(user_id=me.id).all()]
+
+        # Если я тренер, добавляем мою группу
+        if me.own_group:
+            my_group_ids.append(me.own_group.id)
+
+        if my_group_ids:
+            # Публичные ИЛИ Мои группы
+            query = query.filter(
+                or_(
+                    Training.group_id.is_(None),
+                    Training.group_id.in_(my_group_ids)
+                )
+            )
+        else:
+            # Только публичные (если нет групп)
+            query = query.filter(Training.group_id.is_(None))
+
+    items = query.order_by(Training.date, Training.start_time).all()
+
+    # 2. ГАРАНТИЯ: Отдельно получаем ID всех тренировок, на которые записан этот юзер
+    # (код ниже остается почти без изменений, только фильтр по датам)
     my_signed_training_ids = set()
     if me_id:
-        rows = db.session.query(TrainingSignup.training_id)\
-            .join(Training)\
+        rows = db.session.query(TrainingSignup.training_id) \
+            .join(Training) \
             .filter(TrainingSignup.user_id == me_id,
                     Training.date >= start,
                     Training.date <= end).all()
         my_signed_training_ids = {r[0] for r in rows}
 
-    # 3. Собираем ответ и принудительно ставим флаг, если нашли совпадение
+    # 3. Собираем ответ
     data_list = []
     for t in items:
         d = t.to_dict(me_id)
-        # Если мы нашли ID этой тренировки в списке моих записей - ставим True
         if t.id in my_signed_training_ids:
             d['is_signed_up_by_me'] = True
         data_list.append(d)
 
     resp = jsonify({"ok": True, "data": data_list})
-    # ДОБАВЛЕНО: Запрет кэширования для этого запроса
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp
 
