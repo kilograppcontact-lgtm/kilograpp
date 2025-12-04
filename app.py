@@ -6287,11 +6287,39 @@ def create_squad_post(group_id):
     db.session.add(post)
     db.session.commit()
 
-    # PUSH уведомление всем участникам
-    # (код уведомления опускаем для краткости, он аналогичен notification_service)
+    # --- УВЕДОМЛЕНИЯ УЧАСТНИКАМ ---
+    try:
+        # 1. Формируем текст уведомления
+        snippet = (text[:50] + '...') if len(text) > 50 else text
+        if not snippet and image_filename:
+            snippet = "Новое фото 📷"
+
+        notif_title = f"Новое в {group.name} 📢"
+        notif_body = f"{u.name}: {snippet}"
+
+        # 2. Собираем ID получателей (все участники, кроме автора)
+        # group.members - это список объектов GroupMember
+        recipients_ids = [m.user_id for m in group.members if m.user_id != u.id]
+
+        # Если автор не тренер (редкий кейс), то тренеру тоже отправляем
+        if group.trainer_id != u.id and group.trainer_id not in recipients_ids:
+            recipients_ids.append(group.trainer_id)
+
+        # 3. Рассылаем
+        for rid in recipients_ids:
+            send_user_notification(
+                user_id=rid,
+                title=notif_title,
+                body=notif_body,
+                type="info",
+                data={"route": "/squad"}  # При клике открываем вкладку Squads
+            )
+
+    except Exception as e:
+        print(f"[PUSH ERROR] Failed to notify group: {e}")
+    # ------------------------------
 
     return jsonify({"ok": True, "message": "Пост опубликован"})
-
 
 @app.route('/api/groups/<int:group_id>/reply', methods=['POST'])
 @login_required
@@ -6319,6 +6347,26 @@ def create_squad_comment(group_id):
     )
     db.session.add(comment)
     db.session.commit()
+
+    # --- УВЕДОМЛЕНИЕ АВТОРУ ПОСТА ---
+    try:
+        # Находим родительский пост
+        parent_post = db.session.get(GroupMessage, parent_id)
+
+        # Если родитель существует и его автор — не мы сами
+        if parent_post and parent_post.user_id != u.id:
+            snippet = (text[:40] + '...') if len(text) > 40 else text
+
+            send_user_notification(
+                user_id=parent_post.user_id,
+                title="Новый комментарий 💬",
+                body=f"{u.name} ответил: {snippet}",
+                type="info",
+                data={"route": "/squad"}
+            )
+    except Exception as e:
+        print(f"[PUSH ERROR] Failed to notify comment author: {e}")
+    # --------------------------------
 
     return jsonify({"ok": True, "comment": {
         "id": comment.id,

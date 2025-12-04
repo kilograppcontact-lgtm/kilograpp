@@ -20,8 +20,6 @@
       <change afterPath="$PROJECT_DIR$/../SalesJourney/templates/errors/429.html" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../SalesJourney/templates/errors/500.html" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../SalesJourney/templates/errors/base.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.env" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/serviceAccountKey.json" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../foodstream/.env" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../foodstream/app.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../foodstream/assistant.py" afterDir="false" />
