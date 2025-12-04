@@ -1,670 +1,420 @@
 {% extends "base.html" %}
-{% set title = (group.name ~ " — группа") %}
+{% set title = group.name ~ " — Отряд" %}
 
 {% block content %}
 <style>
-  /* ---------- Базовые мелочи ---------- */
-  .fade-in{animation:fadeIn .2s ease-out}
-  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  /* Анимации */
+  .fade-in { animation: fadeIn 0.3s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-  .card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-  .card-hover{transition:transform .15s ease, box-shadow .15s ease}
-  .card-hover:hover{transform:translateY(-2px);box-shadow:0 10px 22px -14px rgba(0,0,0,.35)}
-  .chip{display:inline-flex;align-items:center;padding:.25rem .5rem;border-radius:9999px;font-size:.75rem;font-weight:600}
+  /* Карточки */
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); overflow: hidden; }
 
-  /* ---------- Чат: переносы, размеры, реакции ---------- */
-  #chat-widget-container{transition:opacity .25s ease, transform .25s ease}
+  /* Лидерборд */
+  .leaderboard-row { transition: all 0.3s ease; }
+  .leaderboard-row:hover { background-color: #f8fafc; }
+  .rank-badge { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 12px; font-weight: 800; }
+  .rank-1 { background: #FEF3C7; color: #D97706; } /* Gold */
+  .rank-2 { background: #F3F4F6; color: #4B5563; } /* Silver */
+  .rank-3 { background: #FFEDD5; color: #C2410C; } /* Bronze */
+  .rank-N { background: #F1F5F9; color: #64748B; }
 
-  /* ВАЖНО: ни в коем случае не ломаем слова на символы */
-  #chat-messages-container{
-    overflow-wrap: normal !important;
-    word-break: normal !important;
+  /* Лента */
+  .feed-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+  .comment-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+
+  .post-img {
+    max-height: 500px; width: 100%; object-fit: cover; border-radius: 12px; margin-top: 12px; cursor: zoom-in;
   }
 
-  /* Контейнер сообщения не должен сжиматься */
-  .msg-wrap{
-    max-width:90%;
-    flex:0 0 auto !important;    /* запретить shrink */
-    min-width:6ch !important;     /* базовый минимум ширины блока-строки */
+  /* Комментарии */
+  .comment-section { background: #f9fafb; border-top: 1px solid #f3f4f6; }
+  .comment-bubble { background: #fff; border: 1px solid #e5e7eb; border-radius: 0 16px 16px 16px; padding: 8px 12px; display: inline-block; }
+
+  /* Хедер */
+  .header-bg {
+    background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+    color: white;
   }
-
-  .chat-bubble{
-    display:inline-flex !important;
-    align-items:center;
-    padding:8px 12px;
-    max-width:85%;
-    min-width:6ch !important;     /* «таблетка» не уже 6 символов */
-    min-height:2rem !important;   /* комфортная высота */
-    white-space:pre-wrap;          /* уважаем \n пользователя */
-    overflow-wrap: normal !important;
-    word-break: keep-all !important; /* не разбивать внутри слова */
-    hyphens: manual;               /* без авто-дефисации */
-    border-radius:20px; line-height:1.35;
-    flex:0 0 auto !important;      /* пузырь сам себя не сжимает */
-  }
-
-  .chat-bubble-me{
-    background-image:linear-gradient(90deg,#3b82f6,#6366f1);
-    color:#fff;
-  }
-  .chat-bubble-other{background:#eef2ff;color:#111827}
-
-  .chat-img{
-    max-width:85%;
-    max-height:60vh;
-    width:auto;height:auto;
-    display:block;border-radius:12px;object-fit:contain
-  }
-  .reaction-display{user-select:none}
-
-  /* ---------- Лайтбокс ---------- */
-  #image-lightbox{position:fixed;inset:0;display:none;justify-content:center;align-items:center;z-index:1000;cursor:zoom-out;background:rgba(0,0,0,.85)}
-  #image-lightbox.visible{display:flex}
-  #image-lightbox img{max-width:90%;max-height:90%;object-fit:contain;border-radius:10px;box-shadow:0 0 28px rgba(0,0,0,.5)}
-  #lightbox-close{position:absolute;top:18px;right:26px;color:#fff;font-size:36px;font-weight:800}
-
-  /* ---------- Хедер ---------- */
-  .header-grad{
-    background:linear-gradient(120deg,#6366f1 0%,#8b5cf6 40%,#ec4899 100%);
-  }
-
-  /* ---------- Приятная рамка/шэлл чата ---------- */
-  .chat-shell{
-    background:linear-gradient(180deg,#ffffff 0%, #fafafa 100%);
-    border:1px solid rgba(15,23,42,.08);
-    border-radius:14px;
-    box-shadow: 0 20px 40px -24px rgba(2,6,23,.35), 0 1px 0 rgba(255,255,255,.9) inset;
-    backdrop-filter:saturate(1.05);
-  }
-  .chat-header{
-    background:linear-gradient(180deg,#f8fafc 0%, #eef2ff 100%);
-    border-bottom:1px solid rgba(99,102,241,.15);
-    border-top-left-radius:14px;border-top-right-radius:14px;
-  }
-  .chat-footer{
-    background:#f8fafc;
-    border-top:1px solid #e5e7eb;
-    border-bottom-left-radius:14px;border-bottom-right-radius:14px;
-  }
-
-  /* ---------- Скролл для чата ---------- */
-  #chat-messages-container::-webkit-scrollbar{width:8px}
-  #chat-messages-container::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:9999px}
-  #chat-messages-container:hover::-webkit-scrollbar-thumb{background:#cbd5e1}
-</style>
-<style>
-  /* === Chat overflow fix === */
-  /* Разрешаем ломать только когда иначе будет переполнено */
-  #chat-messages-container{
-    overflow-wrap: break-word !important;
-    word-break: normal !important;
-  }
-
-  /* Контейнер строки сообщения: позволяем сжиматься внутри flex,
-     иначе длинные токены расширяют всю строку */
-  .msg-wrap{
-    max-width: 100% !important;
-    min-width: 0 !important;          /* критично для flex-переносов */
-    flex: 0 1 auto !important;        /* можно слегка сжиматься */
-  }
-
-  /* Сам пузырь: минимум для «ок/йоу/эмодзи», но переносим длинные куски */
-  .chat-bubble{
-    display: inline-flex !important;
-    align-items: center;
-    padding: 8px 12px;
-    max-width: 85%;
-    min-width: 6ch !important;        /* не сплющиваем короткие */
-    min-height: 2rem !important;
-    white-space: pre-wrap;
-
-    overflow-wrap: break-word !important;  /* ломаем длинные токены по необходимости */
-    word-break: normal !important;
-    word-break: break-word !important;     /* Safari fallback */
-    hyphens: auto;
-
-    border-radius: 20px;
-    line-height: 1.35;
-    flex: 0 0 auto !important;        /* ширина пузыря контролируется min/max */
-    box-sizing: border-box;
-  }
-
-  /* На всякий случай: картинки не выходят за пределы */
-  .chat-img{ max-width: 85%; height: auto; }
-
 </style>
 
-<div class="max-w-7xl mx-auto px-3 sm:px-4 py-6 space-y-6">
+<div class="max-w-4xl mx-auto px-4 py-6 space-y-6">
 
-  {# -------- Flash-сообщения -------- #}
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      <div class="space-y-2">
-        {% for category, message in messages %}
-          <div class="px-3 py-2 text-xs rounded-lg
-                      {% if category == 'error' %} bg-red-100 text-red-800
-                      {% elif category == 'success' %} bg-green-100 text-green-800
-                      {% elif category == 'warning' %} bg-yellow-100 text-yellow-800
-                      {% else %} bg-blue-100 text-blue-800 {% endif %}">
-            {{ message }}
-          </div>
-        {% endfor %}
-      </div>
-    {% endif %}
-  {% endwith %}
-
-  {# -------- Хедер группы -------- #}
-  <section class="relative overflow-hidden rounded-3xl text-white">
-    <div class="header-grad">
-      <div class="relative z-10 p-5 md:p-7 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div class="flex items-start gap-3 md:gap-4">
-          <div class="shrink-0">
-            <img src="{{ url_for('serve_file', filename=group.trainer.avatar.filename) if group.trainer and group.trainer.avatar else url_for('static','default-avatar.png') }}"
-                 class="w-12 h-12 md:w-14 md:h-14 rounded-full object-cover ring-2 ring-white/50" alt="Тренер">
-          </div>
-          <div>
-            <h1 class="text-2xl md:text-3xl font-bold tracking-tight">{{ group.name }}</h1>
-            <p class="text-white/90 text-sm mt-1 line-clamp-2">
-              {{ group.description or "Групповое пространство для объявлений, задач и общения." }}
-            </p>
-            <div class="mt-2 flex flex-wrap items-center gap-2">
-              <span class="chip bg-white/15 backdrop-blur text-white border border-white/20">Участников: {{ group.members|length }}</span>
-              <span class="chip bg-white/15 backdrop-blur text-white border border-white/20">
-                Объявлений: {{ (all_posts | selectattr('is_announcement','==',true) | list | length) }}
-              </span>
-              <span class="chip bg-white/15 backdrop-blur text-white border border-white/20">
-                Задач: {{ (all_posts | selectattr('is_announcement','==',false) | list | length) }}
-              </span>
-            </div>
-          </div>
+  {# --- 1. ШАПКА ГРУППЫ --- #}
+  <div class="card header-bg p-6 relative overflow-hidden">
+    <div class="relative z-10 flex flex-col md:flex-row items-center gap-6">
+      <div class="shrink-0 relative">
+        <img src="{{ url_for('serve_file', filename=group.trainer.avatar.filename) if group.trainer and group.trainer.avatar else url_for('static','default-avatar.png') }}"
+             class="w-20 h-20 rounded-full border-4 border-white/20 object-cover">
+        <div class="absolute -bottom-2 -right-2 bg-white text-indigo-600 text-xs font-bold px-2 py-1 rounded-full shadow">
+          COACH
         </div>
+      </div>
 
-        <div class="flex items-center gap-2">
+      <div class="text-center md:text-left flex-1">
+        <h1 class="text-3xl font-black tracking-tight">{{ group.name }}</h1>
+        <p class="text-white/80 mt-1 text-sm max-w-xl mx-auto md:mx-0">
+          {{ group.description or "Добро пожаловать в командный центр! Здесь мы делимся успехами и поддерживаем друг друга." }}
+        </p>
+        <div class="mt-4 flex flex-wrap justify-center md:justify-start gap-3">
+          <div class="inline-flex items-center px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm text-sm font-medium border border-white/10">
+            <i class="bi bi-people-fill mr-2"></i> {{ group.members|length }} участников
+          </div>
           {% if current_user.is_trainer and group.trainer_id == current_user.id %}
-            <span class="chip bg-white text-indigo-700"><i class="bi bi-shield-check mr-1"></i>Тренер</span>
-          {% endif %}
-
-          {% if not is_member and not (current_user.is_trainer and group.trainer_id == current_user.id) %}
-            <form action="{{ url_for('join_group', group_id=group.id) }}" method="POST">
-              <button type="submit"
-                      class="px-4 py-2 rounded-xl bg-white text-indigo-700 hover:bg-white/90 font-semibold shadow-sm">
-                Присоединиться
-              </button>
-            </form>
-          {% elif is_member and not (current_user.is_trainer and group.trainer_id == current_user.id) %}
-            <form action="{{ url_for('leave_group', group_id=group.id) }}" method="POST">
-              <button type="submit"
-                      class="px-4 py-2 rounded-xl bg-white/15 text-white border border-white/30 hover:bg-white/25 font-semibold">
-                Покинуть группу
-              </button>
-            </form>
+            <a href="{{ url_for('admin_groups_list') }}" class="inline-flex items-center px-3 py-1 rounded-full bg-white text-indigo-700 text-sm font-bold shadow hover:bg-gray-100 transition">
+              <i class="bi bi-gear-fill mr-2"></i> Настройки
+            </a>
           {% endif %}
         </div>
       </div>
     </div>
-  </section>
 
-  {# -------- Основной контент: лента + сайдбар -------- #}
-  <div class="grid lg:grid-cols-[1fr,360px] gap-6 items-start">
+    <i class="bi bi-shield-check absolute -right-6 -bottom-10 text-[10rem] text-white/5 rotate-12 pointer-events-none"></i>
+  </div>
 
-    {# ---------- ЛЕВАЯ КОЛОНКА (лента) ---------- #}
-    <section class="space-y-4">
+  {# --- 2. ЛИДЕРБОРД --- #}
+  <div class="card p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+        <i class="bi bi-trophy-fill text-amber-500"></i> Топ участников
+      </h2>
+      <button onclick="toggleLeaderboard()" id="lb-toggle-btn" class="text-sm text-indigo-600 font-semibold hover:text-indigo-800 transition">
+        Показать всех
+      </button>
+    </div>
 
-      {# Composer: только тренер группы #}
-      {% if current_user.is_trainer and group.trainer_id == current_user.id %}
-      <div class="card card-hover p-4 fade-in">
-        <h3 class="font-semibold text-gray-800 mb-3">Создать запись</h3>
-        <form action="{{ url_for('create_group_task', group_id=group.id) }}" method="POST" class="space-y-3 text-sm">
-          <div class="grid md:grid-cols-2 gap-3">
-            <input type="text" name="title" placeholder="Заголовок" required
-                   class="w-full px-3 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <div class="flex items-center gap-3">
-              <label class="inline-flex items-center gap-2">
-                <input type="checkbox" name="is_announcement" id="is-announcement"
-                       class="h-4 w-4 text-yellow-500 rounded border-gray-300 focus:ring-yellow-400">
-                <span class="text-gray-700">Объявление</span>
-              </label>
-              <input type="date" name="due_date"
-                     class="px-3 py-2 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500"
-                     title="Срок (для задач)">
+    <div class="space-y-2" id="leaderboard-container">
+      {% for s in group_member_stats %}
+        {% set is_me = (s.user.id == current_user.id) %}
+        {% set score = (s.fat_loss_progress.current_kg | int * 10) if s.fat_loss_progress else 0 %} {# Пример скоринга #}
+
+        <div class="leaderboard-row flex items-center justify-between p-2 rounded-xl {{ 'hidden' if loop.index > 3 else '' }} {{ 'bg-indigo-50 border border-indigo-100' if is_me else '' }}"
+             data-rank="{{ loop.index }}">
+          <div class="flex items-center gap-3">
+            <div class="rank-badge rank-{{ loop.index if loop.index <= 3 else 'N' }}">
+              {{ loop.index }}
             </div>
-          </div>
-          <textarea name="description" rows="3" placeholder="Описание (Markdown/текст)"
-                    class="w-full px-3 py-2 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500"></textarea>
-          <div class="text-right">
-            <button type="submit" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 shadow">
-              Опубликовать
-            </button>
-          </div>
-        </form>
-      </div>
-      {% endif %}
-
-      {# Панель фильтров ленты #}
-      <div class="card p-2 md:p-3">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div class="inline-flex bg-gray-100 rounded-xl p-1 w-full sm:w-auto">
-            <button type="button" data-filter="all"
-                    class="tab-btn px-3 py-1.5 rounded-lg text-gray-700 font-medium bg-white shadow-sm">
-              Все
-            </button>
-            <button type="button" data-filter="tasks"
-                    class="tab-btn px-3 py-1.5 rounded-lg text-gray-600">
-              Задачи
-            </button>
-            <button type="button" data-filter="announcements"
-                    class="tab-btn px-3 py-1.5 rounded-lg text-gray-600">
-              Объявления
-            </button>
-          </div>
-
-          <div class="relative w-full sm:w-64">
-            <i class="bi bi-search absolute left-3 top-2.5 text-gray-400"></i>
-            <input id="feed-search" type="text" placeholder="Поиск в ленте…"
-                   class="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-300 focus:ring-2 focus:ring-indigo-500">
-          </div>
-        </div>
-      </div>
-
-      {# Лента постов #}
-      {% set hasAny = (all_posts|length) %}
-      <div id="feed" class="space-y-3">
-        {% if hasAny %}
-          {% for item in all_posts %}
-            {% set is_ann = item.is_announcement %}
-            <article class="card card-hover p-4 feed-item"
-                     data-type="{{ 'announcements' if is_ann else 'tasks' }}"
-                     data-title="{{ (item.title or '')|lower }}"
-                     data-desc="{{ (item.description or '')|striptags|lower }}">
-              <div class="flex items-start justify-between gap-3">
-                <div class="flex items-start gap-3">
-                  <div class="mt-0.5">
-                    {% if is_ann %}
-                      <span class="chip bg-yellow-100 text-yellow-800"><i class="bi bi-megaphone-fill mr-1"></i>Объявление</span>
-                    {% else %}
-                      <span class="chip bg-purple-100 text-purple-800"><i class="bi bi-list-check mr-1"></i>Задача</span>
-                    {% endif %}
-                  </div>
-                  <div>
-                    <h4 class="text-base sm:text-lg font-semibold text-gray-900">{{ item.title }}</h4>
-                    {% if item.description %}
-                      <div class="prose prose-sm max-w-none text-gray-700 mt-1">{{ item.description | safe }}</div>
-                    {% endif %}
-                    <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                      {% if not is_ann %}
-                        <span class="chip bg-gray-100 text-gray-700">
-                          <i class="bi bi-hourglass-split mr-1"></i>
-                          Срок: {{ item.due_date.strftime('%d.%m.%Y') if item.due_date else 'не указан' }}
-                        </span>
-                      {% endif %}
-                      <span class="chip bg-gray-100 text-gray-700">
-                        <i class="bi bi-calendar-event mr-1"></i>
-                        Опубликовано: {{ item.created_at.strftime('%d.%m.%Y %H:%M') if item.created_at else '—' }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {% if current_user.is_trainer and group.trainer_id == current_user.id %}
-                <form action="{{ url_for('delete_group_task', task_id=item.id) }}" method="POST" class="shrink-0">
-                  <button type="submit" class="p-2 rounded-lg text-rose-500 hover:bg-rose-50" title="Удалить запись">
-                    <i class="bi bi-x-lg"></i>
-                  </button>
-                </form>
-                {% endif %}
+            <img src="{{ url_for('serve_file', filename=s.user.avatar.filename) if s.user.avatar else url_for('static','default-avatar.png') }}"
+                 class="w-8 h-8 rounded-full object-cover border border-gray-200">
+            <div>
+              <div class="text-sm font-bold text-gray-800">
+                {{ s.user.name }} {{ '(Вы)' if is_me else '' }}
               </div>
-            </article>
-          {% endfor %}
-        {% else %}
-          <div class="card p-10 text-center">
-            <i class="bi bi-card-text text-5xl text-gray-300 mb-3"></i>
-            <div class="text-xl font-semibold text-gray-700">Лента группы пуста</div>
-            <p class="text-gray-500 mt-2">
-              {% if current_user.is_trainer and group.trainer_id == current_user.id %}
-                Создайте первое объявление или задачу через форму выше.
-              {% else %}
-                Тренер пока не опубликовал записи. Как только появятся — вы увидите их здесь.
-              {% endif %}
-            </p>
-          </div>
-        {% endif %}
-      </div>
-    </section>
-
-    {# ---------- ПРАВАЯ КОЛОНКА (сайдбар) ---------- #}
-    <aside class="space-y-4">
-      <div class="card p-4">
-        <h3 class="font-semibold text-gray-800 mb-3">О группе</h3>
-        <div class="space-y-4">
-          <div><p class="text-sm italic text-gray-600">“{{ group.description or 'Без описания' }}”</p></div>
-          <div class="border-t pt-3">
-            <p class="text-xs text-gray-500 mb-1">Тренер</p>
-            <div class="flex items-center gap-2">
-              <img src="{{ url_for('serve_file', filename=group.trainer.avatar) if group.trainer and group.trainer.avatar else url_for('static', filename='default-avatar.png') }}"
-                   class="w-8 h-8 rounded-full object-cover" alt="Тренер">
-              <span class="text-sm font-semibold text-gray-800">{{ group.trainer.name if group.trainer else '—' }}</span>
             </div>
           </div>
 
-          <div>
-            <details class="group">
-              <summary class="cursor-pointer text-sm font-semibold text-gray-800 flex items-center justify-between">
-                Участники ({{ group.members|length }})
-                <i class="bi bi-chevron-down text-gray-400 group-open:rotate-180 transition"></i>
-              </summary>
-              <ul class="mt-2 max-h-40 overflow-auto space-y-1.5 pl-1">
-                {% for m in group.members %}
-                  <li class="flex items-center gap-2 text-sm">
-                    <img src="{{ url_for('serve_file', filename=m.user.avatar.filename) if m.user.avatar else url_for('static','default-avatar.png') }}"
-                         class="w-6 h-6 rounded-full object-cover" alt="">
-                    <span class="text-gray-700">{{ m.user.name }}</span>
-                    {% if m.user_id == current_user.id %}
-                      <span class="text-indigo-600 text-xs font-semibold">(Вы)</span>
-                    {% endif %}
-                  </li>
-                {% else %}
-                  <li class="text-xs text-gray-500 italic">Пока нет участников.</li>
-                {% endfor %}
-              </ul>
-            </details>
+          <div class="text-sm font-bold text-gray-600 bg-gray-100 px-2 py-1 rounded-lg">
+            {{ score }} pts
           </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
 
-          {% if not is_member and not (current_user.is_trainer and group.trainer_id == current_user.id) %}
-            <form action="{{ url_for('join_group', group_id=group.id) }}" method="POST">
-              <button type="submit" class="w-full px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700">
-                Присоединиться к группе
+  {# --- 3. ЛЕНТА (FEED) --- #}
+  <div class="space-y-6">
+
+    {% if current_user.is_trainer and group.trainer_id == current_user.id %}
+    <div class="card p-4">
+      <div class="flex gap-3">
+        <img src="{{ url_for('serve_file', filename=current_user.avatar.filename) if current_user.avatar else url_for('static','default-avatar.png') }}"
+             class="w-10 h-10 rounded-full object-cover">
+        <div class="flex-1">
+          <form id="create-post-form" onsubmit="submitPost(event)">
+            <textarea name="text" rows="2" placeholder="Что нового в команде, тренер?"
+                      class="w-full bg-gray-50 border-0 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
+
+            <div id="image-preview-container" class="hidden mt-2 relative w-fit">
+              <img id="image-preview" src="" class="h-20 rounded-lg border">
+              <button type="button" onclick="clearImage()" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow">&times;</button>
+            </div>
+
+            <div class="flex items-center justify-between mt-3">
+              <button type="button" onclick="document.getElementById('post-image-input').click()"
+                      class="text-gray-500 hover:text-indigo-600 transition text-sm flex items-center gap-1">
+                <i class="bi bi-image"></i> Фото
               </button>
-            </form>
-          {% elif is_member and not (current_user.is_trainer and group.trainer_id == current_user.id) %}
-            <form action="{{ url_for('leave_group', group_id=group.id) }}" method="POST">
-              <button type="submit" class="w-full px-4 py-2 rounded-xl bg-rose-600 text-white font-semibold hover:bg-rose-700">
-                Покинуть группу
+              <input type="file" name="image" id="post-image-input" class="hidden" accept="image/*" onchange="previewImage(this)">
+
+              <button type="submit" class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-700 transition">
+                Опубликовать
               </button>
-            </form>
-          {% endif %}
+            </div>
+          </form>
         </div>
       </div>
-
-      {% if group_member_stats %}
-      <div class="card p-4">
-        <h3 class="font-semibold text-gray-800 mb-3">Прогресс участников</h3>
-        <div class="space-y-3">
-          {% for s in group_member_stats %}
-            {% if not s.is_trainer_in_group %}
-              <div class="p-3 border rounded-xl">
-                <div class="flex items-center gap-3 mb-2">
-                  <img src="{{ url_for('serve_file', filename=s.user.avatar.filename) if s.user.avatar else url_for('static','default-avatar.png') }}"
-                       class="w-8 h-8 rounded-full object-cover" alt="">
-                  <span class="text-sm font-semibold text-gray-800">{{ s.user.name }}</span>
-                </div>
-
-                {% if s.fat_loss_progress %}
-                  {% set p = s.fat_loss_progress %}
-                  <div class="text-sm">
-                    <div class="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>Жир (кг)</span>
-                      <span>{{ "%.1f"|format(p.current_kg) }} / <b class="text-emerald-600">{{ "%.1f"|format(p.goal_kg) }}</b></span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-5 overflow-hidden">
-                      <div class="progress-bar-fill bg-indigo-600 h-5 flex items-center justify-center text-[11px] text-white font-bold"
-                           style="width: {{ p.percentage|int }}%">
-                        {{ p.percentage|int }}%
-                      </div>
-                    </div>
-                    <div class="text-right text-[11px] text-gray-500 mt-1">
-                      Старт: {{ "%.1f"|format(p.initial_kg) }} кг
-                    </div>
-                  </div>
-                {% else %}
-                  <div class="text-xs text-gray-500 bg-gray-50 p-2 rounded-lg text-center">
-                    Цель по снижению жира не установлена.
-                  </div>
-                {% endif %}
-              </div>
-            {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-    </aside>
-  </div>
-</div>
-
-{# -------- Lightbox -------- #}
-<div id="image-lightbox" onclick="closeLightbox()">
-  <span id="lightbox-close">&times;</span>
-  <img id="lightbox-image" src="" alt="Просмотр изображения">
-</div>
-
-{# -------- Плавающий чат -------- #}
-<button id="chat-toggle-button"
-        class="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-700 text-white w-16 h-16 rounded-full shadow-lg flex items-center justify-center z-40">
-  <i class="bi bi-chat-dots-fill text-2xl"></i>
-</button>
-
-<div id="chat-widget-container"
-     class="hidden fixed bottom-6 right-6 w-[92vw] max-w-sm h-[65vh] rounded-xl flex flex-col z-40 origin-bottom-right opacity-0 scale-95 chat-shell">
-  <div class="flex items-center justify-between p-3 chat-header">
-    <h3 class="font-semibold text-gray-800">Обсуждение в группе</h3>
-    <button id="chat-widget-close-button" class="text-gray-500 hover:text-gray-800 text-2xl leading-none" aria-label="Закрыть чаты">&times;</button>
-  </div>
-
-  <div id="chat-messages-container" class="flex-1 p-3 overflow-y-auto bg-white/60 space-y-1 flex flex-col">
-    <p id="chat-placeholder" class="text-gray-500 text-center italic text-xs m-auto">Загрузка сообщений…</p>
-  </div>
-
-  <div class="p-3 chat-footer">
-    {% if (current_user.is_trainer and group.trainer_id == current_user.id) or is_member %}
-    <form id="chat-form" action="{{ url_for('post_group_image_message', group_id=group.id) }}" method="POST" enctype="multipart/form-data">
-      <div class="flex items-center border border-gray-300 rounded-lg shadow-sm focus-within:ring-1 focus-within:ring-indigo-500 bg-white">
-        <textarea name="text" rows="1" placeholder="Сообщение…" class="flex-1 p-2 rounded-l-lg bg-transparent focus:outline-none text-sm resize-none"></textarea>
-        <button type="button" onclick="document.getElementById('image-upload-widget').click()" class="p-2 text-gray-500 hover:text-indigo-600" title="Прикрепить файл">
-          <i class="fas fa-paperclip text-base"></i>
-        </button>
-        <input id="image-upload-widget" type="file" name="image" class="hidden" accept="image/*">
-        <button type="submit" class="p-2 text-gray-600 hover:text-indigo-600" title="Отправить">
-          <i class="fas fa-paper-plane text-base"></i>
-        </button>
-      </div>
-      <span id="file-name-widget" class="block text-xs text-gray-500 mt-1 pl-1"></span>
-    </form>
-    {% else %}
-      <div class="text-center text-sm text-gray-500">Только участники могут писать в чат.</div>
+    </div>
     {% endif %}
+
+    <div id="feed-container" class="space-y-4">
+      <div class="text-center py-10">
+        <div class="animate-spin inline-block w-8 h-8 border-4 border-current border-t-transparent text-indigo-600 rounded-full" role="status"></div>
+        <p class="mt-2 text-gray-500 text-sm">Загрузка ленты...</p>
+      </div>
+    </div>
+
   </div>
+</div>
+
+{# --- Lightbox --- #}
+<div id="image-lightbox" onclick="closeLightbox()" class="fixed inset-0 z-50 hidden bg-black/90 flex items-center justify-center cursor-zoom-out p-4">
+  <img id="lightbox-image" src="" class="max-w-full max-h-full rounded-lg shadow-2xl">
 </div>
 
 <script>
-function escapeHtml(s){
-  return String(s || '').replace(/[&<>"']/g, m => (
-    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]
-  ));
-}
+  const GROUP_ID = {{ group.id }};
+  const CURRENT_USER_ID = {{ current_user.id }};
 
-/* Реакции */
-function likeMessage(messageId) {
-  fetch(`/group_message/${messageId}/react`, { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'} })
-    .then(r => r.json())
-    .then(d => {
-      if (!d.success) return;
-      const root = document.querySelector(`#message-${messageId}`);
-      if (!root) return;
-      let badge = root.querySelector('.reaction-display');
-      const column = root.querySelector('.msg-wrap .flex.flex-col');
-      if (d.new_like_count > 0) {
-        if (!badge && column) {
-          column.insertAdjacentHTML('beforeend', `
-            <div class="reaction-display mt-1 self-end">
-              <div class="bg-white border border-gray-200 rounded-full px-1.5 py-0.5 shadow-sm text-xs text-gray-600 flex items-center select-none">
-                <span class="reaction-icon text-red-500">👍</span>
-                <span class="reaction-count ml-0.5">${d.new_like_count}</span>
-              </div>
-            </div>
-          `);
-        } else if (badge) {
-          const countEl = badge.querySelector('.reaction-count');
-          const iconEl = badge.querySelector('.reaction-icon');
-          if (countEl) countEl.textContent = d.new_like_count;
-          if (iconEl) iconEl.classList.add('text-red-500');
-        }
-      } else {
-        if (badge) badge.remove();
+  // --- ЛОГИКА ЛИДЕРБОРДА ---
+  let lbExpanded = false;
+  function toggleLeaderboard() {
+    lbExpanded = !lbExpanded;
+    const rows = document.querySelectorAll('.leaderboard-row');
+    const btn = document.getElementById('lb-toggle-btn');
+
+    rows.forEach((row, index) => {
+      if (index >= 3) {
+        row.classList.toggle('hidden', !lbExpanded);
       }
     });
-}
-
-/* Рендер сообщения */
-function renderMessage(msg, last) {
-  const changeUser = !last || last.user.name !== msg.user.name || last.is_current_user !== msg.is_current_user;
-  const showAvatar = changeUser;
-  const justify = msg.is_current_user ? 'justify-end' : 'justify-start';
-  const rowDir = msg.is_current_user ? 'flex-row-reverse' : '';
-
-  const reactionHtml = (msg.reactions_count > 0) ? `
-    <div class="reaction-display mt-1 self-end">
-      <div class="bg-white border border-gray-200 rounded-full px-1.5 py-0.5 shadow-sm text-xs text-gray-600 flex items-center select-none">
-        <span class="reaction-icon ${msg.current_user_reacted ? 'text-red-500' : ''}">👍</span>
-        <span class="reaction-count ml-0.5">${msg.reactions_count}</span>
-      </div>
-    </div>` : '';
-
-  const contentHtml = msg.image_url
-    ? `<div class="rounded-xl overflow-hidden shadow-md cursor-zoom-in" onclick="openLightbox('${msg.image_url}')">
-         <img src="${msg.image_url}" class="chat-img" alt="">
-       </div>`
-    : `<div class="chat-bubble ${msg.is_current_user ? 'chat-bubble-me' : 'chat-bubble-other'}">${escapeHtml(msg.text)}</div>`;
-
-  return `
-    <div id="message-${msg.id}" class="w-full flex ${justify}">
-      <div ondblclick="likeMessage(${msg.id})" class="msg-wrap flex items-end gap-1.5 group relative ${rowDir}">
-        <div class="w-6 h-6 flex-shrink-0">
-          ${showAvatar ? `<img src="${msg.user.avatar_url}" class="w-full h-full rounded-full object-cover" alt="">` : ''}
-        </div>
-        <div class="flex flex-col ${msg.is_current_user ? 'items-end' : 'items-start'}">
-          ${(showAvatar && !msg.is_current_user) ? `<span class="text-[11px] text-gray-500 ml-2 mb-0.5">${escapeHtml(msg.user.name)}</span>` : ''}
-          ${contentHtml}
-          ${reactionHtml}
-        </div>
-      </div>
-    </div>`;
-}
-
-/* Фильтры ленты */
-document.addEventListener('DOMContentLoaded', () => {
-  const feed = document.getElementById('feed');
-  const tabs = document.querySelectorAll('.tab-btn');
-  const search = document.getElementById('feed-search');
-
-  function applyFilter() {
-    const active = document.querySelector('.tab-btn.bg-white')?.dataset.filter || 'all';
-    const q = (search?.value || '').trim().toLowerCase();
-    feed?.querySelectorAll('.feed-item').forEach(card => {
-      const type = card.dataset.type;
-      const hay = (card.dataset.title || '') + ' ' + (card.dataset.desc || '');
-      const okType = (active === 'all') || (type === active);
-      const okSearch = !q || hay.includes(q);
-      card.style.display = (okType && okSearch) ? '' : 'none';
-    });
+    btn.innerText = lbExpanded ? "Свернуть" : "Показать всех";
   }
 
-  tabs.forEach(b => {
-    b.addEventListener('click', () => {
-      tabs.forEach(x => x.classList.remove('bg-white','shadow-sm','text-gray-700','font-medium'));
-      b.classList.add('bg-white','shadow-sm','text-gray-700','font-medium');
-      applyFilter();
-    });
-  });
-  search?.addEventListener('input', applyFilter);
-  applyFilter();
-});
-
-/* Чат */
-document.addEventListener('DOMContentLoaded', function() {
-  const groupId = {{ group.id }};
-  let polling = null;
-  const messagesEl = document.getElementById('chat-messages-container');
-  const chatForm = document.getElementById('chat-form');
-
-  function refreshMessages() {
-    fetch(`/api/groups/${groupId}/messages`)
-      .then(r => r.json())
-      .then(list => {
-        messagesEl.innerHTML = '';
-        if (!Array.isArray(list) || list.length === 0) {
-          messagesEl.innerHTML = '<p class="text-gray-500 text-center italic text-xs m-auto">Сообщений пока нет.</p>';
-          return;
-        }
-        let last = null;
-        list.forEach(m => {
-          messagesEl.insertAdjacentHTML('beforeend', renderMessage(m, last));
-          last = m;
-        });
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-      });
-  }
-
-  if (chatForm) {
-    chatForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const fd = new FormData(chatForm);
-      const textEl = chatForm.querySelector('textarea');
-      const fileEl = chatForm.querySelector('input[type="file"]');
-      const fileNameSpan = document.getElementById('file-name-widget');
-
-      if (!textEl.value.trim() && !fileEl.value) return;
-
-      fetch(chatForm.action, { method:'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' }})
-        .then(r => r.json())
-        .then(d => {
-          if (!d.success) return alert(d.error || 'Не удалось отправить сообщение');
-          const ph = document.getElementById('chat-placeholder'); if (ph) ph.remove();
-          messagesEl.insertAdjacentHTML('beforeend', renderMessage(d.message, null));
-          messagesEl.scrollTop = messagesEl.scrollHeight;
-          textEl.value=''; fileEl.value=''; if(fileNameSpan) fileNameSpan.textContent='';
-        });
-    });
-  }
-
-  const upload = document.getElementById('image-upload-widget');
-  if (upload) upload.addEventListener('change', function() {
-    const s = document.getElementById('file-name-widget');
-    if (s) s.textContent = this.files[0] ? `Выбран файл: ${this.files[0].name}` : '';
-  });
-
-  const btnOpen = document.getElementById('chat-toggle-button');
-  const box = document.getElementById('chat-widget-container');
-  const btnClose = document.getElementById('chat-widget-close-button');
-
-  function toggleChat() {
-    const hidden = box.classList.contains('hidden');
-    if (hidden) {
-      box.classList.remove('hidden'); btnOpen.classList.add('hidden');
-      setTimeout(() => { box.classList.remove('opacity-0','scale-95'); }, 10);
-      refreshMessages(); polling = setInterval(refreshMessages, 5000);
-      setTimeout(() => { messagesEl.scrollTop = messagesEl.scrollHeight; }, 150);
-    } else {
-      box.classList.add('opacity-0','scale-95');
-      setTimeout(() => { box.classList.add('hidden'); btnOpen.classList.remove('hidden'); }, 220);
-      if (polling) clearInterval(polling);
+  // --- ЛОГИКА СОЗДАНИЯ ПОСТА ---
+  function previewImage(input) {
+    if (input.files && input.files[0]) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('image-preview').src = e.target.result;
+        document.getElementById('image-preview-container').classList.remove('hidden');
+      }
+      reader.readAsDataURL(input.files[0]);
     }
   }
 
-  btnOpen?.addEventListener('click', toggleChat);
-  btnClose?.addEventListener('click', toggleChat);
+  function clearImage() {
+    document.getElementById('post-image-input').value = '';
+    document.getElementById('image-preview-container').classList.add('hidden');
+  }
 
-  /* Лайтбокс */
-  const lightbox = document.getElementById('image-lightbox');
-  const lightboxImg = document.getElementById('lightbox-image');
-  window.openLightbox = (src) => { if(!lightbox || !lightboxImg) return; lightboxImg.src = src; lightbox.classList.add('visible'); }
-  window.closeLightbox = () => { if(!lightbox || !lightboxImg) return; lightbox.classList.remove('visible'); lightboxImg.src=''; }
-  lightbox?.addEventListener('click', (e) => { if (e.target === lightbox) window.closeLightbox(); });
+  async function submitPost(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
 
-  /* Esc закрывает лайтбокс или чат */
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    if (lightbox?.classList.contains('visible')) return window.closeLightbox();
-    if (!box?.classList.contains('hidden')) toggleChat();
-  });
-});
+    if (!formData.get('text').trim() && !formData.get('image').size) return;
+
+    try {
+      const res = await fetch(`/api/groups/${GROUP_ID}/post`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        form.reset();
+        clearImage();
+        loadFeed(); // Перезагрузить ленту
+      } else {
+        alert(data.error);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка отправки');
+    }
+  }
+
+  // --- ЛОГИКА ЛЕНТЫ (FEED) ---
+
+  // Загрузка
+  async function loadFeed() {
+    const container = document.getElementById('feed-container');
+    try {
+      const res = await fetch(`/api/groups/${GROUP_ID}/feed`);
+      const data = await res.json();
+
+      if (data.ok) {
+        renderFeed(data.feed);
+      }
+    } catch (err) {
+      container.innerHTML = `<div class="text-center text-red-500 py-10">Ошибка загрузки ленты</div>`;
+    }
+  }
+
+  // Рендеринг списка
+  function renderFeed(posts) {
+    const container = document.getElementById('feed-container');
+
+    if (posts.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-10 text-gray-400">
+          <i class="bi bi-chat-square-quote text-4xl mb-2 block"></i>
+          Пока новостей нет
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = posts.map(post => {
+      const isSystem = post.type === 'system';
+      const userAvatar = post.avatar ? `/files/${post.avatar}` : '/static/default-avatar.png';
+      const postImage = post.image ? `/files/${post.image}` : null;
+
+      // Блок комментариев
+      const commentsHtml = post.comments.map(c => `
+        <div class="flex gap-2 mb-3">
+          <img src="${c.avatar ? `/files/${c.avatar}` : '/static/default-avatar.png'}" class="comment-avatar shrink-0">
+          <div class="text-sm">
+            <div class="bg-gray-100 px-3 py-2 rounded-2xl rounded-tl-none inline-block">
+              <span class="font-bold text-gray-900 text-xs">${c.user_name}</span>
+              <p class="text-gray-800 mt-0.5">${c.text}</p>
+            </div>
+            <div class="text-[10px] text-gray-400 mt-1 ml-1">${c.timestamp}</div>
+          </div>
+        </div>
+      `).join('');
+
+      return `
+        <article class="card fade-in" id="post-${post.id}">
+          <div class="p-4">
+            <div class="flex items-center gap-3 mb-3">
+              ${isSystem
+                ? `<div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><i class="bi bi-trophy-fill"></i></div>`
+                : `<img src="${userAvatar}" class="feed-avatar">`
+              }
+              <div>
+                <div class="font-bold text-gray-900 text-sm flex items-center gap-2">
+                  ${post.user_name}
+                  ${!isSystem ? '<i class="bi bi-patch-check-fill text-indigo-500 text-xs"></i>' : ''}
+                </div>
+                <div class="text-xs text-gray-500">${post.timestamp}</div>
+              </div>
+            </div>
+
+            <div class="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">${post.text}</div>
+
+            ${postImage ? `<img src="${postImage}" class="post-img" onclick="openLightbox(this.src)">` : ''}
+
+            <div class="mt-4 flex items-center gap-4 border-t pt-3">
+              <button onclick="toggleLike(${post.id})" class="flex items-center gap-1.5 text-sm font-semibold transition ${post.is_liked ? 'text-red-500' : 'text-gray-500 hover:text-gray-700'}">
+                <i class="bi ${post.is_liked ? 'bi-heart-fill' : 'bi-heart'}"></i>
+                <span class="likes-count">${post.likes_count > 0 ? post.likes_count : 'Нравится'}</span>
+              </button>
+
+              <button onclick="focusComment(${post.id})" class="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-700 transition">
+                <i class="bi bi-chat"></i>
+                <span>${post.comments.length > 0 ? post.comments.length : 'Комментировать'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="comment-section p-4 ${post.comments.length === 0 ? '' : 'pt-2'}">
+            <div id="comments-list-${post.id}">
+              ${commentsHtml}
+            </div>
+
+            <form onsubmit="submitComment(event, ${post.id})" class="flex gap-2 mt-2">
+              <img src="{{ url_for('serve_file', filename=current_user.avatar.filename) if current_user.avatar else url_for('static','default-avatar.png') }}" class="w-8 h-8 rounded-full object-cover">
+              <div class="flex-1 relative">
+                <input type="text" name="text" placeholder="Написать комментарий..."
+                       class="w-full bg-white border border-gray-300 rounded-full py-1.5 px-4 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+                <button type="submit" class="absolute right-2 top-1.5 text-indigo-600 hover:text-indigo-800">
+                  <i class="bi bi-send-fill"></i>
+                </button>
+              </div>
+            </form>
+          </div>
+        </article>
+      `;
+    }).join('');
+  }
+
+  // Лайк
+  async function toggleLike(postId) {
+    // Оптимистичное обновление
+    const btn = document.querySelector(`#post-${postId} button`);
+    const icon = btn.querySelector('i');
+    const countSpan = btn.querySelector('.likes-count');
+
+    const isLiked = icon.classList.contains('bi-heart-fill');
+    let count = parseInt(countSpan.innerText) || 0;
+
+    // Toggle visual
+    if (isLiked) {
+      icon.classList.replace('bi-heart-fill', 'bi-heart');
+      btn.classList.replace('text-red-500', 'text-gray-500');
+      count = Math.max(0, count - 1);
+    } else {
+      icon.classList.replace('bi-heart', 'bi-heart-fill');
+      btn.classList.replace('text-gray-500', 'text-red-500');
+      count++;
+    }
+    countSpan.innerText = count > 0 ? count : 'Нравится';
+
+    // API call
+    try {
+      await fetch(`/group_message/${postId}/react`, { method: 'POST' });
+    } catch(e) {
+      console.error(e);
+      // Revert if error (omitted for brevity)
+    }
+  }
+
+  // Комментарий
+  function focusComment(postId) {
+    const input = document.querySelector(`#post-${postId} input[name="text"]`);
+    if (input) input.focus();
+  }
+
+  async function submitComment(e, postId) {
+    e.preventDefault();
+    const input = e.target.text;
+    const text = input.value.trim();
+    if (!text) return;
+
+    // Очистить инпут сразу
+    input.value = '';
+
+    try {
+      const res = await fetch(`/api/groups/${GROUP_ID}/reply`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ parent_id: postId, text: text })
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        // Добавить коммент в DOM
+        const c = data.comment;
+        const html = `
+          <div class="flex gap-2 mb-3 fade-in">
+            <img src="${c.avatar ? `/files/${c.avatar}` : '/static/default-avatar.png'}" class="comment-avatar shrink-0">
+            <div class="text-sm">
+              <div class="bg-gray-100 px-3 py-2 rounded-2xl rounded-tl-none inline-block">
+                <span class="font-bold text-gray-900 text-xs">${c.user_name}</span>
+                <p class="text-gray-800 mt-0.5">${c.text}</p>
+              </div>
+              <div class="text-[10px] text-gray-400 mt-1 ml-1">Только что</div>
+            </div>
+          </div>
+        `;
+        document.getElementById(`comments-list-${postId}`).insertAdjacentHTML('beforeend', html);
+      }
+    } catch(err) {
+      alert('Ошибка');
+    }
+  }
+
+  // Lightbox
+  function openLightbox(src) {
+    document.getElementById('lightbox-image').src = src;
+    document.getElementById('image-lightbox').classList.remove('hidden');
+  }
+  function closeLightbox() {
+    document.getElementById('image-lightbox').classList.add('hidden');
+  }
+
+  // INIT
+  document.addEventListener('DOMContentLoaded', loadFeed);
+
 </script>
 {% endblock %}
