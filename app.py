@@ -4475,27 +4475,23 @@ def api_my_group():
     # Сортируем по очкам
     members_data.sort(key=lambda x: x['score'], reverse=True)
 
-    # Превью чата
-    recent_messages = GroupMessage.query.filter_by(group_id=g.id) \
-        .order_by(GroupMessage.timestamp.desc()).limit(3).all()
+    # Сортируем по очкам
+    members_data.sort(key=lambda x: x['score'], reverse=True)
 
-    chat_preview = []
-    for msg in recent_messages:
-        chat_preview.append({
-            "user": msg.user.name,
-            "text": msg.text,
-            "time": msg.timestamp.strftime('%H:%M'),
-            "avatar": msg.user.avatar.filename if msg.user.avatar else None
-        })
+    # (Превью чата удаляем, так как теперь будет отдельный запрос на фид)
 
     group_data = {
         "id": g.id,
         "name": g.name,
         "description": g.description,
         "trainer_name": g.trainer.name if g.trainer else "Тренер",
+        "trainer_avatar": g.trainer.avatar.filename if g.trainer and g.trainer.avatar else None,
+        # Добавили аватар тренера
         "members": members_data,
-        "chat_preview": chat_preview
+        "is_trainer": (g.trainer_id == u.id)  # Флаг: я тренер этой группы?
     }
+
+    return jsonify({"ok": True, "group": group_data})
 
     return jsonify({"ok": True, "group": group_data})
 
