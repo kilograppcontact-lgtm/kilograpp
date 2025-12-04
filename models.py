@@ -419,6 +419,10 @@ class Training(db.Model):
     capacity = db.Column(db.Integer, default=10)
     is_public = db.Column(db.Boolean, default=True, server_default=expression.true())
 
+    # Флаги для групповых уведомлений (чтобы не спамить)
+    group_notified_1h = db.Column(db.Boolean, default=False, server_default=expression.false())
+    group_notified_start = db.Column(db.Boolean, default=False, server_default=expression.false())
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

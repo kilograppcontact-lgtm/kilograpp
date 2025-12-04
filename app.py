@@ -293,7 +293,9 @@ def _notification_worker():
     with app.app_context():
         while True:
             try:
-                now = datetime.now()
+                # --- ВРЕМЯ АЛМАТЫ ---
+                # Используем явную таймзону, чтобы не зависеть от времени сервера
+                now = datetime.now(ZoneInfo("Asia/Almaty"))
                 now_d = now.date()
                 target = now + timedelta(hours=1)
 
@@ -316,41 +318,74 @@ def _notification_worker():
                 ).all()
 
                 for t in trainings:
-                    rows = TrainingSignup.query.filter_by(training_id=t.id, notified_1h=False).all()
-                    for s in rows:
-                        u = db.session.get(User, s.user_id)
+                    # СЦЕНАРИЙ 1: Групповая тренировка (уведомляем ВСЕХ участников)
+                    if t.group_id is not None:
+                        if not t.group_notified_1h:
+                            # Берем всех участников группы
+                            members = GroupMember.query.filter_by(group_id=t.group_id).all()
 
-                        # --- 1. Проверяем ОБЩИЕ настройки ---
-                        if (not u or not getattr(u, "telegram_notify_enabled", True)  # (Оставляем старую настройку)
-                                or not getattr(u, "notify_trainings", True)):
-                            s.notified_1h = True  # Помечаем, чтобы не спамить
-                            continue
+                            # Также добавляем тренера, если он не участник, чтобы он тоже знал
+                            recipients_ids = {m.user_id for m in members}
+                            if t.trainer_id:
+                                recipients_ids.add(t.trainer_id)
 
-                        # --- 2. Формируем контент для PUSH ---
-                        when = t.start_time.strftime("%H:%M")
-                        date_s = t.date.strftime("%d.%m.%Y")
-                        title = "⏰ Напоминание о тренировке!"
-                        body = (
-                            f"Через 1 час: «{t.title or 'Онлайн-тренировка'}» с "
-                            f"{(t.trainer.name if t.trainer and getattr(t.trainer, 'name', None) else 'тренером')} в {when}."
-                        )
+                            for uid in recipients_ids:
+                                u = db.session.get(User, uid)
+                                if not u: continue
 
-                        # --- 3. Отправляем уведомление (БД + PUSH) ---
-                        # Импорт внутри функции для избежания циклических ссылок
-                        from notification_service import send_user_notification
+                                # Проверка настроек юзера (общая)
+                                settings = get_effective_user_settings(u)
+                                if not settings.notify_trainings: continue
 
-                        sent_mobile = send_user_notification(
-                            user_id=u.id,
-                            title=title,
-                            body=body,
-                            type='reminder',
-                            data={"training_id": str(t.id), "route": "/calendar"}
-                        )
-                        # Fallback на Telegram ПОЛНОСТЬЮ УБРАН
+                                from notification_service import send_user_notification
+                                send_user_notification(
+                                    user_id=u.id,
+                                    title="⏰ Скоро тренировка!",
+                                    body=f"Команда собирается через час: «{t.title}». Не опаздывайте!",
+                                    type='reminder',
+                                    data={"training_id": str(t.id), "route": "/squad"}  # Ведем в сквад
+                                )
 
-                        # --- 4. Помечаем как "уведомлено" ---
-                        if sent_mobile:
-                            s.notified_1h = True
+                            # Помечаем тренировку как "оповещенную"
+                            t.group_notified_1h = True
+
+                    # СЦЕНАРИЙ 2: Публичная тренировка (по старой логике Signups)
+                    else:
+                        rows = TrainingSignup.query.filter_by(training_id=t.id, notified_1h=False).all()
+                        for s in rows:
+                            u = db.session.get(User, s.user_id)
+
+                            # --- 1. Проверяем ОБЩИЕ настройки ---
+                            if (not u or not getattr(u, "telegram_notify_enabled", True)  # (Оставляем старую настройку)
+                                    or not getattr(u, "notify_trainings", True)):
+                                s.notified_1h = True  # Помечаем, чтобы не спамить
+                                continue
+
+                            # --- 2. Формируем контент для PUSH ---
+                            when = t.start_time.strftime("%H:%M")
+                            date_s = t.date.strftime("%d.%m.%Y")
+                            title = "⏰ Напоминание о тренировке!"
+                            body = (
+                                f"Через 1 час: «{t.title or 'Онлайн-тренировка'}» с "
+                                f"{(t.trainer.name if t.trainer and getattr(t.trainer, 'name', None) else 'тренером')} в {when}."
+                            )
+
+                            # --- 3. Отправляем уведомление (БД + PUSH) ---
+                            # Импорт внутри функции для избежания циклических ссылок
+                            from notification_service import send_user_notification
+
+                            sent_mobile = send_user_notification(
+                                user_id=u.id,
+                                title=title,
+                                body=body,
+                                type='reminder',
+                                data={"training_id": str(t.id), "route": "/calendar"}
+                            )
+                            # Fallback на Telegram ПОЛНОСТЬЮ УБРАН
+
+                            # --- 4. Помечаем как "уведомлено" ---
+                            if sent_mobile:
+                                s.notified_1h = True
                 startings = Training.query.filter(
                     Training.date == now.date(),
                     func.extract('hour', Training.start_time) == now.hour,
@@ -358,41 +393,66 @@ def _notification_worker():
                 ).all()
 
                 for t in startings:
-                    rows = TrainingSignup.query.filter_by(training_id=t.id).all()
-                    for s in rows:
-                        # пропускаем, если уже отмечали старт
-                        if getattr(s, "notified_start", False):
-                            continue
-                        u = db.session.get(User, s.user_id)
+                    # СЦЕНАРИЙ 1: Групповая
+                    if t.group_id is not None:
+                        if not t.group_notified_start:
+                            members = GroupMember.query.filter_by(group_id=t.group_id).all()
+                            recipients_ids = {m.user_id for m in members}
+                            if t.trainer_id: recipients_ids.add(t.trainer_id)
 
-                        # --- 1. Проверяем ОБЩИЕ настройки ---
-                        if (not u or not getattr(u, "telegram_notify_enabled", True)
-                                or not getattr(u, "notify_trainings", True)):
-                            s.notified_start = True  # Помечаем, чтобы не спамить
-                            continue
+                            for uid in recipients_ids:
+                                u = db.session.get(User, uid)
+                                if not u: continue
+                                settings = get_effective_user_settings(u)
+                                if not settings.notify_trainings: continue
 
-                        # --- 2. Формируем контент для PUSH ---
-                        when = t.start_time.strftime("%H:%M")
-                        date_s = t.date.strftime("%d.%m.%Y")
-                        title = "🏁 Тренировка начинается!"
-                        body = f"«{t.title or 'Онлайн-тренировка'}» началась. Тренер: {(t.trainer.name if t.trainer and getattr(t.trainer, 'name', None) else 'тренер')}."
+                                from notification_service import send_user_notification
+                                send_user_notification(
+                                    user_id=u.id,
+                                    title="🚀 Тренировка началась!",
+                                    body=f"Заходите в видео-чат: «{t.title}».",
+                                    type='info',
+                                    data={"training_id": str(t.id), "route": "/squad"}
+                                )
+                            t.group_notified_start = True
 
-                        # --- 3. Отправляем уведомление (БД + PUSH) ---
-                        from notification_service import send_user_notification
+                    # СЦЕНАРИЙ 2: Публичная
+                    else:
+                        rows = TrainingSignup.query.filter_by(training_id=t.id).all()
+                        for s in rows:
+                            # пропускаем, если уже отмечали старт
+                            if getattr(s, "notified_start", False):
+                                continue
+                            u = db.session.get(User, s.user_id)
 
-                        sent_mobile = send_user_notification(
-                            user_id=u.id,
-                            title=title,
-                            body=body,
-                            type='info',
-                            data={"training_id": str(t.id), "route": "/calendar"}
-                        )
+                            # --- 1. Проверяем ОБЩИЕ настройки ---
+                            if (not u or not getattr(u, "telegram_notify_enabled", True)
+                                    or not getattr(u, "notify_trainings", True)):
+                                s.notified_start = True  # Помечаем, чтобы не спамить
+                                continue
 
-                        # Fallback на Telegram ПОЛНОСТЬЮ УБРАН
+                            # --- 2. Формируем контент для PUSH ---
+                            when = t.start_time.strftime("%H:%M")
+                            date_s = t.date.strftime("%d.%m.%Y")
+                            title = "🏁 Тренировка начинается!"
+                            body = f"«{t.title or 'Онлайн-тренировка'}» началась. Тренер: {(t.trainer.name if t.trainer and getattr(t.trainer, 'name', None) else 'тренер')}."
 
-                        # --- 4. Помечаем как "уведомлено" ---
-                        if sent_mobile:
-                            s.notified_start = True
+                            # --- 3. Отправляем уведомление (БД + PUSH) ---
+                            from notification_service import send_user_notification
+
+                            sent_mobile = send_user_notification(
+                                user_id=u.id,
+                                title=title,
+                                body=body,
+                                type='info',
+                                data={"training_id": str(t.id), "route": "/calendar"}
+                            )
+
+                            # Fallback на Telegram ПОЛНОСТЬЮ УБРАН
+
+                            # --- 4. Помечаем как "уведомлено" ---
+                            if sent_mobile:
+                                s.notified_start = True
 
                 users = User.query.all()
                 for u in users:
@@ -4522,9 +4582,27 @@ def api_my_group():
 
     # (Превью чата удаляем, так как теперь будет отдельный запрос на фид)
 
+    # --- Ищем ближайшую будущую тренировку группы ---
+    next_training = Training.query.filter(
+        Training.group_id == g.id,
+        Training.date >= date.today()
+    ).order_by(Training.date, Training.start_time).all()
+
+    now = datetime.now()
+    next_training_iso = None
+
+    for t in next_training:
+        # Собираем полный datetime
+        dt = datetime.combine(t.date, t.start_time)
+        if dt > now:
+            next_training_iso = dt.isoformat()
+            break
+    # ------------------------------------------------
+
     group_data = {
         "id": g.id,
         "name": g.name,
+        "next_training_iso": next_training_iso,  # <-- НОВОЕ ПОЛЕ
         "description": g.description,
         "trainer_name": g.trainer.name if g.trainer else "Тренер",
         "trainer_avatar": g.trainer.avatar.filename if g.trainer and g.trainer.avatar else None,
