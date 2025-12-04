@@ -253,10 +253,22 @@ class GroupMessage(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     image_file = db.Column(db.String(200), nullable=True)
 
+    # --- НОВЫЕ ПОЛЯ ---
+    # Тип сообщения: 'post' (тренер), 'system' (достижение), 'comment' (ответ)
+    type = db.Column(db.String(20), default='post')
+    # Ссылка на родительский пост (если это комментарий)
+    parent_id = db.Column(db.Integer, db.ForeignKey('group_message.id'), nullable=True)
+    # ------------------
+
     group = db.relationship('Group', back_populates='messages')
     user = db.relationship('User')
-    reactions = db.relationship('MessageReaction', back_populates='message', cascade='all, delete-orphan')
 
+    # Связь с родительским сообщением и дочерними комментариями
+    replies = db.relationship('GroupMessage',
+                              backref=db.backref('parent', remote_side=[id]),
+                              cascade='all, delete-orphan')
+
+    reactions = db.relationship('MessageReaction', back_populates='message', cascade='all, delete-orphan')
 
 class MessageReaction(db.Model):
     __tablename__ = "message_reaction"
