@@ -155,6 +155,73 @@ def award_squad_points(user, category, base_points, description=None):
     db.session.add(log)
     return final_points
 
+
+def trigger_ai_feed_post(user, event_text):
+    """
+    Генерирует короткий AI-пост в группу пользователя о его достижении.
+    """
+    # 1. Определяем группу пользователя
+    group_id = None
+    if user.own_group:
+        group_id = user.own_group.id
+    else:
+        mem = GroupMember.query.filter_by(user_id=user.id).first()
+        if mem:
+            group_id = mem.group_id
+
+    if not group_id:
+        return
+
+    # 2. Генерируем текст через GPT-4o
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system",
+                 "content": "Ты — энергичный бот-комментатор в фитнес-группе. Твоя задача: написать ОЧЕНЬ КОРОТКОЕ (максимум 20 слов), хайповое и веселое поздравление участнику. Используй эмодзи (🔥, 🚀, 🏆). Пиши в третьем лице (называй по имени). Не будь скучным!"},
+                {"role": "user",
+                 "content": f"Напиши пост об этом событии: {event_text}. Пользователя зовут {user.name}."}
+            ],
+            max_tokens=100
+        )
+        content = completion.choices[0].message.content.strip()
+
+        # 3. Сохраняем сообщение в ленту (тип system)
+        msg = GroupMessage(
+            group_id=group_id,
+            user_id=user.id,
+            text=content,
+            type='system',  # Специальный тип для выделения в UI
+            timestamp=datetime.now(UTC)
+        )
+        db.session.add(msg)
+        db.session.commit()
+
+        # 4. Отправляем PUSH-уведомление соотрядцам
+        group = db.session.get(Group, group_id)
+        if group:
+            recipients = set([m.user_id for m in group.members])
+            if group.trainer_id:
+                recipients.add(group.trainer_id)
+
+            # Себе не отправляем
+            if user.id in recipients:
+                recipients.remove(user.id)
+
+            for rid in recipients:
+                from notification_service import send_user_notification
+                send_user_notification(
+                    user_id=rid,
+                    title=f"Новости отряда {group.name} ⚡️",
+                    body=content,
+                    type='info',
+                    data={"route": "/squad"}
+                )
+
+    except Exception as e:
+        print(f"Error triggering AI feed post: {e}")
+
+
 ADMIN_EMAIL = "admin@healthclub.local"
 
 def _magic_serializer():
@@ -1423,6 +1490,13 @@ def app_log_meal():
         # Пересчитываем стрик на основе дат
         recalculate_streak(user)
 
+        # --- AI FEED: STREAK MILESTONES ---
+        # Постим в ленту на 3, 7, 14, 21, 30... дней
+        s = user.current_streak
+        if s > 0 and (s == 3 or s % 7 == 0):
+            trigger_ai_feed_post(user, f"Участник держит стрик питания уже {s} дней подряд!")
+        # ----------------------------------
+
         # --- SQUAD SCORING: FOOD LOG (10 pts) ---
         # Проверяем, собраны ли все 3 основных приема пищи за сегодня
         today = date.today()
@@ -1444,12 +1518,28 @@ def app_log_meal():
                 award_squad_points(user, 'food_log', 10, "Дневной рацион выполнен")
         # ----------------------------------------
 
-        # --- ПРОВЕРКА АЧИВОК ---
-        check_all_achievements(user)
-        # -----------------------
+                # --- ПРОВЕРКА АЧИВОК ---
+                check_all_achievements(user)
 
-        db.session.commit()
-        return jsonify({"status": "ok"}), 200
+                # Проверяем, появились ли новые ачивки "только что" (созданы за последние 10 сек)
+                # Предполагаем, что у UserAchievement есть поле created_at (стандарт для models)
+                try:
+                    recent_achievements = UserAchievement.query.filter(
+                        UserAchievement.user_id == user.id,
+                        UserAchievement.created_at >= datetime.now(UTC) - timedelta(seconds=10)
+                    ).all()
+
+                    for ach in recent_achievements:
+                        meta = ACHIEVEMENTS_METADATA.get(ach.slug)
+                        if meta:
+                            title = meta['title']
+                            trigger_ai_feed_post(user, f"Получено новое достижение: «{title}»!")
+                except Exception:
+                    pass  # Если поля created_at нет или ошибка базы
+                # -----------------------
+
+                db.session.commit()
+                return jsonify({"status": "ok"}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -2725,10 +2815,37 @@ def confirm_analysis():
 
                         if not existing_score:
                             award_squad_points(user, 'healthy_progress', 30, "Здоровый прогресс веса")
-            # ------------------------------------------------
 
-        # 8. Сохраняем все
-        db.session.commit()
+                            # --- AI FEED: PROGRESS MILESTONES ---
+                            # Проверяем прогресс по жиросжиганию (если цель задана)
+                        if user.initial_body_analysis_id and user.fat_mass_goal:
+                            initial = db.session.get(BodyAnalysis, user.initial_body_analysis_id)
+                            if initial and initial.fat_mass and previous_analysis and previous_analysis.fat_mass and new_analysis_entry.fat_mass:
+
+                                start_fat = float(initial.fat_mass)
+                                goal_fat = float(user.fat_mass_goal)
+                                prev_fat = float(previous_analysis.fat_mass)
+                                curr_fat = float(new_analysis_entry.fat_mass)
+
+                                total_diff = start_fat - goal_fat
+
+                                if total_diff > 0:  # Цель - похудение
+                                    prev_progress = (start_fat - prev_fat) / total_diff
+                                    curr_progress = (start_fat - curr_fat) / total_diff
+
+                                    # Половина пути (переход через 50%)
+                                    if prev_progress < 0.5 and curr_progress >= 0.5:
+                                        trigger_ai_feed_post(user, "Прошел половину пути к своей цели по весу!")
+
+                                    # Цель достигнута (переход через 100%)
+                                    elif prev_progress < 1.0 and curr_progress >= 1.0:
+                                        trigger_ai_feed_post(user, "Полностью достиг своей цели по трансформации тела!")
+                            # ------------------------------------
+
+                            # ------------------------------------------------
+
+                            # 8. Сохраняем все
+                        db.session.commit()
 
         # 9. Возвращаем JSON с AI-комментарием
         return jsonify({"success": True, "ai_comment": ai_comment_text})
