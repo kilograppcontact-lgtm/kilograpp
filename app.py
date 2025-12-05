@@ -2495,11 +2495,17 @@ def upload_analysis():
         content = response_metrics.choices[0].message.content.strip()
         result = json.loads(content)
 
-        # Если рост не найден, пытаемся взять его из последнего анализа
-        if not result.get('height'):
-            last_analysis = BodyAnalysis.query.filter_by(user_id=user.id).order_by(BodyAnalysis.timestamp.desc()).first()
-            if last_analysis and last_analysis.height:
+        # Если данные не найдены, пытаемся взять их из последнего анализа (чтобы не сбрасывать прогресс в 0)
+        last_analysis = BodyAnalysis.query.filter_by(user_id=user.id).order_by(BodyAnalysis.timestamp.desc()).first()
+        if last_analysis:
+            if not result.get('height') and last_analysis.height:
                 result['height'] = last_analysis.height
+            if not result.get('weight') and last_analysis.weight:
+                result['weight'] = last_analysis.weight
+            if not result.get('fat_mass') and last_analysis.fat_mass:
+                result['fat_mass'] = last_analysis.fat_mass
+            if not result.get('muscle_mass') and last_analysis.muscle_mass:
+                result['muscle_mass'] = last_analysis.muscle_mass
 
         # Список обязательных полей
         required_keys = [
@@ -2670,11 +2676,15 @@ def confirm_analysis():
         new_analysis_entry.bmi = analysis_data.get('bmi')
         new_analysis_entry.fat_free_body_weight = analysis_data.get('fat_free_body_weight')
 
-        # 5. Обновляем цели пользователя (если они пришли)
+        # 5. Обновляем цели пользователя и согласие (если пришли)
         if 'fat_mass_goal' in analysis_data:
             user.fat_mass_goal = analysis_data.get('fat_mass_goal')
         if 'muscle_mass_goal' in analysis_data:
             user.muscle_mass_goal = analysis_data.get('muscle_mass_goal')
+
+        # Обновляем согласие на визуализацию, если передано
+        if 'face_consent' in analysis_data:
+            user.face_consent = bool(analysis_data.get('face_consent'))
 
         user.updated_at = datetime.now(UTC)
         db.session.add(new_analysis_entry)
