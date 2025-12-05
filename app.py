@@ -55,7 +55,7 @@ from shopping_bp import shopping_bp
 from user_bp import user_bp
 # Добавляем этот импорт, чтобы отправка работала в админке
 from notification_service import send_user_notification
-from models import BodyVisualization, SubscriptionApplication, EmailVerification
+from models import BodyVisualization, SubscriptionApplication, EmailVerification, SquadScoreLog
 from flask import send_file
 from io import BytesIO
 from progress_analyzer import generate_progress_commentary
@@ -121,6 +121,39 @@ def resize_image(filepath, max_size):
         print(f"ERROR: Failed to resize image {filepath}: {e}")
 
 
+def award_squad_points(user, category, base_points, description=None):
+    """
+    Начисляет баллы с учетом множителя стрика (x1.2 если стрик >= 3).
+    Возвращает начисленные баллы.
+    """
+    # Если пользователь не в активном скваде, баллы не идут в зачет лидерборда
+    # (но можно сохранять для личной статистики, здесь реализуем строгую привязку к группе)
+
+    # Определяем текущую группу
+    group_id = None
+    if user.own_group:
+        group_id = user.own_group.id
+    else:
+        membership = GroupMember.query.filter_by(user_id=user.id).first()
+        if membership:
+            group_id = membership.group_id
+
+    if not group_id:
+        return 0
+
+        # Множитель за стрик
+    multiplier = 1.2 if getattr(user, 'current_streak', 0) >= 3 else 1.0
+    final_points = int(base_points * multiplier)
+
+    log = SquadScoreLog(
+        user_id=user.id,
+        group_id=group_id,
+        points=final_points,
+        category=category,
+        description=description
+    )
+    db.session.add(log)
+    return final_points
 
 ADMIN_EMAIL = "admin@healthclub.local"
 
@@ -1390,6 +1423,27 @@ def app_log_meal():
         # Пересчитываем стрик на основе дат
         recalculate_streak(user)
 
+        # --- SQUAD SCORING: FOOD LOG (10 pts) ---
+        # Проверяем, собраны ли все 3 основных приема пищи за сегодня
+        today = date.today()
+        # Получаем типы, которые УЖЕ были в БД + тот, что добавляем сейчас
+        today_meals_query = db.session.query(MealLog.meal_type).filter_by(user_id=user.id, date=today).all()
+        logged_types = {m[0] for m in today_meals_query}
+        logged_types.add(data['meal_type'])
+
+        required = {'breakfast', 'lunch', 'dinner'}
+        if required.issubset(logged_types):
+            # Проверяем, не начисляли ли уже баллы за еду сегодня
+            existing_score = SquadScoreLog.query.filter(
+                SquadScoreLog.user_id == user.id,
+                SquadScoreLog.category == 'food_log',
+                func.date(SquadScoreLog.created_at) == today
+            ).first()
+
+            if not existing_score:
+                award_squad_points(user, 'food_log', 10, "Дневной рацион выполнен")
+        # ----------------------------------------
+
         # --- ПРОВЕРКА АЧИВОК ---
         check_all_achievements(user)
         # -----------------------
@@ -1399,7 +1453,6 @@ def app_log_meal():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-
 
 @app.route('/api/app/activity/today')
 @login_required
@@ -2640,6 +2693,30 @@ def confirm_analysis():
             if ai_comment_text:
                 new_analysis_entry.ai_comment = ai_comment_text
 
+            # --- SQUAD SCORING: HEALTHY PROGRESS (30 pts) ---
+            # Логика: потеря веса от 0.1% до 1.5%
+            if previous_analysis.weight and new_analysis_entry.weight:
+                prev_w = float(previous_analysis.weight)
+                curr_w = float(new_analysis_entry.weight)
+
+                if prev_w > 0:
+                    change_pct = (curr_w - prev_w) / prev_w
+                    # change_pct должен быть от -0.015 до -0.001
+                    if -0.015 <= change_pct <= -0.001:
+                        # Проверяем, не получал ли уже бонус на этой неделе
+                        today = date.today()
+                        start_of_week = today - timedelta(days=today.weekday())
+
+                        existing_score = SquadScoreLog.query.filter(
+                            SquadScoreLog.user_id == user.id,
+                            SquadScoreLog.category == 'healthy_progress',
+                            func.date(SquadScoreLog.created_at) >= start_of_week
+                        ).first()
+
+                        if not existing_score:
+                            award_squad_points(user, 'healthy_progress', 30, "Здоровый прогресс веса")
+            # ------------------------------------------------
+
         # 8. Сохраняем все
         db.session.commit()
 
@@ -2668,6 +2745,8 @@ def confirm_analysis():
     # 3. Если нет ни комментария, ни данных для подтверждения — отправляем в профиль
     flash("Нет данных для подтверждения. Пожалуйста, загрузите анализ снова.", "warning")
     return redirect(url_for('profile'))
+
+
 
 @app.route('/generate_telegram_code')
 def generate_telegram_code():
@@ -3401,6 +3480,39 @@ def subscription_status():
         return jsonify({"ok": False, "reason": "no_user"}), 401
 
     return jsonify({"ok": True, "has_subscription": bool(getattr(user, 'has_subscription', False))})
+
+
+@app.route('/api/trainings/<int:tid>/checkin', methods=['POST'])
+@login_required
+def checkin_training(tid):
+    user = get_current_user()
+    training = Training.query.get_or_404(tid)
+
+    # Валидация времени: чекин возможен за 30 мин до и 1.5 часа после начала
+    now = datetime.now()
+    # Учитываем, что training.date и training.start_time хранятся без таймзоны (считаем серверное время)
+    start_dt = datetime.combine(training.date, training.start_time)
+
+    # Разница в часах
+    time_diff = (now - start_dt).total_seconds() / 3600
+
+    # Окно: [-0.5 ... +1.5] часа от начала
+    if -0.5 <= time_diff <= 1.5:
+        # Проверяем дубликаты (чтобы не накручивали за одну тренировку)
+        existing = SquadScoreLog.query.filter_by(
+            user_id=user.id,
+            category='workout',
+            description=f"Training {tid}"
+        ).first()
+
+        if not existing:
+            points = award_squad_points(user, 'workout', 50, f"Training {tid}")
+            db.session.commit()
+            return jsonify({"ok": True, "points": points, "message": "Чекин успешен! +50 баллов"})
+        else:
+            return jsonify({"ok": True, "message": "Уже отмечено"})
+
+    return jsonify({"ok": False, "error": "Чекин доступен только во время тренировки"}), 400
 
 @app.route('/api/trainings/my')
 def api_trainings_my():
@@ -4565,22 +4677,28 @@ def api_my_group():
 
     # Собираем участников
     members_data = []
+
+    # Определяем начало текущей недели (понедельник)
+    today = date.today()
+    start_of_week = today - timedelta(days=today.weekday())
+
     for m in g.members:
+        # Считаем сумму баллов за текущую неделю
+        weekly_score = db.session.query(func.sum(SquadScoreLog.points)).filter(
+            SquadScoreLog.user_id == m.user.id,
+            func.date(SquadScoreLog.created_at) >= start_of_week
+        ).scalar() or 0
+
         members_data.append({
             "id": m.user.id,
             "name": m.user.name,
             "avatar_filename": m.user.avatar.filename if m.user.avatar else None,
             "is_me": (m.user.id == u.id),
-            "score": getattr(m.user, 'current_streak', 0) * 10  # Примерный скор
+            "score": int(weekly_score)  # Реальные баллы
         })
 
     # Сортируем по очкам
     members_data.sort(key=lambda x: x['score'], reverse=True)
-
-    # Сортируем по очкам
-    members_data.sort(key=lambda x: x['score'], reverse=True)
-
-    # (Превью чата удаляем, так как теперь будет отдельный запрос на фид)
 
     # --- Ищем ближайшую будущую тренировку группы ---
     next_training = Training.query.filter(
@@ -4602,19 +4720,15 @@ def api_my_group():
     group_data = {
         "id": g.id,
         "name": g.name,
-        "next_training_iso": next_training_iso,  # <-- НОВОЕ ПОЛЕ
+        "next_training_iso": next_training_iso,
         "description": g.description,
         "trainer_name": g.trainer.name if g.trainer else "Тренер",
         "trainer_avatar": g.trainer.avatar.filename if g.trainer and g.trainer.avatar else None,
-        # Добавили аватар тренера
         "members": members_data,
-        "is_trainer": (g.trainer_id == u.id)  # Флаг: я тренер этой группы?
+        "is_trainer": (g.trainer_id == u.id)
     }
 
     return jsonify({"ok": True, "group": group_data})
-
-    return jsonify({"ok": True, "group": group_data})
-
 
 # --- ADMIN ASSIGN UPDATE ---
 

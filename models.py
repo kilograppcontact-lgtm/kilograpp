@@ -300,6 +300,23 @@ class GroupTask(db.Model):
     trainer = db.relationship('User')
 
 
+class SquadScoreLog(db.Model):
+    __tablename__ = 'squad_score_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    # Группа, в которой состоял юзер на момент получения (для истории)
+    group_id = db.Column(db.Integer, db.ForeignKey('group.id'), nullable=True, index=True)
+
+    points = db.Column(db.Integer, nullable=False)
+    # Категории: 'food_log', 'workout', 'healthy_progress'
+    category = db.Column(db.String(50), nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship('User', backref=db.backref('score_logs', lazy='dynamic', cascade='all, delete-orphan'))
+    group = db.relationship('Group', backref=db.backref('score_logs', lazy='dynamic'))
+
 # ------------------ DIET / ACTIVITY ------------------
 
 class MealLog(db.Model):
