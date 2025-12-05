@@ -1483,7 +1483,8 @@ def app_log_meal():
     meal.protein = float(data.get('protein', 0.0))
     meal.fat = float(data.get('fat', 0.0))
     meal.carbs = float(data.get('carbs', 0.0))
-    meal.analysis = data.get('analysis', '')  # Если данные пришли из AI
+    # ИСПРАВЛЕНО: data.get возвращает None, если пришел json null. Добавляем 'or ""'
+    meal.analysis = data.get('analysis') or ""
 
     try:
         db.session.add(meal)
@@ -3515,7 +3516,7 @@ def log_meal():
         protein=float(protein),
         fat=float(fat),
         carbs=float(carbs),
-        analysis=raw
+        analysis=raw or ""  # ИСПРАВЛЕНО: Защита от Null
     )
 
     try:
