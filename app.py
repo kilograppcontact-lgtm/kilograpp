@@ -1487,27 +1487,24 @@ def app_log_meal():
 
     try:
         db.session.add(meal)
-        # Пересчитываем стрик на основе дат
+
+        # 1. Пересчитываем стрик
         recalculate_streak(user)
 
         # --- AI FEED: STREAK MILESTONES ---
-        # Постим в ленту на 3, 7, 14, 21, 30... дней
-        s = user.current_streak
+        s = getattr(user, 'current_streak', 0)
         if s > 0 and (s == 3 or s % 7 == 0):
             trigger_ai_feed_post(user, f"Участник держит стрик питания уже {s} дней подряд!")
         # ----------------------------------
 
         # --- SQUAD SCORING: FOOD LOG (10 pts) ---
-        # Проверяем, собраны ли все 3 основных приема пищи за сегодня
         today = date.today()
-        # Получаем типы, которые УЖЕ были в БД + тот, что добавляем сейчас
         today_meals_query = db.session.query(MealLog.meal_type).filter_by(user_id=user.id, date=today).all()
         logged_types = {m[0] for m in today_meals_query}
         logged_types.add(data['meal_type'])
 
         required = {'breakfast', 'lunch', 'dinner'}
         if required.issubset(logged_types):
-            # Проверяем, не начисляли ли уже баллы за еду сегодня
             existing_score = SquadScoreLog.query.filter(
                 SquadScoreLog.user_id == user.id,
                 SquadScoreLog.category == 'food_log',
@@ -1518,30 +1515,33 @@ def app_log_meal():
                 award_squad_points(user, 'food_log', 10, "Дневной рацион выполнен")
         # ----------------------------------------
 
-                # --- ПРОВЕРКА АЧИВОК ---
-                check_all_achievements(user)
+        # --- ПРОВЕРКА АЧИВОК ---
+        check_all_achievements(user)
 
-                # Проверяем, появились ли новые ачивки "только что" (созданы за последние 10 сек)
-                # Предполагаем, что у UserAchievement есть поле created_at (стандарт для models)
-                try:
-                    recent_achievements = UserAchievement.query.filter(
-                        UserAchievement.user_id == user.id,
-                        UserAchievement.created_at >= datetime.now(UTC) - timedelta(seconds=10)
-                    ).all()
+        # Проверяем новые ачивки для поста в ленту (только если поле created_at существует)
+        try:
+            if hasattr(UserAchievement, 'created_at'):
+                # Ищем ачивки, созданные за последние 15 секунд
+                recent_achievements = UserAchievement.query.filter(
+                    UserAchievement.user_id == user.id,
+                    UserAchievement.created_at >= datetime.now(UTC) - timedelta(seconds=15)
+                ).all()
 
-                    for ach in recent_achievements:
-                        meta = ACHIEVEMENTS_METADATA.get(ach.slug)
-                        if meta:
-                            title = meta['title']
-                            trigger_ai_feed_post(user, f"Получено новое достижение: «{title}»!")
-                except Exception:
-                    pass  # Если поля created_at нет или ошибка базы
-                # -----------------------
+                for ach in recent_achievements:
+                    meta = ACHIEVEMENTS_METADATA.get(ach.slug)
+                    if meta:
+                        title = meta['title']
+                        trigger_ai_feed_post(user, f"Получено новое достижение: «{title}»!")
+        except Exception as e:
+            print(f"Error posting achievement feed: {e}")
+        # -----------------------
 
-                db.session.commit()
-                return jsonify({"status": "ok"}), 200
+        db.session.commit()
+        return jsonify({"status": "ok"}), 200
+
     except Exception as e:
         db.session.rollback()
+        print(f"Error in log_meal: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/app/activity/today')
