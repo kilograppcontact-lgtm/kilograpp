@@ -151,7 +151,8 @@
         </div>
 
         <div class="flex flex-col" id="leaderboard-container">
-          {% for s in group_member_stats %}
+          {# ИСПРАВЛЕНИЕ: Фильтруем список, исключая тренера (if not s.is_trainer_in_group) #}
+          {% for s in group_member_stats if not s.is_trainer_in_group %}
             {# ВАЖНО: Тут мы пока используем заглушку для скора, т.к. бэкенд не передает SquadScoreLog.
                В реальной версии тут должен быть s.score #}
             {% set score = (loop.index * 100) % 250 + 50 %}
