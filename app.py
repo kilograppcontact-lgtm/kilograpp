@@ -1702,14 +1702,17 @@ def api_me():
             "id": u.id,
             "name": u.name,
             "email": u.email,
+            # --- ДОБАВЛЕНО: возвращаем дату рождения и аватар ---
+            "date_of_birth": u.date_of_birth.isoformat() if u.date_of_birth else None,
+            "avatar_filename": u.avatar.filename if u.avatar else None,
+            # ----------------------------------------------------
             "has_subscription": bool(getattr(u, 'has_subscription', False)),
             "is_trainer": bool(getattr(u, 'is_trainer', False)),
             'onboarding_complete': bool(getattr(u, 'onboarding_complete', False)),
-            'onboarding_v2_complete': bool(getattr(u, 'onboarding_v2_complete', False)),  # <-- НОВОЕ ПОЛЕ
-            'squad_status': getattr(u, 'squad_status', 'none')  # <--- НОВОЕ
+            'onboarding_v2_complete': bool(getattr(u, 'onboarding_v2_complete', False)),
+            'squad_status': getattr(u, 'squad_status', 'none')
         }
     })
-
 
 @app.post('/api/register')
 def api_register():
