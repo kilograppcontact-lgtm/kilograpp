@@ -1271,6 +1271,7 @@ def app_profile_data():
             pass
 
         latest_analysis_data = {
+            'timestamp': latest_analysis.timestamp.isoformat() if latest_analysis.timestamp else None,  # <--- ДОБАВЛЕНО
             'height': latest_analysis.height,
             'weight_kg': latest_analysis.weight,
             'muscle_mass_kg': latest_analysis.muscle_mass,
@@ -2743,12 +2744,22 @@ def confirm_analysis():
         if not analysis_data:
             return jsonify({"success": False, "error": "Нет данных от приложения"}), 400
 
-        # 2. Получаем предыдущий замер ДО сохранения нового
-        previous_analysis = BodyAnalysis.query.filter_by(user_id=user.id).order_by(
-            BodyAnalysis.timestamp.desc()).first()
+            # 2. Получаем предыдущий замер ДО сохранения нового
+            previous_analysis = BodyAnalysis.query.filter_by(user_id=user.id).order_by(
+                BodyAnalysis.timestamp.desc()).first()
 
-        # 3. Создаем и наполняем новую запись анализа
-        new_analysis_entry = BodyAnalysis(user_id=user.id, timestamp=datetime.now(UTC))
+            # --- ЗАЩИТА: Проверка 7 дней ---
+            if previous_analysis and previous_analysis.timestamp:
+                # Сравниваем даты (без времени), чтобы было честно по календарю, или с временем (как вам удобнее)
+                # Здесь строгая проверка по времени:
+                diff = datetime.now(UTC) - previous_analysis.timestamp
+                if diff.days < 7:
+                    return jsonify(
+                        {"success": False, "error": f"Следующий замер доступен через {7 - diff.days} дн."}), 400
+            # -------------------------------
+
+            # 3. Создаем и наполняем новую запись анализа
+            new_analysis_entry = BodyAnalysis(user_id=user.id, timestamp=datetime.now(UTC))
 
         # 4. (ВАЖНО) Переносим ВСЕ метрики из JSON в новую запись
         # (Используем .get(), чтобы избежать ошибок, если поле отсутствует)
