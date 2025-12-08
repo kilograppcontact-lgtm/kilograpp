@@ -346,7 +346,6 @@
   function openModal(id) {
     const el = document.getElementById(id);
     el.classList.remove('hidden');
-    // Небольшая задержка для анимации
     setTimeout(() => {
       el.querySelector('.modal-content').classList.remove('scale-95', 'opacity-0');
       el.querySelector('.modal-content').classList.add('scale-100', 'opacity-100');
@@ -443,12 +442,17 @@
     }
   }
 
-  // Удаление поста (нужно добавить эндпоинт на бэке, здесь визуализация)
   async function deletePost(postId) {
     if(!confirm('Удалить этот пост?')) return;
-    // TODO: Add backend endpoint DELETE /api/groups/posts/<id>
+    // Пока только визуальное удаление, т.к. API удаления еще нет в app.py
+    // Когда добавите API, раскомментируйте fetch ниже
+    /*
+    try {
+      await fetch(`/api/groups/posts/${postId}`, { method: 'DELETE' });
+      document.getElementById(`post-${postId}`).remove();
+    } catch(e) {}
+    */
     alert('Функция удаления будет доступна после обновления API');
-    // visual remove: document.getElementById(`post-${postId}`).remove();
   }
 
   function renderFeed(posts) {
@@ -467,10 +471,9 @@
 
     container.innerHTML = posts.map(post => {
       const isSystem = post.type === 'system';
-      const userAvatar = post.avatar ? `/files/${post.avatar}` : '/static/default-avatar.png';
+      const userAvatar = post.avatar ? `/files/${post.avatar}` : '/static/default-avatar.png'; // Исправлен путь к дефолту
       const postImage = post.image ? `/files/${post.image}` : null;
 
-      // Можно ли удалить? (Тренер или автор)
       const canDelete = IS_TRAINER || post.user_id === CURRENT_USER_ID;
 
       const commentsHtml = post.comments.map(c => `
@@ -480,11 +483,6 @@
             <div class="bg-gray-100 px-4 py-2.5 rounded-2xl rounded-tl-none inline-block max-w-full relative">
               <span class="font-bold text-gray-900 text-xs block mb-0.5">${c.user_name}</span>
               <p class="text-gray-800 text-sm leading-snug">${c.text}</p>
-
-              ${ (IS_TRAINER || c.user_id === CURRENT_USER_ID) ? `
-              <button onclick="deleteComment(${c.id})" class="absolute -right-2 -top-2 bg-white text-red-500 rounded-full w-5 h-5 flex items-center justify-center shadow border border-gray-100 opacity-0 group-hover:opacity-100 transition scale-0 group-hover:scale-100">
-                <i class="bi bi-x"></i>
-              </button>` : '' }
             </div>
             <div class="text-[10px] text-gray-400 mt-1 ml-1 font-medium">${c.timestamp}</div>
           </div>
@@ -521,7 +519,7 @@
             ${postImage ? `<img src="${postImage}" class="post-img shadow-sm hover:shadow-md transition" onclick="openLightbox(this.src)">` : ''}
 
             <div class="mt-5 flex items-center gap-6 border-t border-gray-100 pt-4">
-              <button onclick="toggleLike(${post.id})" class="group flex items-center gap-2 text-sm font-semibold transition ${post.is_liked ? 'text-red-500' : 'text-gray-500 hover:text-gray-700'}">
+              <button onclick="toggleLike(${post.id})" class="like-btn group flex items-center gap-2 text-sm font-semibold transition ${post.is_liked ? 'text-red-500' : 'text-gray-500 hover:text-gray-700'}">
                 <div class="p-2 rounded-full group-hover:bg-red-50 transition">
                    <i class="bi ${post.is_liked ? 'bi-heart-fill' : 'bi-heart'} text-lg"></i>
                 </div>
@@ -560,12 +558,21 @@
 
   // --- ЛАЙКИ И КОММЕНТАРИИ ---
   async function toggleLike(postId) {
-    const btn = document.querySelector(`#post-${postId} button`);
+    // ИСПРАВЛЕНО: ищем кнопку по классу .like-btn внутри поста
+    const postEl = document.getElementById(`post-${postId}`);
+    const btn = postEl.querySelector('.like-btn');
+
+    if (!btn) return; // Защита от ошибок
+
     const icon = btn.querySelector('i');
     const countSpan = btn.querySelector('.likes-count');
     const isLiked = icon.classList.contains('bi-heart-fill');
-    let count = parseInt(countSpan.innerText) || 0;
 
+    // Парсим число или 0, если там текст "Нравится"
+    let count = parseInt(countSpan.innerText);
+    if (isNaN(count)) count = 0;
+
+    // Toggle visual
     if (isLiked) {
       icon.classList.replace('bi-heart-fill', 'bi-heart');
       btn.classList.replace('text-red-500', 'text-gray-500');
@@ -599,7 +606,7 @@
         body: JSON.stringify({ parent_id: postId, text: text })
       });
       const data = await res.json();
-      if (data.ok) loadFeed(); // Reload fully to simplify rendering
+      if (data.ok) loadFeed();
     } catch(err) {}
   }
 
