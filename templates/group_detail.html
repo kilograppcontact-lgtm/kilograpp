@@ -314,23 +314,49 @@
         </button>
       </div>
 
-      <div class="overflow-y-auto p-2">
-        {% for m in group.members %}
+    <div class="overflow-y-auto p-2">
+        {# Используем group_member_stats, так как там есть флаг is_inactive #}
+        {% for s in group_member_stats if not s.is_trainer_in_group %}
           <div class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl group transition">
             <div class="flex items-center gap-3">
-              <img src="{{ url_for('serve_file', filename=m.user.avatar.filename) if m.user.avatar else url_for('static', filename='default-avatar.png') }}"
-                   class="w-10 h-10 rounded-full object-cover border border-gray-200">
+              <div class="relative">
+                <img src="{{ url_for('serve_file', filename=s.user.avatar.filename) if s.user.avatar else url_for('static', filename='default-avatar.png') }}"
+                     class="w-10 h-10 rounded-full object-cover border border-gray-200 {{ 'grayscale opacity-70' if s.is_inactive else '' }}">
+
+                {% if s.is_inactive %}
+                  <div class="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm" title="Неактивен {{ s.days_inactive }} дн.">
+                    <div class="w-4 h-4 bg-amber-100 rounded-full flex items-center justify-center text-[10px]">💤</div>
+                  </div>
+                {% endif %}
+              </div>
+
               <div>
-                <div class="font-bold text-gray-900 text-sm">{{ m.user.name }}</div>
-                <div class="text-xs text-gray-400">{{ m.user.email }}</div>
+                <div class="font-bold text-gray-900 text-sm flex items-center gap-2">
+                  {{ s.user.name }}
+                  {% if s.is_inactive %}
+                    <span class="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">СПИТ ({{ s.days_inactive }}д)</span>
+                  {% endif %}
+                </div>
+                <div class="text-xs text-gray-400">{{ s.user.email }}</div>
               </div>
             </div>
 
-            <form action="{{ url_for('admin_delete_user', user_id=m.user.id) }}" method="POST" onsubmit="return confirm('Удалить участника из группы?');">
-               <button type="submit" class="text-gray-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition" title="Исключить">
-                 <i class="bi bi-person-x-fill text-lg"></i>
-               </button>
-            </form>
+            <div class="flex items-center gap-2">
+                {# Кнопка "Напомнить" (только для тренера и только если юзер неактивен) #}
+                {% if s.is_inactive %}
+                  <button onclick="nudgeUser({{ s.user.id }}, this)"
+                          class="bg-amber-100 text-amber-600 hover:bg-amber-200 p-2 rounded-lg transition"
+                          title="Отправить напоминание">
+                    <i class="bi bi-bell-fill text-lg"></i>
+                  </button>
+                {% endif %}
+
+                <form action="{{ url_for('admin_delete_user', user_id=s.user.id) }}" method="POST" onsubmit="return confirm('Удалить участника из группы?');">
+                   <button type="submit" class="text-gray-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition" title="Исключить">
+                     <i class="bi bi-person-x-fill text-lg"></i>
+                   </button>
+                </form>
+            </div>
           </div>
         {% endfor %}
       </div>
@@ -591,6 +617,34 @@
   function focusComment(postId) {
     const input = document.querySelector(`#post-${postId} input[name="text"]`);
     if (input) input.focus();
+  }
+
+  // --- НАПОМИНАНИЯ (NUDGE) ---
+  async function nudgeUser(userId, btn) {
+    // Анимация нажатия
+    const originalContent = btn.innerHTML;
+    btn.innerHTML = '<div class="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full"></div>';
+    btn.disabled = true;
+
+    try {
+      const res = await fetch(`/api/groups/nudge/${userId}`, { method: 'POST' });
+      const data = await res.json();
+
+      if (data.ok) {
+        btn.classList.remove('bg-amber-100', 'text-amber-600', 'hover:bg-amber-200');
+        btn.classList.add('bg-green-100', 'text-green-600');
+        btn.innerHTML = '<i class="bi bi-check-lg text-lg"></i>';
+        // Возвращаем как было через 3 сек (опционально, или оставляем зеленым)
+      } else {
+        alert('Ошибка: ' + data.error);
+        btn.innerHTML = originalContent;
+        btn.disabled = false;
+      }
+    } catch (e) {
+      alert('Ошибка сети');
+      btn.innerHTML = originalContent;
+      btn.disabled = false;
+    }
   }
 
   async function submitComment(e, postId) {

@@ -4366,12 +4366,39 @@ def group_detail(group_id):
                     'current_kg': latest_analysis.fat_mass - estimated_fat_burned_kg
                 }
 
-            group_member_stats.append({
-                'user': member_user,
-                'fat_loss_progress': fat_loss_progress,
-                'is_trainer_in_group': (member_user.id == group.trainer_id)
-            })
-        group_member_stats.sort(key=lambda x: (not x['is_trainer_in_group'], x['user'].name.lower()))
+                # --- ПРОВЕРКА АКТИВНОСТИ (НОВОЕ) ---
+                # Ищем последнюю запись еды или активности
+                last_meal = MealLog.query.filter_by(user_id=member_user.id).order_by(MealLog.date.desc()).first()
+                last_act = Activity.query.filter_by(user_id=member_user.id).order_by(Activity.date.desc()).first()
+
+                last_active_date = None
+                if last_meal: last_active_date = last_meal.date
+                if last_act and (not last_active_date or last_act.date > last_active_date):
+                    last_active_date = last_act.date
+
+                is_inactive = False
+                days_inactive = 0
+
+                if last_active_date:
+                    days_inactive = (date.today() - last_active_date).days
+                    if days_inactive >= 3:  # Если не было активности 3 дня
+                        is_inactive = True
+                elif not member_user.is_trainer:  # Если вообще нет записей и это не тренер
+                    is_inactive = True
+                    days_inactive = 999
+                    # -----------------------------------
+
+                group_member_stats.append({
+                    'user': member_user,
+                    'fat_loss_progress': fat_loss_progress,
+                    'is_trainer_in_group': (member_user.id == group.trainer_id),
+                    'is_inactive': is_inactive,  # Флаг для шаблона
+                    'days_inactive': days_inactive
+                })
+
+                # Сортировка: Тренер -> Неактивные (чтобы были на виду в списке) -> Активные
+            group_member_stats.sort(
+                key=lambda x: (not x['is_trainer_in_group'], not x['is_inactive'], x['user'].name.lower()))
 
         # Получаем будущие тренировки группы
         upcoming_trainings = Training.query.filter(
@@ -4386,6 +4413,7 @@ def group_detail(group_id):
                                group_member_stats=group_member_stats,
                                all_posts=all_posts,
                                upcoming_trainings=upcoming_trainings)  # Передаем тренировки
+
 @app.route('/group_message/<int:message_id>/react', methods=['POST'])
 @login_required
 def react_to_message(message_id):
@@ -6789,6 +6817,50 @@ def create_group_training(group_id):
 
         # Можно отправить уведомление (код уведомления опущен для краткости)
 
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route('/api/groups/nudge/<int:user_id>', methods=['POST'])
+@login_required
+def nudge_member(user_id):
+    """Отправляет напоминание пользователю от тренера."""
+    target_user = db.session.get(User, user_id)
+    if not target_user:
+        return jsonify({"ok": False, "error": "User not found"}), 404
+
+    currentUser = get_current_user()
+
+    # Проверка прав (только тренер может пинать)
+    # (Упрощенно: если у текущего юзера есть группа и этот юзер в ней состоит, или если админ)
+    is_authorized = False
+    if currentUser.is_trainer and currentUser.own_group:
+        # Проверяем, состоит ли target_user в группе тренера
+        member = GroupMember.query.filter_by(group_id=currentUser.own_group.id, user_id=user_id).first()
+        if member:
+            is_authorized = True
+
+    if not is_authorized and not is_admin():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+
+    try:
+        # Отправляем PUSH
+        from notification_service import send_user_notification
+
+        # Разные тексты в зависимости от времени отсутствия (можно усложнить)
+        title = "Тренер ждет тебя! 👀"
+        body = f"{currentUser.name}: Давно не видел твоих отчетов. Как дела? Возвращайся в строй!"
+
+        send_user_notification(
+            user_id=user_id,
+            title=title,
+            body=body,
+            type='reminder',
+            data={"route": "/squad"}
+        )
+
+        # Опционально: Можно записать это в лог или чат, что тренер напомнил
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
