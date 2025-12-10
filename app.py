@@ -2050,43 +2050,44 @@ def onboarding_generate_visualization():
             body_age=metrics_current.get('body_age'),
             body_water=metrics_current.get('body_water'),
             protein_percentage=metrics_current.get('protein_percentage')
-            # source='onboarding_flow_v2' # <-- УДАЛЕНО: Этого поля нет в модели
         )
         db.session.add(analysis_from_metrics)
         db.session.flush()
 
-        # 4. Устанавливаем этот анализ как "начальный"
+        # 4. Устанавливаем этот анализ как "начальный", если его еще нет или если пользователь перепроходит онбординг
+        # (Можно обновлять всегда, чтобы актуализировать "Точку А" при повторном прохождении)
         if not user.initial_body_analysis_id:
             user.initial_body_analysis_id = analysis_from_metrics.id
-            db.session.commit()  # Сохраняем user.initial_body_analysis_id
 
-            # 5. Рассчитываем "Точку Б" (ТЗ 1.3)
-            # Дополняем `metrics_current` % жира и % мышц для `gemini_visualizer`
-            metrics_current["fat_pct"] = _compute_pct(metrics_current.get("fat_mass"), metrics_current.get("weight"))
-            metrics_current["muscle_pct"] = _compute_pct(
-                metrics_current.get("muscle_mass"),
-                metrics_current.get("weight")
-            )
-            metrics_current["height_cm"] = metrics_current.get('height')
-            metrics_current["weight_kg"] = metrics_current.get('weight')
-            metrics_current["sex"] = user.sex
+        # --- ВЫНЕСЕНО ИЗ БЛОКА IF ---
+        # 5. Рассчитываем "Точку Б" (ТЗ 1.3)
+        # Дополняем `metrics_current` % жира и % мышц для `gemini_visualizer`
+        metrics_current["fat_pct"] = _compute_pct(metrics_current.get("fat_mass"), metrics_current.get("weight"))
+        metrics_current["muscle_pct"] = _compute_pct(
+            metrics_current.get("muscle_mass"),
+            metrics_current.get("weight")
+        )
+        metrics_current["height_cm"] = metrics_current.get('height')
+        metrics_current["weight_kg"] = metrics_current.get('weight')
+        metrics_current["sex"] = user.sex
 
-            # Рассчитываем целевые
-            metrics_target = _calculate_target_metrics(user, metrics_current)
+        # Рассчитываем целевые
+        metrics_target = _calculate_target_metrics(user, metrics_current)
 
-            # --- FIX: Сохраняем рассчитанные цели в профиль пользователя ---
-            user.fat_mass_goal = metrics_target.get("fat_mass")
-            user.muscle_mass_goal = metrics_target.get("muscle_mass")
-            db.session.commit()
-            # --------------------------------------------------------------
+        # Сохраняем рассчитанные цели в профиль пользователя
+        user.fat_mass_goal = metrics_target.get("fat_mass")
+        user.muscle_mass_goal = metrics_target.get("muscle_mass")
 
-            # 6. Запускаем "nano banana" (gemini_visualizer.py)
+        db.session.commit()  # Коммитим изменения (ID анализа и цели)
+        # ----------------------------
+
+        # 6. Запускаем "nano banana" (gemini_visualizer.py)
         # Он принимает фото в полный рост (как "аватар") и 2 набора метрик
         before_filename, after_filename = generate_for_user(
             user=user,
             avatar_bytes=full_body_photo_bytes,
             metrics_current=metrics_current,
-            metrics_target=metrics_target
+            metrics_target=metrics_target  # Теперь переменная доступна всегда
         )
 
         # 7. Сохраняем запись о самой визуализации
@@ -2108,7 +2109,6 @@ def onboarding_generate_visualization():
         db.session.rollback()
         app.logger.error(f"[generate_visualization] FAILED: {e}", exc_info=True)
         return jsonify({"success": False, "error": f"Ошибка AI-генерации: {e}"}), 500
-
 
 @app.route('/api/onboarding/complete_flow', methods=['POST'])
 @login_required
