@@ -2588,9 +2588,6 @@ def complete_onboarding_tour():
 
     return jsonify({"success": True})
 
-# Убедитесь, что jsonify импортирован в начале файла: from flask import jsonify
-# (Замените вашу функцию upload_analysis на эту)
-
 @app.route('/upload_analysis', methods=['POST'])
 @login_required
 def upload_analysis():
@@ -2598,14 +2595,6 @@ def upload_analysis():
     user = get_current_user()
     if not file or not user:
         return jsonify({"success": False, "error": "Файл не загружен или вы не авторизованы."}), 400
-
-    # Временно сохраняем файл
-    filename = secure_filename(file.filename)
-    upload_folder = app.config.get('UPLOAD_FOLDER', 'uploads')
-    if not os.path.exists(upload_folder):
-        os.makedirs(upload_folder)
-    filepath = os.path.join(upload_folder, filename)
-    file.save(filepath)
 
     try:
         # Читаем байты напрямую из памяти (без сохранения на диск!)
@@ -2690,18 +2679,15 @@ def upload_analysis():
         goals_content = response_goals.choices[0].message.content.strip()
         goals_result = json.loads(goals_content)
         result.update(goals_result)
-        return jsonify({"success": True, "data": result}) # <-- СТАЛО
 
+        return jsonify({"success": True, "data": result})
 
     except Exception as e:
         print(f"!!! ОШИБКА В UPLOAD_ANALYSIS: {e}")
         return jsonify({
             "success": False,
-            "error": "Не удалось проанализировать изображение."
+            "error": "Не удалось проанализировать изображение. Пожалуйста, попробуйте другое фото или загрузите файл лучшего качества."
         }), 500
-    finally:
-        if os.path.exists(filepath):
-            os.remove(filepath)
 
 # ЗАМЕНИТЕ СТАРУЮ ФУНКЦИЮ meals НА ЭТУ
 @app.route("/meals", methods=["GET", "POST"])
