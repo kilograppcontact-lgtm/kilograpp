@@ -6913,9 +6913,9 @@ def nudge_member(user_id):
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
-    @app.route('/api/groups/messages/<int:message_id>/report', methods=['POST'])
-    @login_required
-    def report_message(message_id):
+@app.route('/api/groups/messages/<int:message_id>/report', methods=['POST'])
+@login_required
+def report_message(message_id):
         """Пожаловаться на сообщение. Сохраняет в БД и уведомляет тренера."""
         msg = db.session.get(GroupMessage, message_id)
         if not msg:
@@ -6946,9 +6946,9 @@ def nudge_member(user_id):
         db.session.commit()
         return jsonify({"ok": True, "message": "Жалоба отправлена"})
 
-    @app.route('/api/groups/<int:group_id>/weekly_stories', methods=['GET'])
-    @login_required
-    def get_weekly_stories(group_id):
+@app.route('/api/groups/<int:group_id>/weekly_stories', methods=['GET'])
+@login_required
+def get_weekly_stories(group_id):
         """Генерирует данные для Stories (итоги прошлой недели)."""
         group = db.session.get(Group, group_id)
         if not group:
