@@ -95,7 +95,7 @@ from models import (
     User, Subscription, Order, Group, GroupMember, GroupMessage, MessageReaction,
     GroupTask, MealLog, Activity, Diet, Training, TrainingSignup, BodyAnalysis,
     UserSettings, MealReminderLog, AuditLog, PromptTemplate, UploadedFile,
-    UserAchievement) # <-- Добавлено UserAchievement
+    UserAchievement, MessageReport)
 
 # <-- Добавьте это ниже импортов models
 from achievements_engine import check_all_achievements, ACHIEVEMENTS_METADATA
@@ -629,6 +629,54 @@ def _notification_worker():
                                     ):
                                         u.last_measurement_reminder_sent_at = now
                                         db.session.commit()
+
+                                        # --- ЕЖЕНЕДЕЛЬНЫЕ ИТОГИ (Понедельник 09:00 Алматы) ---
+                                    if now.weekday() == 0 and now.hour == 9 and now.minute == 0:
+                                        # 1. Определяем даты прошлой недели (Пн-Вс)
+                                        today_date = now.date()
+                                        start_of_last_week = today_date - timedelta(days=7)
+                                        end_of_last_week = today_date - timedelta(days=1)
+
+                                        # 2. Проходим по всем группам
+                                        groups = Group.query.all()
+                                        for group in groups:
+                                            # Считаем очки за прошлую неделю
+                                            scores = db.session.query(
+                                                SquadScoreLog.user_id,
+                                                func.sum(SquadScoreLog.points).label('total')
+                                            ).filter(
+                                                SquadScoreLog.group_id == group.id,
+                                                func.date(SquadScoreLog.created_at) >= start_of_last_week,
+                                                func.date(SquadScoreLog.created_at) <= end_of_last_week
+                                            ).group_by(SquadScoreLog.user_id).order_by(text('total DESC')).all()
+
+                                            # 3. Рассылаем уведомления Топ-3
+                                            for rank, (uid, score) in enumerate(scores[:3]):
+                                                place = rank + 1
+                                                medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+
+                                                title_msg = f"Итоги недели: {place} место! {medals.get(place, '')}"
+                                                body_msg = f"Так держать! Вы набрали {score} баллов и заняли {place} место в отряде {group.name}."
+
+                                                from notification_service import send_user_notification
+                                                send_user_notification(
+                                                    user_id=uid,
+                                                    title=title_msg,
+                                                    body=body_msg,
+                                                    type='success',
+                                                    data={"route": "/squad", "args": "stories"}  # Откроет сторис
+                                                )
+
+                                            # Уведомление для остальных (чтобы зашли посмотреть сторис)
+                                            for uid, score in scores[3:]:
+                                                from notification_service import send_user_notification
+                                                send_user_notification(
+                                                    user_id=uid,
+                                                    title="Итоги недели подведены 📊",
+                                                    body=f"Посмотрите результаты битвы в отряде {group.name}!",
+                                                    type='info',
+                                                    data={"route": "/squad", "args": "stories"}
+                                                )
 
                 db.session.commit()
             except Exception:
@@ -6865,12 +6913,117 @@ def nudge_member(user_id):
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
-if __name__ == '__main__':
-    # ЭТОТ БЛОК ВЫВЕДЕТ ВСЕ РАБОТАЮЩИЕ ССЫЛКИ В КОНСОЛЬ ПРИ ЗАПУСКЕ
-    print("=== Registered Routes ===")
-    for rule in app.url_map.iter_rules():
-        if 'check_user_email' in str(rule):
-            print(f"FOUND: {rule} -> {rule.endpoint}")
-    print("=========================")
+    @app.route('/api/groups/messages/<int:message_id>/report', methods=['POST'])
+    @login_required
+    def report_message(message_id):
+        """Пожаловаться на сообщение. Сохраняет в БД и уведомляет тренера."""
+        msg = db.session.get(GroupMessage, message_id)
+        if not msg:
+            return jsonify({"ok": False, "error": "Message not found"}), 404
 
+        reporter = get_current_user()
+
+        # 1. Сохраняем в БД
+        report = MessageReport(
+            message_id=msg.id,
+            reporter_id=reporter.id,
+            reason=request.json.get('reason', 'other')
+        )
+        db.session.add(report)
+
+        # 2. Уведомляем тренера группы
+        group = msg.group
+        if group.trainer_id and group.trainer_id != reporter.id:  # Не уведомляем, если тренер сам жалуется (странный кейс)
+            from notification_service import send_user_notification
+            send_user_notification(
+                user_id=group.trainer_id,
+                title="Жалоба на сообщение 🛡️",
+                body=f"{reporter.name} пожаловался на сообщение в чате.",
+                type='warning',
+                data={"route": "/squad"}
+            )
+
+        db.session.commit()
+        return jsonify({"ok": True, "message": "Жалоба отправлена"})
+
+    @app.route('/api/groups/<int:group_id>/weekly_stories', methods=['GET'])
+    @login_required
+    def get_weekly_stories(group_id):
+        """Генерирует данные для Stories (итоги прошлой недели)."""
+        group = db.session.get(Group, group_id)
+        if not group:
+            return jsonify({"ok": False, "error": "Group not found"}), 404
+
+        # 1. Расчет дат (Прошлая неделя Пн-Вс)
+        tz = ZoneInfo("Asia/Almaty")
+        now = datetime.now(tz)
+        today_date = now.date()
+
+        start_of_current_week = today_date - timedelta(days=today_date.weekday())
+        start_date = start_of_current_week - timedelta(days=7)
+        end_date = start_of_current_week - timedelta(days=1)
+
+        # 2. Топ по баллам
+        scores = db.session.query(
+            SquadScoreLog.user_id,
+            func.sum(SquadScoreLog.points).label('total')
+        ).filter(
+            SquadScoreLog.group_id == group_id,
+            func.date(SquadScoreLog.created_at) >= start_date,
+            func.date(SquadScoreLog.created_at) <= end_date
+        ).group_by(SquadScoreLog.user_id).order_by(text('total DESC')).limit(3).all()
+
+        if not scores:
+            return jsonify({"ok": True, "has_stories": False})
+
+        top_3 = []
+        for rank, (uid, total) in enumerate(scores):
+            u = db.session.get(User, uid)
+            if u:
+                top_3.append({
+                    "rank": rank + 1,
+                    "name": u.name,
+                    "avatar": u.avatar.filename if u.avatar else None,
+                    "score": int(total)
+                })
+
+        # 3. MVP (1 место)
+        mvp_data = top_3[0] if top_3 else None
+
+        # Формируем JSON-сценарий сторис
+        stories = []
+
+        # Слайд 1: Интро
+        stories.append({
+            "type": "intro",
+            "title": "Итоги недели",
+            "subtitle": f"{start_date.strftime('%d.%m')} — {end_date.strftime('%d.%m')}",
+            "bg_color": "0xFF4F46E5"
+        })
+
+        # Слайд 2: Лидерборд
+        if top_3:
+            stories.append({
+                "type": "leaderboard",
+                "title": "Лидеры гонки 🏆",
+                "data": top_3,
+                "bg_color": "0xFF0F172A"
+            })
+
+        # Слайд 3: MVP
+        if mvp_data:
+            stories.append({
+                "type": "mvp",
+                "title": "MVP Недели 🔥",
+                "user": mvp_data,
+                "bg_color": "0xFFFF5722"
+            })
+
+        return jsonify({
+            "ok": True,
+            "has_stories": True,
+            "stories": stories
+        })
+
+if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

@@ -733,6 +733,14 @@ class Notification(db.Model):
             "created_at": self.created_at.isoformat()
         }
 
+class MessageReport(db.Model):
+        __tablename__ = "message_reports"
+
+        id = db.Column(db.Integer, primary_key=True)
+        message_id = db.Column(db.Integer, db.ForeignKey('group_message.id'), nullable=False)
+        reporter_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+        reason = db.Column(db.String(50), default='other')
+        created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # ------------------ AUTO-DEFAULTS HOOK ------------------
 
 
