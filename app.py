@@ -10,6 +10,7 @@ from functools import wraps
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 from sqlalchemy import or_ # <--- Добавьте это в импорты sqlalchemy
+import tempfile  # Добавить в импорты вверху файла
 
 from dotenv import load_dotenv
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -2607,8 +2608,9 @@ def upload_analysis():
     file.save(filepath)
 
     try:
-        with open(filepath, "rb") as image_file:
-            base64_image = base64.b64encode(image_file.read()).decode("utf-8")
+        # Читаем байты напрямую из памяти (без сохранения на диск!)
+        file_bytes = file.read()
+        base64_image = base64.b64encode(file_bytes).decode("utf-8")
 
         # --- ШАГ 1: Извлечение данных с изображения ---
         response_metrics = client.chat.completions.create(
@@ -2688,18 +2690,14 @@ def upload_analysis():
         goals_content = response_goals.choices[0].message.content.strip()
         goals_result = json.loads(goals_content)
         result.update(goals_result)
-
-        # --- ИЗМЕНЕНИЕ ДЛЯ FLUTTER ---
-        # session['temp_analysis'] = result # <-- БЫЛО
-        # return jsonify({"success": True, "redirect_url": url_for('confirm_analysis')}) # <-- БЫЛО
-
         return jsonify({"success": True, "data": result}) # <-- СТАЛО
+
 
     except Exception as e:
         print(f"!!! ОШИБКА В UPLOAD_ANALYSIS: {e}")
         return jsonify({
             "success": False,
-            "error": "Не удалось проанализировать изображение. Пожалуйста, попробуйте другое фото или загрузите файл лучшего качества."
+            "error": "Не удалось проанализировать изображение."
         }), 500
     finally:
         if os.path.exists(filepath):
