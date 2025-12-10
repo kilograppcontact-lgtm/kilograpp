@@ -30,7 +30,8 @@
     jobs: "{{ url_for('admin_jobs') }}",
     prompts: "{{ url_for('admin_prompts') }}",
     broadcast: "{{ url_for('admin_broadcast') }}",
-    audit: "{{ url_for('admin_audit') }}"
+    audit: "{{ url_for('admin_audit') }}",
+    reports: "{{ url_for('admin_reports') }}"
   };
 </script>
 
@@ -54,6 +55,7 @@
       <a :href="urls.jobs" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700">⏱ Планировщик</a>
       <a :href="urls.prompts" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 text-white hover:bg-purple-700">🧩 Промпты</a>
       <a :href="urls.broadcast" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">📣 Рассылка</a>
+      <a :href="urls.reports" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700">🛡️ Жалобы</a>
       <a :href="urls.audit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-600 text-white hover:bg-gray-700">📜 Аудит</a>
     </div>
   </div>

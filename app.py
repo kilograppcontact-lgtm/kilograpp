@@ -6203,6 +6203,73 @@ def admin_audit():
     logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(200).all()
     return render_template("admin_audit.html", logs=logs)
 
+
+# ===== ADMIN: Жалобы (Reports) =====
+
+@app.route("/admin/reports")
+@admin_required
+def admin_reports():
+    # Загружаем жалобы с подгрузкой связанных данных
+    reports = MessageReport.query.options(
+        subqueryload(MessageReport.message).subqueryload(GroupMessage.user),
+        subqueryload(MessageReport.reporter)
+    ).order_by(MessageReport.created_at.desc()).all()
+
+    data = []
+    for r in reports:
+        # Пропускаем, если сообщение уже удалено
+        if not r.message:
+            # Можно удалять "сироту" из базы
+            db.session.delete(r)
+            continue
+
+        data.append({
+            "id": r.id,
+            "reason": r.reason,
+            "created_at": r.created_at.strftime('%Y-%m-%d %H:%M'),
+            "reporter": r.reporter.name if r.reporter else "Unknown",
+            "sender": r.message.user.name if r.message.user else "Unknown",
+            "sender_id": r.message.user_id if r.message.user else None,
+            "text": r.message.text,
+            "image": url_for('serve_file', filename=r.message.image_file) if r.message.image_file else None
+        })
+
+    # Коммитим удаление сирот, если были
+    db.session.commit()
+
+    return render_template("admin_reports.html", reports=data)
+
+
+@app.route("/admin/reports/<int:rid>/resolve", methods=["POST"])
+@admin_required
+def admin_report_resolve(rid):
+    r = db.session.get(MessageReport, rid)
+    if not r: abort(404)
+
+    action = request.form.get("action")  # 'delete_msg' | 'dismiss'
+
+    if action == 'delete_msg':
+        msg = r.message
+        if msg:
+            # Удаляем сообщение и саму жалобу
+            db.session.delete(msg)
+            db.session.delete(r)
+            flash("Сообщение удалено, жалоба закрыта.", "success")
+            log_audit("mod_delete_msg", "GroupMessage", msg.id, new={"reason": r.reason})
+        else:
+            db.session.delete(r)
+            flash("Сообщение уже было удалено.", "warning")
+
+    elif action == 'dismiss':
+        # Удаляем только жалобу
+        db.session.delete(r)
+        flash("Жалоба отклонена.", "info")
+        log_audit("mod_dismiss_report", "MessageReport", rid)
+
+    db.session.commit()
+    return redirect(url_for("admin_reports"))
+
+
 # регистрация блюпринта (добавь после определения маршрутов)
 app.register_blueprint(bp)
 app.register_blueprint(shopping_bp, url_prefix="/shopping")
