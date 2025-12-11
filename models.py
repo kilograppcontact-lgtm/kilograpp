@@ -750,6 +750,19 @@ class MessageReport(db.Model):
     # Рекомендую также добавить это, чтобы можно было делать report.reporter (узнать, кто пожаловался)
     reporter = db.relationship('User', foreign_keys=[reporter_id])
 
+
+class AnalyticsEvent(db.Model):
+    __tablename__ = "analytics_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
+    event_type = db.Column(db.String(50), nullable=False, index=True)  # например: 'signup', 'onboarding_step_1'
+    event_data = db.Column(db.JSON, nullable=True)  # Доп. данные (например, success: true/false)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship('User', backref=db.backref('analytics_events', lazy=True))
+
+
 @event.listens_for(User, "after_insert")
 def create_default_settings(mapper, connection, target):
     """

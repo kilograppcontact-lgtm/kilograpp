@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-6">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold">Аналитика приложения</h1>
+        <a href="{{ url_for('admin_dashboard') }}" class="text-indigo-600 hover:text-indigo-800">← Назад</a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white p-6 rounded-xl shadow">
+            <h3 class="text-sm font-medium text-gray-500">Просмотры Paywall</h3>
+            <p class="text-3xl font-bold text-gray-900 mt-2">{{ paywall_views }}</p>
+        </div>
+        <div class="bg-white p-6 rounded-xl shadow">
+            <h3 class="text-sm font-medium text-gray-500">Создано заявок</h3>
+            <p class="text-3xl font-bold text-indigo-600 mt-2">{{ applications }}</p>
+        </div>
+        <div class="bg-white p-6 rounded-xl shadow">
+            <h3 class="text-sm font-medium text-gray-500">Конверсия в заявку</h3>
+            <p class="text-3xl font-bold text-green-600 mt-2">
+                {% if paywall_views > 0 %}
+                    {{ (applications / paywall_views * 100) | round(1) }}%
+                {% else %}
+                    0%
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div class="bg-white p-6 rounded-xl shadow">
+            <h3 class="text-lg font-bold mb-4">Воронка Онбординга (Уникальные юзеры)</h3>
+            <canvas id="funnelChart"></canvas>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow">
+            <h3 class="text-lg font-bold mb-4">Новые регистрации (14 дней)</h3>
+            <canvas id="regChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Воронка
+    const funnelCtx = document.getElementById('funnelChart').getContext('2d');
+    new Chart(funnelCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ funnel_steps | safe }},
+            datasets: [{
+                label: 'Пользователи',
+                data: {{ funnel_data | safe }},
+                backgroundColor: [
+                    'rgba(99, 102, 241, 0.8)', // Indigo
+                    'rgba(167, 139, 250, 0.8)',
+                    'rgba(236, 72, 153, 0.8)',
+                    'rgba(244, 63, 94, 0.8)',
+                    'rgba(16, 185, 129, 0.8)'  // Green
+                ],
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y', // Горизонтальный бар
+            responsive: true,
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+
+    // Регистрации
+    const regCtx = document.getElementById('regChart').getContext('2d');
+    new Chart(regCtx, {
+        type: 'line',
+        data: {
+            labels: {{ dates | safe }},
+            datasets: [{
+                label: 'Регистрации',
+                data: {{ reg_counts | safe }},
+                borderColor: 'rgb(79, 70, 229)',
+                backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+        }
+    });
+</script>
+{% endblock %}

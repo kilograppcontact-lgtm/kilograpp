@@ -100,7 +100,7 @@ from models import (
     User, Subscription, Order, Group, GroupMember, GroupMessage, MessageReaction,
     GroupTask, MealLog, Activity, Diet, Training, TrainingSignup, BodyAnalysis,
     UserSettings, MealReminderLog, AuditLog, PromptTemplate, UploadedFile,
-    UserAchievement, MessageReport)
+    UserAchievement, MessageReport, AnalyticsEvent)
 
 # <-- Добавьте это ниже импортов models
 from achievements_engine import check_all_achievements, ACHIEVEMENTS_METADATA
@@ -251,6 +251,24 @@ def log_audit(action: str, entity: str, entity_id: str, old=None, new=None):
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+def track_event(event_type, user_id=None, data=None):
+        """Сохраняет событие аналитики в БД."""
+        try:
+            if not user_id and session.get('user_id'):
+                user_id = session.get('user_id')
+
+            event = AnalyticsEvent(
+                user_id=user_id,
+                event_type=event_type,
+                event_data=data or {}
+            )
+            db.session.add(event)
+            db.session.commit()
+        except Exception as e:
+            print(f"Analytics Error: {e}")
+            # Не роняем основной поток из-за ошибки аналитики
+            db.session.rollback()
 
 def login_required(f):
     @wraps(f)
@@ -1915,6 +1933,8 @@ def api_register_v2():
                     "sex": sex
                 }
             ))
+            # INTERNAL ANALYTICS
+            track_event('signup_completed', user.id, {"method": "email", "sex": sex})
         except Exception as e:
             print(f"Amplitude error: {e}")
 
@@ -1998,10 +2018,12 @@ def analyze_scales_photo():
                 "error": "Не удалось распознать данные на фото. Попробуйте сделать более четкий снимок."
             }), 400
 
-        # Возвращаем JSON с метриками (какие-то поля могут быть null)
-        return jsonify({"success": True, "metrics": result_metrics})
+             # Возвращаем JSON с метриками (какие-то поля могут быть null)
+             track_event('scales_analyzed', user.id, {"success": True})
+             return jsonify({"success": True, "metrics": result_metrics})
 
     except Exception as e:
+        track_event('scales_analyzed_error', user.id, {"error": str(e)})
         return jsonify({"success": False, "error": f"Ошибка AI-анализа: {e}"}), 500
 
 def _calculate_target_metrics(user: User, metrics_current: dict) -> dict:
@@ -2132,6 +2154,8 @@ def onboarding_generate_visualization():
             metrics_target=metrics_target
         )
 
+        track_event('visualization_generated', user.id)
+
         return jsonify({
             "success": True,
             "before_photo_url": url_for('serve_file', filename=before_filename),
@@ -2156,6 +2180,7 @@ def complete_onboarding_flow():
         # (Также устанавливаем старый флаг для совместимости с KiloShell)
         user.onboarding_complete = True
         db.session.commit()
+        track_event('onboarding_finished', user.id)
         return jsonify({"success": True})
     except Exception as e:
         db.session.rollback()
@@ -2944,6 +2969,8 @@ def confirm_analysis():
                 except Exception as e:
                     print(f"Amplitude error: {e}")
 
+                track_event('analysis_confirmed', user.id,
+                            {"is_initial": (user.initial_body_analysis_id == new_analysis_entry.id)})
                 return jsonify({"success": True, "ai_comment": ai_comment_text})
 
             # --- ЛОГИКА GET-ЗАПРОСА (Для Веб-версии) ---
@@ -5224,6 +5251,7 @@ def create_application():
         db.session.add(new_app)
         db.session.commit()
 
+        track_event('application_created', u.id)
         return jsonify(success=True, message="Ваша заявка принята, мы скоро с вами свяжемся.")
 
     except Exception as e:
@@ -5435,6 +5463,9 @@ def deficit_history():
 
 @app.route("/purchase")
 def purchase_page():
+    user_id = session.get('user_id')
+    if user_id:
+        track_event('paywall_viewed', user_id)
     bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "kilograpptestbot")
     return render_template("purchase.html", bot_username=bot_username)
 
@@ -6346,6 +6377,60 @@ def admin_report_resolve(rid):
 
     db.session.commit()
     return redirect(url_for("admin_reports"))
+
+
+@app.route("/admin/analytics")
+@admin_required
+def admin_analytics_page():
+    # 1. Воронка онбординга (за всё время или за последние 30 дней)
+    # Порядок событий: signup_completed -> scales_analyzed -> analysis_confirmed -> visualization_generated -> onboarding_finished
+
+    funnel_steps = [
+        'signup_completed',
+        'scales_analyzed',
+        'analysis_confirmed',
+        'visualization_generated',
+        'onboarding_finished'
+    ]
+
+    # Считаем уникальных пользователей на каждом этапе
+    funnel_data = []
+    for step in funnel_steps:
+        count = db.session.query(func.count(func.distinct(AnalyticsEvent.user_id))) \
+            .filter(AnalyticsEvent.event_type == step).scalar()
+        funnel_data.append(count)
+
+    # 2. Динамика регистраций за 14 дней
+    today = date.today()
+    dates = []
+    reg_counts = []
+
+    for i in range(13, -1, -1):
+        d = today - timedelta(days=i)
+        d_next = d + timedelta(days=1)
+        cnt = db.session.query(func.count(AnalyticsEvent.id)).filter(
+            AnalyticsEvent.event_type == 'signup_completed',
+            AnalyticsEvent.created_at >= d,
+            AnalyticsEvent.created_at < d_next
+        ).scalar()
+        dates.append(d.strftime("%d.%m"))
+        reg_counts.append(cnt)
+
+    # 3. Активность (просмотр пейволла vs заявки)
+    paywall_views = db.session.query(func.count(AnalyticsEvent.id)).filter(
+        AnalyticsEvent.event_type == 'paywall_viewed').scalar()
+    applications = db.session.query(func.count(AnalyticsEvent.id)).filter(
+        AnalyticsEvent.event_type == 'application_created').scalar()
+
+    return render_template(
+        "admin_analytics.html",
+        funnel_steps=json.dumps(['Регистрация', 'Анализ весов', 'Подтверждение', 'Визуализация', 'Финиш онбординга']),
+        funnel_data=json.dumps(funnel_data),
+        dates=json.dumps(dates),
+        reg_counts=json.dumps(reg_counts),
+        paywall_views=paywall_views,
+        applications=applications
+    )
 
 
 # регистрация блюпринта (добавь после определения маршрутов)
