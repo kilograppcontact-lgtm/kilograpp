@@ -6465,6 +6465,33 @@ def admin_analytics_page():
         apps_created=apps_created
     )
 
+
+@app.route("/admin/analytics/events")
+@admin_required
+def admin_analytics_events_list():
+    page = request.args.get('page', 1, type=int)
+    user_id = request.args.get('user_id', type=str)
+    event_type = request.args.get('event_type')
+
+    query = AnalyticsEvent.query.options(subqueryload(AnalyticsEvent.user))
+
+    # Фильтры
+    if user_id and user_id.isdigit():
+        query = query.filter(AnalyticsEvent.user_id == int(user_id))
+    if event_type:
+        query = query.filter(AnalyticsEvent.event_type.ilike(f"%{event_type}%"))
+
+    # Сортировка: новые сверху + Пагинация (50 штук на страницу)
+    pagination = query.order_by(AnalyticsEvent.created_at.desc()).paginate(page=page, per_page=50)
+
+    return render_template(
+        "admin_analytics_events.html",
+        events=pagination.items,
+        pagination=pagination,
+        filter_user_id=user_id,
+        filter_event_type=event_type
+    )
+
 # регистрация блюпринта (добавь после определения маршрутов)
 app.register_blueprint(bp)
 app.register_blueprint(shopping_bp, url_prefix="/shopping")
