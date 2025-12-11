@@ -35,6 +35,7 @@ from flask import (
 from flask_bcrypt import Bcrypt
 from flask_login import current_user
 from werkzeug.utils import secure_filename
+from amplitude import Amplitude, BaseEvent  # <-- Amplitude
 
 # --- Импорты для Google Sign-In ---
 from google.oauth2 import id_token
@@ -80,6 +81,9 @@ else:
     print("Firebase Admin SDK already initialized (likely due to Flask reloader).")
 
 load_dotenv()
+
+# Инициализация Amplitude
+amplitude = Amplitude(api_key=os.getenv("AMPLITUDE_API_KEY", "c9572b73ece4f73786a764fa197c2161"))
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "supersecret")
@@ -1533,7 +1537,6 @@ def app_log_meal():
     meal.protein = float(data.get('protein', 0.0))
     meal.fat = float(data.get('fat', 0.0))
     meal.carbs = float(data.get('carbs', 0.0))
-    # ИСПРАВЛЕНО: data.get возвращает None, если пришел json null. Добавляем 'or ""'
     meal.analysis = data.get('analysis') or ""
 
     try:
@@ -1569,10 +1572,9 @@ def app_log_meal():
         # --- ПРОВЕРКА АЧИВОК ---
         check_all_achievements(user)
 
-        # Проверяем новые ачивки для поста в ленту (только если поле created_at существует)
+        # Проверяем новые ачивки для поста в ленту
         try:
             if hasattr(UserAchievement, 'created_at'):
-                # Ищем ачивки, созданные за последние 15 секунд
                 recent_achievements = UserAchievement.query.filter(
                     UserAchievement.user_id == user.id,
                     UserAchievement.created_at >= datetime.now(UTC) - timedelta(seconds=15)
@@ -1585,9 +1587,25 @@ def app_log_meal():
                         trigger_ai_feed_post(user, f"Получено новое достижение: «{title}»!")
         except Exception as e:
             print(f"Error posting achievement feed: {e}")
-        # -----------------------
 
+        # -----------------------
+        # ВАЖНО: Эти строки должны быть на уровне с try (не внутри except)
         db.session.commit()
+
+        # ANALYTICS: Meal Logged (Backend backup)
+        try:
+            amplitude.track(BaseEvent(
+                event_type="Meal Logged",
+                user_id=str(user.id),
+                event_properties={
+                    "meal_type": data['meal_type'],
+                    "calories": int(data.get('calories', 0)),
+                    "has_analysis": bool(data.get('analysis'))
+                }
+            ))
+        except Exception as e:
+            print(f"Amplitude error: {e}")
+
         return jsonify({"status": "ok"}), 200
 
     except Exception as e:
@@ -1885,6 +1903,20 @@ def api_register_v2():
 
         # 6. Логиним пользователя (создаем сессию)
         session['user_id'] = user.id
+
+        # ANALYTICS: Sign Up Completed
+        try:
+            amplitude.track(BaseEvent(
+                event_type="Sign Up Completed",
+                user_id=str(user.id),
+                event_properties={
+                    "method": "email",
+                    "has_avatar": True,
+                    "sex": sex
+                }
+            ))
+        except Exception as e:
+            print(f"Amplitude error: {e}")
 
         return jsonify({
             "ok": True,
@@ -2894,10 +2926,27 @@ def confirm_analysis():
                             # 8. Сохраняем все
                         db.session.commit()
 
-        # 9. Возвращаем JSON с AI-комментарием
-        return jsonify({"success": True, "ai_comment": ai_comment_text})
+                # 9. Возвращаем JSON с AI-комментарием
 
-    # --- ЛОГИКА GET-ЗАПРОСА (Для Веб-версии) ---
+                # ANALYTICS: Body Analysis Confirmed
+                try:
+                    amplitude.track(BaseEvent(
+                        event_type="Body Analysis Confirmed",
+                        user_id=str(user.id),
+                        event_properties={
+                            "weight": new_analysis_entry.weight,
+                            "fat_mass": new_analysis_entry.fat_mass,
+                            "muscle_mass": new_analysis_entry.muscle_mass,
+                            "has_ai_comment": bool(ai_comment_text),
+                            "is_initial": (user.initial_body_analysis_id == new_analysis_entry.id)
+                        }
+                    ))
+                except Exception as e:
+                    print(f"Amplitude error: {e}")
+
+                return jsonify({"success": True, "ai_comment": ai_comment_text})
+
+            # --- ЛОГИКА GET-ЗАПРОСА (Для Веб-версии) ---
     # (Этот код остается таким же, как в вашем исходнике, для поддержки веба)
 
     # 1. Проверяем, есть ли готовый комментарий для отображения (после редиректа)
@@ -3043,6 +3092,20 @@ def generate_diet():
             type='success',
             data={"route": "/diet"}
         )
+
+        # ANALYTICS: Diet Generated
+        try:
+            amplitude.track(BaseEvent(
+                event_type="Diet Generated",
+                user_id=str(user.id),
+                event_properties={
+                    "goal": goal,
+                    "total_kcal": diet_data.get('total_kcal'),
+                    "has_preferences": bool(preferences)
+                }
+            ))
+        except Exception as e:
+            print(f"Amplitude error: {e}")
 
         return jsonify({"redirect": "/diet"})
 
@@ -4559,8 +4622,8 @@ def create_group_task(group_id):
             message_text = f"🔔 **{task_type} от тренера {user.name}**\n\n**{title}**\n\n_{description}_"
 
             # URL вашего бота (нужно будет указать, когда бот будет на сервере)
-            BOT_WEBHOOK_URL = os.getenv("BOT_WEBHOOK_URL")  # Например, [https://your-bot-domain.com/notify](https://your-bot-domain.com/notify)
-            BOT_SECRET_TOKEN = os.getenv("BOT_SECRET_TOKEN")  # Секретный токен для безопасности
+            BOT_WEBHOOK_URL = os.getenv("BOT_WEBHOOK_URL")
+            BOT_SECRET_TOKEN = os.getenv("BOT_SECRET_TOKEN")
 
             if BOT_WEBHOOK_URL and BOT_SECRET_TOKEN:
                 payload = {
@@ -6181,6 +6244,21 @@ def visualize_run():
         )
 
         # Используем новый маршрут 'serve_file'
+
+        # ANALYTICS: Body Visualization Generated
+        try:
+            amplitude.track(BaseEvent(
+                event_type="Body Visualization Generated",
+                user_id=str(u.id),  # <--- ИСПРАВЛЕНО: user -> u
+                event_properties={
+                    "current_weight": metrics_current.get("weight_kg"),
+                    "target_weight": metrics_target.get("weight_kg"),
+                    "sex": metrics_current.get("sex")
+                }
+            ))
+        except Exception as e:
+            print(f"Amplitude error: {e}")
+
         return jsonify({
             "success": True,
             "visualization": {
@@ -6675,6 +6753,19 @@ def join_squad_request():
 
         db.session.commit()
 
+        # ANALYTICS: Squad Join Requested
+        try:
+            amplitude.track(BaseEvent(
+                event_type="Squad Join Requested",
+                user_id=str(user.id),
+                event_properties={
+                    "preferred_time": pref_time,
+                    "fitness_level": fit_level
+                }
+            ))
+        except Exception as e:
+            print(f"Amplitude error: {e}")
+
         return jsonify({"ok": True, "message": "Заявка в Squad принята"})
     except Exception as e:
         db.session.rollback()
@@ -6820,9 +6911,23 @@ def create_squad_post(group_id):
 
     except Exception as e:
         print(f"[PUSH ERROR] Failed to notify group: {e}")
-    # ------------------------------
+        # ------------------------------
 
-    return jsonify({"ok": True, "message": "Пост опубликован"})
+        # ANALYTICS: Squad Post Created
+        try:
+            amplitude.track(BaseEvent(
+                event_type="Squad Post Created",
+                user_id=str(u.id),
+                event_properties={
+                    "group_id": group.id,
+                    "has_image": bool(image_filename),
+                    "post_type": msg_type
+                }
+            ))
+        except Exception as e:
+            print(f"Amplitude error: {e}")
+
+        return jsonify({"ok": True, "message": "Пост опубликован"})
 
 @app.route('/api/groups/<int:group_id>/reply', methods=['POST'])
 @login_required
