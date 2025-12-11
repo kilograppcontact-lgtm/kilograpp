@@ -2167,6 +2167,24 @@ def onboarding_generate_visualization():
         app.logger.error(f"[generate_visualization] FAILED: {e}", exc_info=True)
         return jsonify({"success": False, "error": f"Ошибка AI-генерации: {e}"}), 500
 
+
+@app.route('/api/analytics/track', methods=['POST'])
+def api_analytics_track():
+    """
+    Принимает любые события с фронтенда (нажатия, просмотры экранов)
+    и сохраняет их в нашу независимую таблицу аналитики.
+    """
+    data = request.get_json(silent=True) or {}
+    event_name = data.get('event_type')
+    props = data.get('event_data')
+
+    # track_event сам разберется с user_id из сессии (cookie)
+    # Если сессии нет (юзер еще не вошел), событие запишется как анонимное (user_id=None),
+    # но мы все равно увидим общее количество таких событий в воронке.
+    track_event(event_name, data=props)
+
+    return jsonify({"ok": True})
+
 @app.route('/api/onboarding/complete_flow', methods=['POST'])
 @login_required
 def complete_onboarding_flow():
