@@ -6397,59 +6397,73 @@ def admin_report_resolve(rid):
     return redirect(url_for("admin_reports"))
 
 
+# --- ANALYTICS DASHBOARD ---
+
 @app.route("/admin/analytics")
 @admin_required
 def admin_analytics_page():
-    # 1. Воронка онбординга (за всё время или за последние 30 дней)
-    # Порядок событий: signup_completed -> scales_analyzed -> analysis_confirmed -> visualization_generated -> onboarding_finished
-
-    funnel_steps = [
+    # 1. Воронка Онбординга (Конверсия в уникальных пользователях)
+    # Этапы: Регистрация -> Анализ весов -> Подтверждение анализа -> Визуализация -> Финиш
+    funnel_steps_keys = [
         'signup_completed',
         'scales_analyzed',
         'analysis_confirmed',
         'visualization_generated',
         'onboarding_finished'
     ]
+    funnel_labels = [
+        'Регистрация',
+        'Анализ весов',
+        'Подтверждение данных',
+        'Визуализация (AI)',
+        'Завершение тура'
+    ]
 
-    # Считаем уникальных пользователей на каждом этапе
-    funnel_data = []
-    for step in funnel_steps:
+    funnel_counts = []
+    for step in funnel_steps_keys:
+        # Считаем уникальных юзеров, совершивших это действие
         count = db.session.query(func.count(func.distinct(AnalyticsEvent.user_id))) \
             .filter(AnalyticsEvent.event_type == step).scalar()
-        funnel_data.append(count)
+        funnel_counts.append(count or 0)
 
-    # 2. Динамика регистраций за 14 дней
+    # 2. Динамика регистраций (за последние 14 дней)
     today = date.today()
-    dates = []
-    reg_counts = []
+    dates_labels = []
+    reg_values = []
 
     for i in range(13, -1, -1):
         d = today - timedelta(days=i)
         d_next = d + timedelta(days=1)
+
+        # Считаем события 'signup_completed' за этот день
         cnt = db.session.query(func.count(AnalyticsEvent.id)).filter(
             AnalyticsEvent.event_type == 'signup_completed',
             AnalyticsEvent.created_at >= d,
             AnalyticsEvent.created_at < d_next
         ).scalar()
-        dates.append(d.strftime("%d.%m"))
-        reg_counts.append(cnt)
 
-    # 3. Активность (просмотр пейволла vs заявки)
-    paywall_views = db.session.query(func.count(AnalyticsEvent.id)).filter(
-        AnalyticsEvent.event_type == 'paywall_viewed').scalar()
-    applications = db.session.query(func.count(AnalyticsEvent.id)).filter(
-        AnalyticsEvent.event_type == 'application_created').scalar()
+        dates_labels.append(d.strftime("%d.%m"))
+        reg_values.append(cnt or 0)
+
+    # 3. Общая статистика (KPI)
+    # Просмотры пейволла
+    paywall_hits = db.session.query(func.count(AnalyticsEvent.id)) \
+                       .filter(AnalyticsEvent.event_type == 'paywall_viewed').scalar() or 0
+
+    # Созданные заявки
+    apps_created = db.session.query(func.count(AnalyticsEvent.id)) \
+                       .filter(AnalyticsEvent.event_type == 'application_created').scalar() or 0
 
     return render_template(
         "admin_analytics.html",
-        funnel_steps=json.dumps(['Регистрация', 'Анализ весов', 'Подтверждение', 'Визуализация', 'Финиш онбординга']),
-        funnel_data=json.dumps(funnel_data),
-        dates=json.dumps(dates),
-        reg_counts=json.dumps(reg_counts),
-        paywall_views=paywall_views,
-        applications=applications
+        # Передаем данные как JSON строки для JS
+        funnel_labels=json.dumps(funnel_labels),
+        funnel_data=json.dumps(funnel_counts),
+        dates_labels=json.dumps(dates_labels),
+        reg_data=json.dumps(reg_values),
+        paywall_hits=paywall_hits,
+        apps_created=apps_created
     )
-
 
 # регистрация блюпринта (добавь после определения маршрутов)
 app.register_blueprint(bp)
