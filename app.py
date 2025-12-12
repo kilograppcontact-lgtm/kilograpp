@@ -2854,22 +2854,22 @@ def confirm_analysis():
         if not analysis_data:
             return jsonify({"success": False, "error": "Нет данных от приложения"}), 400
 
-            # 2. Получаем предыдущий замер ДО сохранения нового
-            previous_analysis = BodyAnalysis.query.filter_by(user_id=user.id).order_by(
-                BodyAnalysis.timestamp.desc()).first()
+        # 2. Получаем предыдущий замер ДО сохранения нового
+        previous_analysis = BodyAnalysis.query.filter_by(user_id=user.id).order_by(
+            BodyAnalysis.timestamp.desc()).first()
 
-            # --- ЗАЩИТА: Проверка 7 дней ---
-            if previous_analysis and previous_analysis.timestamp:
-                # Сравниваем даты (без времени), чтобы было честно по календарю, или с временем (как вам удобнее)
-                # Здесь строгая проверка по времени:
-                diff = datetime.now(UTC) - previous_analysis.timestamp
-                if diff.days < 7:
-                    return jsonify(
-                        {"success": False, "error": f"Следующий замер доступен через {7 - diff.days} дн."}), 400
-            # -------------------------------
+        # --- ЗАЩИТА: Проверка 7 дней ---
+        if previous_analysis and previous_analysis.timestamp:
+            # Сравниваем даты (без времени), чтобы было честно по календарю, или с временем (как вам удобнее)
+            # Здесь строгая проверка по времени:
+            diff = datetime.now(UTC) - previous_analysis.timestamp
+            if diff.days < 7:
+                return jsonify(
+                    {"success": False, "error": f"Следующий замер доступен через {7 - diff.days} дн."}), 400
+        # -------------------------------
 
-            # 3. Создаем и наполняем новую запись анализа
-            new_analysis_entry = BodyAnalysis(user_id=user.id, timestamp=datetime.now(UTC))
+        # 3. Создаем и наполняем новую запись анализа
+        new_analysis_entry = BodyAnalysis(user_id=user.id, timestamp=datetime.now(UTC))
 
         # 4. (ВАЖНО) Переносим ВСЕ метрики из JSON в новую запись
         # (Используем .get(), чтобы избежать ошибок, если поле отсутствует)

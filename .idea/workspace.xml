@@ -32,6 +32,11 @@
       <change afterPath="$PROJECT_DIR$/../foodstream/templates/admin.html" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../foodstream/templates/chat_view.html" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../foodstream/templates/index.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../foodstream/templates/login.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../foodstream/templates/super_admin.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../foodstream/templates/waiter.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../foodstream/utils_pdf.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -79,7 +84,7 @@
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
     &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;configurable.group.tools&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
