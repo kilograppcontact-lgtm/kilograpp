@@ -2013,14 +2013,15 @@ def analyze_scales_photo():
         # === ВАЖНОЕ ИЗМЕНЕНИЕ: МЫ НЕ ВОЗВРАЩАЕМ ОШИБКУ, ЕСЛИ НЕТ РОСТА ===
         # Мы проверяем только совсем пустой результат (если даже веса нет — тогда ошибка)
         if not result_metrics.get('weight') and not result_metrics.get('fat_mass'):
-             return jsonify({
+            return jsonify({
                 "success": False,
                 "error": "Не удалось распознать данные на фото. Попробуйте сделать более четкий снимок."
             }), 400
 
-             # Возвращаем JSON с метриками (какие-то поля могут быть null)
-             track_event('scales_analyzed', user.id, {"success": True})
-             return jsonify({"success": True, "metrics": result_metrics})
+        # <--- ИСПРАВЛЕНИЕ: Сдвинули влево
+        # Возвращаем JSON с метриками (какие-то поля могут быть null)
+        track_event('scales_analyzed', user.id, {"success": True})
+        return jsonify({"success": True, "metrics": result_metrics})
 
     except Exception as e:
         track_event('scales_analyzed_error', user.id, {"error": str(e)})
@@ -4546,7 +4547,7 @@ def group_detail(group_id):
             Training.date >= date.today()
         ).order_by(Training.date, Training.start_time).all()
 
-        return render_template('group_detail.html',
+    return render_template('group_detail.html',
                                group=group,
                                is_member=is_member,
                                processed_messages=processed_messages,
@@ -7053,6 +7054,7 @@ def create_squad_post(group_id):
                 data={"route": "/squad"}  # При клике открываем вкладку Squads
             )
 
+
     except Exception as e:
         print(f"[PUSH ERROR] Failed to notify group: {e}")
         # ------------------------------
@@ -7071,7 +7073,7 @@ def create_squad_post(group_id):
         except Exception as e:
             print(f"Amplitude error: {e}")
 
-        return jsonify({"ok": True, "message": "Пост опубликован"})
+    return jsonify({"ok": True, "message": "Пост опубликован"})
 
 @app.route('/api/groups/<int:group_id>/reply', methods=['POST'])
 @login_required

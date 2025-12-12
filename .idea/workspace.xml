@@ -36,7 +36,6 @@
       <change afterPath="$PROJECT_DIR$/../foodstream/templates/super_admin.html" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../foodstream/templates/waiter.html" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../foodstream/utils_pdf.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
