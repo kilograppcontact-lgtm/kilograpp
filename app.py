@@ -2863,7 +2863,13 @@ def confirm_analysis():
         if previous_analysis and previous_analysis.timestamp:
             # Сравниваем даты (без времени), чтобы было честно по календарю, или с временем (как вам удобнее)
             # Здесь строгая проверка по времени:
-            diff = datetime.now(UTC) - previous_analysis.timestamp
+
+            # Исправление TypeError: приводим время из БД к UTC, если оно naive
+            prev_ts = previous_analysis.timestamp
+            if prev_ts.tzinfo is None:
+                prev_ts = prev_ts.replace(tzinfo=UTC)
+
+            diff = datetime.now(UTC) - prev_ts
             if diff.days < 7:
                 return jsonify(
                     {"success": False, "error": f"Следующий замер доступен через {7 - diff.days} дн."}), 400
