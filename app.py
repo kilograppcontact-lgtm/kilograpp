@@ -2027,43 +2027,37 @@ def analyze_scales_photo():
         track_event('scales_analyzed_error', user.id, {"error": str(e)})
         return jsonify({"success": False, "error": f"Ошибка AI-анализа: {e}"}), 500
 
+
 def _calculate_target_metrics(user: User, metrics_current: dict) -> dict:
     """
-    (НОВЫЙ ХЕЛПЕР)
-    Рассчитывает "Точку Б" (ТЗ 1.3) на основе "Точки А".
-    Цель: ИМТ 22, % жира 18% (М) / 23% (Ж).
+    Рассчитывает целевые показатели ("Точка Б") на основе переданного веса, роста и процента жира.
     """
     try:
-        height_cm = float(metrics_current.get("height_cm") or user.height or 170)  # Берем из метрик или из профиля
+        height_cm = float(metrics_current.get("height", 170))
+        weight_curr = float(metrics_current.get("weight", 70))
         height_m = height_cm / 100.0
 
-        # 1. Расчет целевого веса (ИМТ 22)
-        target_weight = 22 * (height_m * height_m)
+        # Целевой вес на основе здорового ИМТ 21.5
+        target_weight = 21.5 * (height_m * height_m)
 
-        # 2. Расчет целевого % жира
-        target_fat_pct_val = 0.23 if user.sex == 'female' else 0.18
-        target_fat_mass = target_weight * target_fat_pct_val
+        # Целевой процент жира: 15% для мужчин, 22% для женщин
+        target_fat_pct = 0.22 if user.sex == 'female' else 0.15
+        target_fat_mass = target_weight * target_fat_pct
 
-        # 3. Расчет целевых мышц
-        # (Упрощенно: Мышцы = Вес * (1.0 - %жира - %кости/прочее))
-        # (Используем ту же логику, что в /api/onboarding/visualize_point_b)
-        target_muscle_mass = target_weight * (1.0 - target_fat_pct_val - 0.15)
+        # Расчет сухой мышечной массы
+        target_muscle_mass = target_weight * (1.0 - target_fat_pct - 0.13)
 
-        metrics_target = {
+        return {
             "height_cm": height_cm,
             "weight_kg": round(target_weight, 1),
             "fat_mass": round(target_fat_mass, 1),
             "muscle_mass": round(target_muscle_mass, 1),
             "sex": user.sex,
-            "fat_pct": _compute_pct(target_fat_mass, target_weight),
-            "muscle_pct": _compute_pct(target_muscle_mass, target_weight)
+            "fat_pct": target_fat_pct * 100,
+            "muscle_pct": (target_muscle_mass / target_weight) * 100
         }
-
-        return metrics_target
-
     except Exception as e:
         app.logger.error(f"[calculate_target_metrics] FAILED: {e}")
-        # Возвращаем копию текущих, чтобы не сломать генерацию
         return metrics_current.copy()
 
 
@@ -2071,102 +2065,54 @@ def _calculate_target_metrics(user: User, metrics_current: dict) -> dict:
 @login_required
 def onboarding_generate_visualization():
     """
-    НОВЫЙ ФЛОУ (ЭТАП 2): Запускает AI-генерацию ("nano banana" / Gemini)
-    на основе метрик и фото в полный рост.
-    Вызывает `gemini_visualizer.py`.
+    Генерирует визуализацию на основе трех показателей (рост, вес, жир) и фото в рост.
     """
     user = get_current_user()
-
     try:
-        # 1. Получаем метрики (в виде JSON-строки)
-        metrics_json = request.form.get('metrics')
-        if not metrics_json:
-            return jsonify({"success": False, "error": "Metrics JSON is required."}), 400
-        metrics_current = json.loads(metrics_json)
-
-        # 2. Получаем фото в полный рост
+        metrics_current = json.loads(request.form.get('metrics'))
         file = request.files.get('full_body_photo')
-        if not file:
-            return jsonify({"success": False, "error": "Full body photo is required."}), 400
-
         full_body_photo_bytes = file.read()
 
-        # 3. (ВАЖНО) Сохраняем собранные метрики как первый BodyAnalysis
-        # Это наша "Точка А"
-        analysis_from_metrics = BodyAnalysis(
+        # Сохраняем "Точку А" на основе 3-х параметров
+        analysis = BodyAnalysis(
             user_id=user.id,
             timestamp=datetime.now(UTC),
             height=metrics_current.get('height'),
             weight=metrics_current.get('weight'),
             fat_mass=metrics_current.get('fat_mass'),
-            muscle_mass=metrics_current.get('muscle_mass'),
-            bmi=metrics_current.get('bmi'),
-            metabolism=metrics_current.get('metabolism'),
-            visceral_fat_rating=metrics_current.get('visceral_fat_rating'),
-            body_age=metrics_current.get('body_age'),
-            body_water=metrics_current.get('body_water'),
-            protein_percentage=metrics_current.get('protein_percentage')
+            muscle_mass=metrics_current.get('weight') * 0.4  # Дефолтное значение мышц для старта
         )
-        db.session.add(analysis_from_metrics)
+        db.session.add(analysis)
         db.session.flush()
+        user.initial_body_analysis_id = analysis.id
 
-        # 4. Устанавливаем этот анализ как "начальный", если его еще нет или если пользователь перепроходит онбординг
-        # (Можно обновлять всегда, чтобы актуализировать "Точку А" при повторном прохождении)
-        if not user.initial_body_analysis_id:
-            user.initial_body_analysis_id = analysis_from_metrics.id
-
-        # --- ВЫНЕСЕНО ИЗ БЛОКА IF ---
-        # 5. Рассчитываем "Точку Б" (ТЗ 1.3)
-        # Дополняем `metrics_current` % жира и % мышц для `gemini_visualizer`
-        metrics_current["fat_pct"] = _compute_pct(metrics_current.get("fat_mass"), metrics_current.get("weight"))
-        metrics_current["muscle_pct"] = _compute_pct(
-            metrics_current.get("muscle_mass"),
-            metrics_current.get("weight")
-        )
-        metrics_current["height_cm"] = metrics_current.get('height')
-        metrics_current["weight_kg"] = metrics_current.get('weight')
+        # Рассчитываем целевую "Точку Б"
         metrics_current["sex"] = user.sex
-
-        # Рассчитываем целевые
         metrics_target = _calculate_target_metrics(user, metrics_current)
 
-        # Сохраняем рассчитанные цели в профиль пользователя
         user.fat_mass_goal = metrics_target.get("fat_mass")
         user.muscle_mass_goal = metrics_target.get("muscle_mass")
 
-        db.session.commit()  # Коммитим изменения (ID анализа и цели)
-        # ----------------------------
-
-        # 6. Запускаем "nano banana" (gemini_visualizer.py)
-        # Он принимает фото в полный рост (как "аватар") и 2 набора метрик
+        # AI Генерация
         before_filename, after_filename = generate_for_user(
             user=user,
             avatar_bytes=full_body_photo_bytes,
             metrics_current=metrics_current,
-            metrics_target=metrics_target  # Теперь переменная доступна всегда
-        )
-
-        # 7. Сохраняем запись о самой визуализации
-        create_record(
-            user=user,
-            curr_filename=before_filename,
-            tgt_filename=after_filename,
-            metrics_current=metrics_current,
             metrics_target=metrics_target
         )
 
-        track_event('visualization_generated', user.id)
+        create_record(user=user, curr_filename=before_filename, tgt_filename=after_filename,
+                      metrics_current=metrics_current, metrics_target=metrics_target)
 
+        db.session.commit()
         return jsonify({
             "success": True,
             "before_photo_url": url_for('serve_file', filename=before_filename),
             "after_photo_url": url_for('serve_file', filename=after_filename),
         })
-
     except Exception as e:
         db.session.rollback()
-        app.logger.error(f"[generate_visualization] FAILED: {e}", exc_info=True)
-        return jsonify({"success": False, "error": f"Ошибка AI-генерации: {e}"}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/analytics/track', methods=['POST'])
