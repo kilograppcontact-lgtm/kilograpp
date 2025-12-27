@@ -2073,6 +2073,26 @@ def onboarding_generate_visualization():
         file = request.files.get('full_body_photo')
         full_body_photo_bytes = file.read()
 
+        # --- ИЗМЕНЕНИЕ: Сохраняем фото в полный рост в профиль пользователя ---
+        if file and full_body_photo_bytes:
+            filename = secure_filename(file.filename) or "body_photo.jpg"
+            unique_filename = f"body_{user.id}_{uuid.uuid4().hex}.jpg"
+
+            new_file = UploadedFile(
+                filename=unique_filename,
+                content_type=file.mimetype or 'image/jpeg',
+                data=full_body_photo_bytes,
+                size=len(full_body_photo_bytes),
+                user_id=user.id
+            )
+            db.session.add(new_file)
+            db.session.flush()  # Чтобы получить id
+
+            # Привязываем к пользователю (предполагаем наличие поля full_body_photo_id)
+            user.full_body_photo_id = new_file.id
+            db.session.commit()
+        # ---------------------------------------------------------------------
+
         # Сохраняем "Точку А" на основе 3-х параметров
         analysis = BodyAnalysis(
             user_id=user.id,
@@ -6183,13 +6203,19 @@ def visualize_run():
         return jsonify(
             {"success": False, "error": "Загрузите актуальный анализ тела — без него визуализация не строится."}), 400
 
-    # --- Получаем байты аватара ---
+    # --- ИЗМЕНЕНИЕ: Получаем байты фото (Приоритет: Полный рост -> Аватар -> Дефолт) ---
     avatar_bytes = None
-    if u.avatar:
+
+    # 1. Проверяем наличие фото в полный рост
+    if getattr(u, 'full_body_photo', None):
+        avatar_bytes = u.full_body_photo.data
+
+    # 2. Если нет, берем аватар (как запасной вариант)
+    elif u.avatar:
         avatar_bytes = u.avatar.data
 
     if not avatar_bytes:
-        # Если у пользователя нет аватара, загружаем дефолтный из static
+        # Если у пользователя нет ни фото тела, ни аватара, загружаем дефолтный из static
         try:
             with open(os.path.join(app.static_folder, 'i.webp'), 'rb') as f:
                 avatar_bytes = f.read()

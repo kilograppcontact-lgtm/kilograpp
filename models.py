@@ -23,6 +23,10 @@ class User(db.Model):
     notify_trainings = db.Column(db.Boolean, default=True, server_default=expression.true())
     notify_subscription = db.Column(db.Boolean, default=True, server_default=expression.true())
 
+    # В models.py внутри class User:
+    full_body_photo_id = db.Column(db.Integer, db.ForeignKey('uploaded_files.id'), nullable=True)
+    full_body_photo = db.relationship('UploadedFile', foreign_keys=[full_body_photo_id])
+
     # Цели
     fat_mass_goal = db.Column(db.Float, nullable=True)
     muscle_mass_goal = db.Column(db.Float, nullable=True)
